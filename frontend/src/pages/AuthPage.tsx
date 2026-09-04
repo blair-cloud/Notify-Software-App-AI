@@ -693,11 +693,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       ) : (
                         <div>
                           <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1">
-                            Primary District
+                            Primary District (default)
                           </label>
                           <div className="px-3.5 py-2.5 rounded-[12px] bg-slate-100 border-2 border-black text-xs font-bold text-black flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-green-500" />
-                            <span>Kigali Commercial District</span>
+                            <span>Kigali Commercial Districts</span>
                           </div>
                         </div>
                       )}
