@@ -180,7 +180,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         }
       }, 600);
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Invalid email or password.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Invalid email or password.');
       setErrorMessage(msg);
     } finally {
       setLoading(false);
@@ -259,7 +259,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         }, 800);
       }
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Registration could not be completed.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Registration could not be completed.');
       setErrorMessage(msg);
     } finally {
       setLoading(false);
@@ -291,7 +291,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       setSuccessMessage('Password reset security code generated. Set your new password below.');
       setMode('RESET_PASSWORD');
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Unable to process reset request.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Unable to process reset request.');
       setErrorMessage(msg);
     } finally {
       setLoading(false);
@@ -331,7 +331,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         setMode('LOGIN');
       }, 1500);
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Failed to reset password.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Failed to reset password.');
       setErrorMessage(msg);
     } finally {
       setLoading(false);
@@ -388,11 +388,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </h1>
 
                   <p className="text-sm sm:text-base text-slate-700 font-medium mt-1.5">
-                    {mode === 'LOGIN' && 'Sign in to access rent tracking, active mall units, and live mobile alerts.'}
+                    {mode === 'LOGIN'}
                     {mode === 'SIGNUP' &&
                       (selectedRole === 'LANDLORD'
-                        ? 'Manage commercial properties, automate lease tracking, and collect rent.'
-                        : 'Join your designated commercial unit with your landlord invitation code.')}
+                      )}
                     {mode === 'FORGOT_PASSWORD' && 'Enter your registered email address to receive your password recovery code.'}
                     {mode === 'RESET_PASSWORD' && 'Enter your security reset code and choose a new secure password.'}
                   </p>

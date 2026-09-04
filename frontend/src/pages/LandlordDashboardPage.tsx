@@ -1213,13 +1213,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       <aside className="hidden md:flex flex-col w-64 h-full bg-[#331A6F] text-white border-r border-purple-900/40 shrink-0 select-none">
         {/* Brand header - Minimalist and Clean */}
         <div className="p-6 pb-5 shrink-0 flex items-center gap-3 border-b border-purple-900/40">
-          <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black text-xl flex items-center justify-center shadow-xs">
-            N
-          </div>
-          <div>
-            <div className="font-extrabold text-lg tracking-wide uppercase">Notify</div>
-            <div className="text-[10px] text-amber-300 font-bold uppercase tracking-wider">Landlord Portfolio</div>
-          </div>
+          <img src="/src/assets/images/white_logo.png" alt="Notify" className="h-12 w-auto object-contain" />
         </div>
 
         {/* Navbar tabs - Clean, modern, independently scrollable */}
@@ -1273,7 +1267,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             }`}
           >
             <Building2 className="w-4 h-4" />
-            <span>Properties ({properties.length})</span>
+            <span>Properties</span>
           </button>
 
           <button
@@ -1285,7 +1279,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             }`}
           >
             <Home className="w-4 h-4" />
-            <span>Units ({units.length})</span>
+            <span>Units</span>
           </button>
 
           <button
@@ -1297,7 +1291,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Tenants ({tenants.length})</span>
+            <span>Tenants</span>
           </button>
 
           <button
@@ -1309,7 +1303,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>Leases ({leases.length})</span>
+            <span>Leases</span>
             {expiringSoonLeases.length > 0 && (
               <span className="ml-auto bg-amber-400 text-slate-950 font-bold text-[10px] px-1.5 py-0.5 rounded-full">
                 {expiringSoonLeases.length}
@@ -1326,7 +1320,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             }`}
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>Documents ({leases.filter(l => l.agreement_document || l.has_signed_document).length})</span>
+            <span>Documents</span>
           </button>
 
           <button
@@ -1338,7 +1332,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             }`}
           >
             <Send className="w-4 h-4" />
-            <span>Invitations ({invitations.length})</span>
+            <span>Invitations</span>
           </button>
 
           {/* 3. Financial Management tabs */}
@@ -1367,7 +1361,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>Invoices ({invoices.length})</span>
+            <span>Invoices</span>
             {invoices.filter(i => i.status === 'UNPAID' || i.status === 'OVERDUE').length > 0 && (
               <span className="ml-auto bg-amber-400 text-slate-950 font-bold text-[10px] px-1.5 py-0.5 rounded-full">
                 {invoices.filter(i => i.status === 'UNPAID' || i.status === 'OVERDUE').length}
@@ -1418,7 +1412,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             }`}
           >
             <Wrench className="w-4 h-4" />
-            <span>Maintenance ({maintenanceRequests.length})</span>
+            <span>Maintenance</span>
             {openMaintenanceCount > 0 && (
               <span className="ml-auto bg-amber-400 text-slate-950 font-bold text-[10px] px-1.5 py-0.5 rounded-full">
                 {openMaintenanceCount}
@@ -1435,7 +1429,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             }`}
           >
             <AlertTriangle className="w-4 h-4" />
-            <span>Complaints ({complaints.length})</span>
+            <span>Complaints</span>
             {openComplaintsCount > 0 && (
               <span className="ml-auto bg-rose-500 text-white font-bold text-[10px] px-1.5 py-0.5 rounded-full">
                 {openComplaintsCount}
@@ -1452,7 +1446,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Technicians ({workers.length})</span>
+            <span>Technicians</span>
           </button>
 
           {/* 5. Settings & Account Management */}
@@ -1496,10 +1490,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       {/* Mobile Header - Clean & Minimalist */}
       <header className="md:hidden bg-[#331A6F] text-white p-4 flex items-center justify-between border-b border-purple-900 shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center">
-            N
-          </div>
-          <span className="font-bold text-base uppercase tracking-wide">Notify Landlord</span>
+          <img src="/src/assets/images/white_logo.png" alt="Notify" className="h-8 w-auto object-contain" />
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -3656,3 +3647,5 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     </div>
   );
 };
+
+

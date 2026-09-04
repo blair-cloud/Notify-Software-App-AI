@@ -245,18 +245,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {/* Brand Header */}
       <div className="p-4 sm:p-5 border-b border-purple-900/40 bg-[#140824] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-rose-500 text-white font-black text-lg flex items-center justify-center border-2 border-black shadow-[0.5px_0.5px_0_#000]">
-            N
-          </div>
-          <div>
-            <div className="font-extrabold text-base tracking-wide text-white flex items-center gap-1.5">
-              <span>Notify</span>
-              <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
-                ADMIN
-              </span>
-            </div>
-            <div className="text-[11px] text-purple-300 font-medium">Platform Administration</div>
-          </div>
+          <img src="/src/assets/images/white_logo.png" alt="Notify" className="h-9 w-auto object-contain" />
         </div>
         {setMobileOpen && (
           <button
@@ -351,3 +340,4 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     </>
   );
 };
+

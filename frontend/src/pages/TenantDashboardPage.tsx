@@ -414,13 +414,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
         {/* Logo & Portal Badge */}
         <div className="p-4 lg:p-6 pb-3 lg:pb-4 shrink-0 border-b border-purple-800/30">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 lg:w-10 lg:h-10 rounded-xl bg-amber-400 text-slate-950 font-bold text-lg lg:text-xl flex items-center justify-center shadow-xs">
-              N
-            </div>
-            <div>
-              <div className="font-extrabold text-base lg:text-lg tracking-wide uppercase">Notify</div>
-              <div className="text-[9px] lg:text-[10px] text-amber-300 font-semibold uppercase tracking-wider">Tenant Portal</div>
-            </div>
+            <img src="/src/assets/images/white_logo.png" alt="Notify" className="h-12 w-auto object-contain" />
           </div>
         </div>
 
@@ -428,11 +422,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
         <nav className="flex-1 overflow-y-auto scrollbar-subtle px-3 lg:px-4 py-4 space-y-1.5">
           <button
             onClick={() => switchTab('home')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs lg:text-sm transition-all cursor-pointer ${
-              activeTab === 'home'
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs lg:text-sm transition-all cursor-pointer ${activeTab === 'home'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <Home className="w-4 h-4 shrink-0" />
             <span className="truncate">{t.tenantMyHome || 'Home'}</span>
@@ -440,11 +433,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
 
           <button
             onClick={() => switchTab('lease')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs lg:text-sm transition-all cursor-pointer ${
-              activeTab === 'lease'
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs lg:text-sm transition-all cursor-pointer ${activeTab === 'lease'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <FileText className="w-4 h-4 shrink-0" />
             <span className="truncate">{t.tenantLease || 'Lease'}</span>
@@ -452,11 +444,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
 
           <button
             onClick={() => switchTab('payments')}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs lg:text-sm transition-all cursor-pointer ${
-              activeTab === 'payments'
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs lg:text-sm transition-all cursor-pointer ${activeTab === 'payments'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-3 min-w-0">
               <CreditCard className="w-4 h-4 shrink-0" />
@@ -474,11 +465,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
               setMessagesMaintenanceMode(false);
               switchTab('messages');
             }}
-            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs lg:text-sm transition-all cursor-pointer ${
-              activeTab === 'messages'
+            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs lg:text-sm transition-all cursor-pointer ${activeTab === 'messages'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-3 min-w-0">
               <MessageSquare className="w-4 h-4 shrink-0" />
@@ -494,11 +484,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
 
           <button
             onClick={() => switchTab('profile')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs lg:text-sm transition-all cursor-pointer ${
-              activeTab === 'profile'
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs lg:text-sm transition-all cursor-pointer ${activeTab === 'profile'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <User className="w-4 h-4 shrink-0" />
             <span className="truncate">{t.profileDetails || 'Profile & Settings'}</span>
@@ -528,24 +517,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       {/* Mobile Top App Bar - Clean, modern, minimalist */}
       <header className="md:hidden bg-[#331A6F] text-white px-4 py-3 flex items-center justify-between border-b border-purple-800/40 shrink-0 sticky top-0 z-30 shadow-xs">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-amber-400 text-slate-950 font-bold text-sm flex items-center justify-center shadow-xs">
-            N
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-base tracking-tight leading-none">Notify</span>
-              <span className="text-[9px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-md font-bold uppercase">
-                {t.verifiedTenant || 'Tenant'}
-              </span>
-            </div>
-            <span className="text-[11px] text-purple-200 font-medium">
-              {activeTab === 'home' && (t.tenantMyHome || 'Home')}
-              {activeTab === 'lease' && (t.tenantLease || 'Lease')}
-              {activeTab === 'payments' && (t.navPayments || 'Payments')}
-              {activeTab === 'messages' && (t.navMessages || 'Messages')}
-              {activeTab === 'profile' && (t.profileDetails || 'Profile & Settings')}
-            </span>
-          </div>
+          <img src="/src/assets/images/white_logo.png" alt="Notify" className="h-8 w-auto object-contain" />
         </div>
 
         <div className="flex items-center gap-2">
@@ -566,11 +538,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
           {/* User Profile Initial */}
           <button
             onClick={() => switchTab('profile')}
-            className={`w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center transition-all cursor-pointer ${
-              activeTab === 'profile'
+            className={`w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center transition-all cursor-pointer ${activeTab === 'profile'
                 ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300/80'
                 : 'bg-white/15 text-white hover:bg-white/25'
-            }`}
+              }`}
             title={t.profileDetails || 'Profile & Settings'}
           >
             {user?.first_name ? user.first_name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
@@ -583,11 +554,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
         {/* 1. Home */}
         <button
           onClick={() => switchTab('home')}
-          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative ${
-            activeTab === 'home'
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative ${activeTab === 'home'
               ? 'text-[#331A6F] font-bold'
               : 'text-slate-400 font-medium hover:text-slate-600'
-          }`}
+            }`}
         >
           <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'home' ? 'bg-purple-100 text-[#331A6F]' : ''}`}>
             <Home className="w-5 h-5 stroke-[2.2]" />
@@ -598,11 +568,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
         {/* 2. Lease */}
         <button
           onClick={() => switchTab('lease')}
-          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative ${
-            activeTab === 'lease'
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative ${activeTab === 'lease'
               ? 'text-[#331A6F] font-bold'
               : 'text-slate-400 font-medium hover:text-slate-600'
-          }`}
+            }`}
         >
           <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'lease' ? 'bg-purple-100 text-[#331A6F]' : ''}`}>
             <FileText className="w-5 h-5 stroke-[2.2]" />
@@ -613,11 +582,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
         {/* 3. Payments */}
         <button
           onClick={() => switchTab('payments')}
-          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative ${
-            activeTab === 'payments'
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative ${activeTab === 'payments'
               ? 'text-[#331A6F] font-bold'
               : 'text-slate-400 font-medium hover:text-slate-600'
-          }`}
+            }`}
         >
           <div className={`p-1.5 rounded-xl transition-all relative ${activeTab === 'payments' ? 'bg-purple-100 text-[#331A6F]' : ''}`}>
             <CreditCard className="w-5 h-5 stroke-[2.2]" />
@@ -634,11 +602,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
             setMessagesMaintenanceMode(false);
             switchTab('messages');
           }}
-          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative ${
-            activeTab === 'messages'
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative ${activeTab === 'messages'
               ? 'text-[#331A6F] font-bold'
               : 'text-slate-400 font-medium hover:text-slate-600'
-          }`}
+            }`}
         >
           <div className={`p-1.5 rounded-xl transition-all relative ${activeTab === 'messages' ? 'bg-purple-100 text-[#331A6F]' : ''}`}>
             <MessageSquare className="w-5 h-5 stroke-[2.2]" />
@@ -654,11 +621,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
         {/* 5. Profile & Settings */}
         <button
           onClick={() => switchTab('profile')}
-          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative ${
-            activeTab === 'profile'
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer relative ${activeTab === 'profile'
               ? 'text-[#331A6F] font-bold'
               : 'text-slate-400 font-medium hover:text-slate-600'
-          }`}
+            }`}
         >
           <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'profile' ? 'bg-purple-100 text-[#331A6F]' : ''}`}>
             <User className="w-5 h-5 stroke-[2.2]" />
@@ -733,11 +699,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                 {/* User Profile Initial (Desktop) */}
                 <button
                   onClick={() => switchTab('profile')}
-                  className={`hidden md:flex w-8 h-8 rounded-full font-bold text-xs items-center justify-center transition-all cursor-pointer ${
-                    activeTab === 'profile'
+                  className={`hidden md:flex w-8 h-8 rounded-full font-bold text-xs items-center justify-center transition-all cursor-pointer ${activeTab === 'profile'
                       ? 'bg-purple-100 text-[#331A6F] ring-2 ring-[#331A6F]/30'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
+                    }`}
                   title={t.profileDetails || 'Profile & Settings'}
                 >
                   {user?.first_name ? user.first_name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
@@ -981,11 +946,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                             <td className="py-3 px-3 font-semibold text-slate-800">{inv.total_amount?.toLocaleString()} RWF</td>
                             <td className="py-3 px-3 font-bold text-rose-600">{inv.balance_due?.toLocaleString()} RWF</td>
                             <td className="py-3 px-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                inv.status === 'PAID'
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${inv.status === 'PAID'
                                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                   : 'bg-rose-50 text-rose-700 border border-rose-200'
-                              }`}>
+                                }`}>
                                 {inv.status}
                               </span>
                             </td>
@@ -1017,11 +981,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                       <div key={inv.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="font-mono font-bold text-xs text-slate-900">{inv.invoice_number}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            inv.status === 'PAID'
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${inv.status === 'PAID'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : 'bg-rose-50 text-rose-700 border border-rose-200'
-                          }`}>
+                            }`}>
                             {inv.status}
                           </span>
                         </div>
@@ -1217,21 +1180,19 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                 <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl max-w-md">
                   <button
                     onClick={() => setPaymentSubTab('invoices')}
-                    className={`flex-1 min-h-[38px] py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      paymentSubTab === 'invoices'
+                    className={`flex-1 min-h-[38px] py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${paymentSubTab === 'invoices'
                         ? 'bg-white text-[#331A6F] shadow-xs'
                         : 'text-slate-500 hover:text-slate-800'
-                    }`}
+                      }`}
                   >
                     {t.rentInvoices || 'Rent Invoices'} ({invoices.length})
                   </button>
                   <button
                     onClick={() => setPaymentSubTab('history')}
-                    className={`flex-1 min-h-[38px] py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      paymentSubTab === 'history'
+                    className={`flex-1 min-h-[38px] py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${paymentSubTab === 'history'
                         ? 'bg-white text-[#331A6F] shadow-xs'
                         : 'text-slate-500 hover:text-slate-800'
-                    }`}
+                      }`}
                   >
                     {t.paymentReceipts || 'Payment Receipts'} ({receipts.length})
                   </button>
@@ -1272,11 +1233,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                                 <td className="py-3.5 px-4 font-semibold text-slate-900">{inv.total_amount?.toLocaleString()} RWF</td>
                                 <td className="py-3.5 px-4 font-bold text-rose-600">{inv.balance_due?.toLocaleString()} RWF</td>
                                 <td className="py-3.5 px-4">
-                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                    inv.status === 'PAID'
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${inv.status === 'PAID'
                                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                       : 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  }`}>
+                                    }`}>
                                     {inv.status}
                                   </span>
                                 </td>
@@ -1312,11 +1272,10 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                           <div key={inv.id} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
                             <div className="flex items-center justify-between">
                               <span className="font-mono font-bold text-sm text-slate-900">{inv.invoice_number}</span>
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                                inv.status === 'PAID'
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${inv.status === 'PAID'
                                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                   : 'bg-amber-50 text-amber-700 border border-amber-200'
-                              }`}>
+                                }`}>
                                 {inv.status}
                               </span>
                             </div>
@@ -1392,7 +1351,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                     {/* Transactions Log */}
                     <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">
                       <h3 className="text-base font-bold text-slate-900">{t.paymentTransactionsRecord || 'Payment Transactions Record'}</h3>
-                      
+
                       {/* Desktop Table */}
                       <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-left text-xs border-collapse">
@@ -1421,13 +1380,12 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                                   <td className="py-3.5 px-4 font-medium text-slate-800">{p.payment_method}</td>
                                   <td className="py-3.5 px-4 font-bold text-emerald-700">{p.amount?.toLocaleString()} {p.currency}</td>
                                   <td className="py-3.5 px-4">
-                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                      p.status === 'COMPLETED'
+                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${p.status === 'COMPLETED'
                                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                         : p.status === 'AWAITING_VERIFICATION'
-                                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                        : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                    }`}>
+                                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                      }`}>
                                       {p.status}
                                     </span>
                                   </td>
@@ -1450,13 +1408,12 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                             <div key={p.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
                               <div className="flex items-center justify-between">
                                 <span className="font-mono font-bold text-xs text-slate-900">{p.payment_reference}</span>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  p.status === 'COMPLETED'
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.status === 'COMPLETED'
                                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                     : p.status === 'AWAITING_VERIFICATION'
-                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                    : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                }`}>
+                                      ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                      : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  }`}>
                                   {p.status}
                                 </span>
                               </div>
@@ -1584,3 +1541,5 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
     </div>
   );
 };
+
+

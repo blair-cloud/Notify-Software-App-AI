@@ -102,10 +102,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.refresh_token) {
         localStorage.setItem('notify_refresh_token', res.refresh_token);
       }
-      setUser(res.user);
-      return res.user;
+      const me = await refreshUser(); if (!me) throw new Error('Authentication failed: Could not fetch user profile.'); return me;
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Invalid email or password.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Invalid email or password.');
       setError(msg);
       throw err;
     }
@@ -122,10 +121,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.refresh_token) {
         localStorage.setItem('notify_refresh_token', res.refresh_token);
       }
-      setUser(res.user);
-      return res.user;
+      const me = await refreshUser(); if (!me) throw new Error('Authentication failed: Could not fetch user profile.'); return me;
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Landlord registration failed.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Landlord registration failed.');
       setError(msg);
       throw err;
     }
@@ -142,10 +140,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.refresh_token) {
         localStorage.setItem('notify_refresh_token', res.refresh_token);
       }
-      setUser(res.user);
-      return res.user;
+      const me = await refreshUser(); if (!me) throw new Error('Authentication failed: Could not fetch user profile.'); return me;
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Tenant registration failed.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Tenant registration failed.');
       setError(msg);
       throw err;
     }
@@ -157,7 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await api.auth.forgotPassword(email);
       return res;
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Failed to request password reset.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Failed to request password reset.');
       setError(msg);
       throw err;
     }
@@ -174,7 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await api.auth.resetPassword(data);
       return res;
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Failed to reset password.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Failed to reset password.');
       setError(msg);
       throw err;
     }
@@ -187,7 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser((prev) => (prev ? { ...prev, ...updated } : updated));
       return updated;
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Failed to update profile.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Failed to update profile.');
       setError(msg);
       throw err;
     }
@@ -199,7 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await api.auth.changePassword(data);
       return res;
     } catch (err: any) {
-      const msg = err.data?.detail || err.message || 'Failed to update password.';
+      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Failed to update password.');
       setError(msg);
       throw err;
     }
@@ -249,3 +246,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

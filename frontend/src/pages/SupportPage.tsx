@@ -109,7 +109,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBack, onOpenGetStart
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <a
-              href="https://wa.me/250788000000"
+              href="https://wa.me/250788364786"
               target="_blank"
               rel="noreferrer"
               className="p-6 rounded-[22px] bg-emerald-300 text-black border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[0.5px_0.5px_0_#000000] transition-all duration-150 flex flex-col justify-between min-h-[180px]"
@@ -119,7 +119,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBack, onOpenGetStart
                   <MessageSquare className="w-6 h-6 stroke-[2.5]" />
                 </div>
                 <div className="text-xs font-bold uppercase tracking-wider text-black/80">{t.whatsAppSupport}</div>
-                <div className="text-xl font-black text-black mt-1">+250 788 000 000</div>
+                <div className="text-xl font-black text-black mt-1">+250 788 364786</div>
               </div>
               <div className="mt-6 pt-3 border-t-2 border-black flex items-center justify-between text-xs font-bold uppercase tracking-wider">
                 <span>Instant Replies</span>
@@ -133,7 +133,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBack, onOpenGetStart
                   <Mail className="w-6 h-6 stroke-[2.5]" />
                 </div>
                 <div className="text-xs font-bold uppercase tracking-wider text-slate-600">{t.emailDesk}</div>
-                <div className="text-lg font-black text-black mt-1">support@notify.co.rw</div>
+                <div className="text-lg font-black text-black mt-1">support@notifysoft.com</div>
               </div>
               <div className="mt-6 pt-3 border-t-2 border-black flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-700">
                 <span>Response Time</span>
@@ -147,11 +147,11 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBack, onOpenGetStart
                   <MapPin className="w-6 h-6 stroke-[2.5]" />
                 </div>
                 <div className="text-xs font-bold uppercase tracking-wider text-slate-600">{t.kigaliPhoneLine}</div>
-                <div className="text-lg font-black text-black mt-1">+250 788 123 456</div>
+                <div className="text-lg font-black text-black mt-1">+250 788 364786</div>
               </div>
               <div className="mt-6 pt-3 border-t-2 border-black flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-700">
                 <span>Location</span>
-                <span className="text-[10px] bg-[#FAFAFA] px-2 py-1 rounded-[6px] border border-black">Kigali Heights</span>
+                <span className="text-[10px] bg-[#FAFAFA] px-2 py-1 rounded-[6px] border border-black">KG 313 St, House No. 11.</span>
               </div>
             </div>
           </div>
@@ -241,9 +241,8 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBack, onOpenGetStart
                     >
                       <span>{faq.question}</span>
                       <ChevronDown
-                        className={`w-5 h-5 text-black shrink-0 stroke-[2.5] transition-transform ${
-                          isOpen ? 'rotate-180 text-[#331A6F]' : ''
-                        }`}
+                        className={`w-5 h-5 text-black shrink-0 stroke-[2.5] transition-transform ${isOpen ? 'rotate-180 text-[#331A6F]' : ''
+                          }`}
                       />
                     </button>
                     {isOpen && (

@@ -2306,7 +2306,16 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
 
     if (!response.ok) {
-      const errorMessage = data?.detail || data?.message || `HTTP Error ${response.status}`;
+      let errorMessage = `HTTP Error ${response.status}`;
+      if (typeof data?.detail === 'string') {
+        errorMessage = data.detail;
+      } else if (Array.isArray(data?.detail) && data.detail.length > 0) {
+        errorMessage = data.detail.map((d) => d?.msg || d?.message || JSON.stringify(d)).join(', ');
+      } else if (data?.detail && typeof data.detail === 'object') {
+        errorMessage = JSON.stringify(data.detail);
+      } else if (data?.message) {
+        errorMessage = data.message;
+      }
       throw new ApiError(response.status, errorMessage, data);
     }
 
@@ -2334,11 +2343,16 @@ export const api = {
         body: JSON.stringify(data),
       }),
 
-    login: (data: any) =>
-      request<any>('/auth/login', {
+    login: (data: any) => {
+      const payload = {
+        email_or_phone: data.email_or_phone || data.email || data.username || data.phone || '',
+        password: data.password || '',
+      };
+      return request<any>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify(data),
-      }),
+        body: JSON.stringify(payload),
+      });
+    },
 
     getMe: () =>
       request<any>('/auth/me', {

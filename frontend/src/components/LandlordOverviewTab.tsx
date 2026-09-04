@@ -147,8 +147,8 @@ export const LandlordOverviewTab: React.FC<LandlordOverviewTabProps> = ({
     totalExpectedRent > 0
       ? Math.min(100, Math.round((totalCollectedRent / totalExpectedRent) * 100))
       : totalCollectedRent > 0
-      ? 100
-      : 0;
+        ? 100
+        : 0;
 
   // 3. ACTIVE LEASES (Real data)
   const activeLeases = filteredLeases.filter((l) => l.status === 'ACTIVE' || l.status === 'EXPIRING_SOON');
@@ -279,38 +279,7 @@ export const LandlordOverviewTab: React.FC<LandlordOverviewTabProps> = ({
       </div>
 
       {/* TRACKER QUICK LAUNCHER HERO BANNER */}
-      <div
-        onClick={() => onNavigateTab('tracker')}
-        className="bg-gradient-to-r from-[#1e1045] via-[#2a1463] to-[#3b1c8c] rounded-2xl p-5 text-white shadow-md border border-purple-900/60 cursor-pointer group hover:border-amber-400/50 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-      >
-        <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shrink-0 group-hover:scale-105 transition-transform shadow-xs">
-            <FileSpreadsheet className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-black text-white tracking-wide">Live Payment Tracker & Reconciliation</h2>
-              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 border border-emerald-400/30">
-                Single Source of Truth
-              </span>
-            </div>
-            <p className="text-xs text-purple-200/90 mt-0.5">
-              Upload bank statements (BK, MoMo, I&M) to auto-match rent inflows against expected tenant leases, track today's payments, and verify ledgers in real-time.
-            </p>
-          </div>
-        </div>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onNavigateTab('tracker');
-          }}
-          className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-all flex items-center gap-1.5 shrink-0 shadow-xs group-hover:translate-x-0.5"
-        >
-          <span>Open Tracker</span>
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
 
       {/* 2. PRIMARY STATUS CARDS (CLEAR, INFORMATIVE, AND BALANCED 6-CARD GRID) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
@@ -327,7 +296,7 @@ export const LandlordOverviewTab: React.FC<LandlordOverviewTabProps> = ({
                 </div>
                 <span className="text-[11px] font-bold text-emerald-950 uppercase tracking-wider">Occupancy</span>
               </div>
-              
+
               {/* Clean static donut indicator */}
               <div className="relative w-10 h-10 flex items-center justify-center shrink-0">
                 <svg className="w-full h-full transform -rotate-90" viewBox="0 0 48 48">
@@ -726,13 +695,12 @@ export const LandlordOverviewTab: React.FC<LandlordOverviewTabProps> = ({
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                          unit.status === 'OCCUPIED'
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${unit.status === 'OCCUPIED'
                             ? 'bg-emerald-100 text-emerald-800'
                             : unit.status === 'VACANT' || unit.status === 'RESERVED'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}
                       >
                         {unit.status}
                       </span>

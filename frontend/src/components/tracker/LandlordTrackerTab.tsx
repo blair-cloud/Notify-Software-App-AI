@@ -105,7 +105,7 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
 }) => {
   // Wizard Navigation State
   const [currentStep, setCurrentStep] = useState<WizardStep>('LANDING');
-  
+
   // Selection State
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(
     properties.length > 0 ? properties[0].id : 'ALL'
@@ -620,11 +620,10 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
       {/* Toast Notification */}
       {notification && (
         <div
-          className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg border text-xs font-bold transition-all flex items-center gap-2 ${
-            notification.isError
-              ? 'bg-rose-50 border-rose-200 text-rose-800'
-              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-          }`}
+          className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg border text-xs font-bold transition-all flex items-center gap-2 ${notification.isError
+            ? 'bg-rose-50 border-rose-200 text-rose-800'
+            : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            }`}
         >
           {notification.isError ? <AlertCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
           <span>{notification.message}</span>
@@ -651,19 +650,17 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                       setCurrentStep(stg.key);
                     }
                   }}
-                  className={`flex items-center gap-2 select-none ${
-                    isClickable ? 'cursor-pointer group' : ''
-                  }`}
+                  className={`flex items-center gap-2 select-none ${isClickable ? 'cursor-pointer group' : ''
+                    }`}
                   title={isClickable ? `Return to ${stg.label}` : stg.label}
                 >
                   <div
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                      isCompleted
-                        ? 'bg-[#331a6f] text-white'
-                        : isCurrent
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${isCompleted
+                      ? 'bg-[#331a6f] text-white'
+                      : isCurrent
                         ? 'bg-[#331a6f] text-white ring-4 ring-[#331a6f]/15 shadow-xs'
                         : 'bg-slate-100 text-slate-400 border border-slate-200'
-                    } ${stg.key === 'STEP_ANALYSIS' && isCurrent ? 'animate-pulse' : ''}`}
+                      } ${stg.key === 'STEP_ANALYSIS' && isCurrent ? 'animate-pulse' : ''}`}
                   >
                     {isCompleted ? (
                       <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
@@ -672,24 +669,22 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                     )}
                   </div>
                   <span
-                    className={`text-xs transition-colors hidden md:inline font-semibold ${
-                      isCurrent
-                        ? 'text-[#331a6f] font-black'
-                        : isCompleted
+                    className={`text-xs transition-colors hidden md:inline font-semibold ${isCurrent
+                      ? 'text-[#331a6f] font-black'
+                      : isCompleted
                         ? 'text-slate-700 group-hover:text-[#331a6f]'
                         : 'text-slate-400'
-                    }`}
+                      }`}
                   >
                     {stg.label}
                   </span>
                   <span
-                    className={`text-xs transition-colors md:hidden font-semibold ${
-                      isCurrent
-                        ? 'text-[#331a6f] font-black'
-                        : isCompleted
+                    className={`text-xs transition-colors md:hidden font-semibold ${isCurrent
+                      ? 'text-[#331a6f] font-black'
+                      : isCompleted
                         ? 'text-slate-700'
                         : 'text-slate-400'
-                    }`}
+                      }`}
                   >
                     {stg.shortLabel}
                   </span>
@@ -698,9 +693,8 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                 {/* Connector Line between steps */}
                 {index < TRACKER_STAGES.length - 1 && (
                   <div
-                    className={`flex-1 h-0.5 mx-1.5 sm:mx-3 transition-colors ${
-                      index < currentStepIndex ? 'bg-[#331a6f]' : 'bg-slate-200'
-                    }`}
+                    className={`flex-1 h-0.5 mx-1.5 sm:mx-3 transition-colors ${index < currentStepIndex ? 'bg-[#331a6f]' : 'bg-slate-200'
+                      }`}
                   />
                 )}
               </React.Fragment>
@@ -782,171 +776,10 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
           </div>
 
           {/* AI & Data-Visualization Console Showcase */}
-          <div className="relative rounded-2xl border border-slate-200/90 bg-slate-950 text-slate-100 p-5 sm:p-7 shadow-xl overflow-hidden">
-            {/* Top Telemetry Console Bar */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-5 border-b border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-                </div>
-                <span className="text-xs font-mono font-semibold text-slate-300 tracking-wide">
-                  AI Neural Matching Engine • v3.2
-                </span>
-              </div>
 
-              <div className="flex items-center gap-3 text-xs font-mono">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  99.8% Match Precision
-                </span>
-                <span className="hidden md:inline text-slate-500">Latency: 38ms</span>
-              </div>
-            </div>
-
-            {/* Neural Data Pipeline Visual */}
-            <div className="grid grid-cols-1 lg:grid-cols-7 gap-4 lg:gap-3 items-center pt-6">
-              {/* Left Column: Expected Receivables (2 cols) */}
-              <div className="lg:col-span-3 space-y-3">
-                <div className="flex items-center justify-between text-xs font-mono text-slate-400 pb-1">
-                  <span className="flex items-center gap-1.5 uppercase tracking-wider font-semibold text-slate-300">
-                    <FileText className="w-3.5 h-3.5 text-[#331a6f] bg-white rounded-xs p-0.5" />
-                    Expected Invoices
-                  </span>
-                  <span>Due Schedule</span>
-                </div>
-
-                {/* Sample Expected Row 1 */}
-                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-colors flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="text-xs font-bold text-slate-200">Jean-Paul Hakizimana</div>
-                    <div className="text-[11px] text-slate-400 font-mono">Unit 302 • Kigali Heights</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-bold font-mono text-emerald-400">RWF 450,000</div>
-                    <div className="text-[10px] text-slate-400">Due: 01 Sep</div>
-                  </div>
-                </div>
-
-                {/* Sample Expected Row 2 */}
-                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-colors flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="text-xs font-bold text-slate-200">Aline Mukamana</div>
-                    <div className="text-[11px] text-slate-400 font-mono">Unit 105 • Nyarutarama</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs font-bold font-mono text-emerald-400">RWF 300,000</div>
-                    <div className="text-[10px] text-slate-400">Due: 05 Sep</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Center Column: AI Neural Matching Matrix Hub (1 col) */}
-              <div className="lg:col-span-1 flex flex-col items-center justify-center py-2 lg:py-0">
-                <div className="relative flex items-center justify-center">
-                  <div className="absolute w-14 h-14 rounded-full bg-[#331a6f]/30 blur-md" />
-                  <div className="w-12 h-12 rounded-2xl bg-[#331a6f] border border-[#331a6f]/50 flex items-center justify-center text-white shadow-lg shadow-[#331a6f]/40 z-10">
-                    <Cpu className="w-6 h-6 animate-pulse" />
-                  </div>
-                </div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 mt-2 font-bold text-center">
-                  AI Matching Core
-                </span>
-                <div className="hidden lg:flex flex-col gap-1 items-center mt-2 text-[9px] font-mono text-slate-500">
-                  <span>OCR Parse</span>
-                  <span>Fuzzy Match</span>
-                  <span>Exact Balance</span>
-                </div>
-              </div>
-
-              {/* Right Column: Ingested Bank Statement Feed (3 cols) */}
-              <div className="lg:col-span-3 space-y-3">
-                <div className="flex items-center justify-between text-xs font-mono text-slate-400 pb-1">
-                  <span className="flex items-center gap-1.5 uppercase tracking-wider font-semibold text-slate-300">
-                    <Building2 className="w-3.5 h-3.5 text-indigo-400" />
-                    Bank Statement Feed
-                  </span>
-                  <span>Match Status</span>
-                </div>
-
-                {/* Sample Bank Feed Row 1 */}
-                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-900/40 hover:border-emerald-700/50 transition-colors flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="text-xs font-bold text-slate-200 truncate max-w-[170px] sm:max-w-xs">
-                      BK CR +450,000 • JP HAKIZIMANA
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono">TXN: BK-84920 • Bank of Kigali</div>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold font-mono">
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    <span>100% Match</span>
-                  </div>
-                </div>
-
-                {/* Sample Bank Feed Row 2 */}
-                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-900/40 hover:border-emerald-700/50 transition-colors flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="text-xs font-bold text-slate-200 truncate max-w-[170px] sm:max-w-xs">
-                      MoMo CR +300,000 • MUKAMANA ALINE
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono">TXN: MOMO-55102 • MTN Mobile Money</div>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold font-mono">
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    <span>100% Match</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom Processing Status Bar */}
-            <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 font-mono">
-              <div className="flex items-center gap-2">
-                <Activity className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Multi-channel reconciliation active: Bank of Kigali, Equity, I&M, MTN MoMo Pay</span>
-              </div>
-              <div className="text-emerald-400 font-semibold flex items-center gap-1">
-                <span>0 Unreconciled Mismatches</span>
-              </div>
-            </div>
-          </div>
 
           {/* 3 Modern SaaS Architecture & Trust Pillars */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* Pillar 1: Universal Statement OCR */}
-            <div className="p-6 rounded-2xl border border-slate-200/90 bg-white hover:border-[#331a6f]/30 transition-all shadow-xs space-y-3">
-              <div className="w-11 h-11 rounded-xl bg-[#331a6f]/10 text-[#331a6f] flex items-center justify-center">
-                <FileSpreadsheet className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">Multi-Bank Statement OCR</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Drop any PDF, Excel, or CSV statement from Bank of Kigali, Equity Bank, I&M, or MTN MoMo Pay. Extracts credit transactions in seconds.
-              </p>
-            </div>
 
-            {/* Pillar 2: Intelligent Discrepancy Spotting */}
-            <div className="p-6 rounded-2xl border border-slate-200/90 bg-white hover:border-[#331a6f]/30 transition-all shadow-xs space-y-3">
-              <div className="w-11 h-11 rounded-xl bg-[#331a6f]/10 text-[#331a6f] flex items-center justify-center">
-                <Zap className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">Intelligent Fuzzy Matching</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Cross-references payer names, unit identifiers, and payment references against active lease schedules and overdue rent balances.
-              </p>
-            </div>
-
-            {/* Pillar 3: Bank-Grade Privacy Vault */}
-            <div className="p-6 rounded-2xl border border-slate-200/90 bg-white hover:border-[#331a6f]/30 transition-all shadow-xs space-y-3">
-              <div className="w-11 h-11 rounded-xl bg-[#331a6f]/10 text-[#331a6f] flex items-center justify-center">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">Encrypted In-Memory Privacy</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Your bank statements are parsed securely in memory. Bank account logins and sensitive financial passwords are never requested or stored.
-              </p>
-            </div>
-          </div>
         </div>
       )}
 
@@ -967,18 +800,16 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
             {/* Option: All Properties */}
             <div
               onClick={() => setSelectedPropertyId('ALL')}
-              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                selectedPropertyId === 'ALL'
-                  ? 'border-[#331a6f] bg-[#331a6f]/5 shadow-xs'
-                  : 'border-slate-200 hover:border-slate-300 bg-white'
-              }`}
+              className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${selectedPropertyId === 'ALL'
+                ? 'border-[#331a6f] bg-[#331a6f]/5 shadow-xs'
+                : 'border-slate-200 hover:border-slate-300 bg-white'
+                }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      selectedPropertyId === 'ALL' ? 'bg-[#331a6f] text-white' : 'bg-slate-100 text-slate-600'
-                    }`}
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedPropertyId === 'ALL' ? 'bg-[#331a6f] text-white' : 'bg-slate-100 text-slate-600'
+                      }`}
                   >
                     <Layers className="w-5 h-5" />
                   </div>
@@ -989,11 +820,10 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                 </div>
 
                 <div
-                  className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                    selectedPropertyId === 'ALL'
-                      ? 'border-[#331a6f] bg-[#331a6f] text-white'
-                      : 'border-slate-300 bg-white'
-                  }`}
+                  className={`w-5 h-5 rounded-full border flex items-center justify-center ${selectedPropertyId === 'ALL'
+                    ? 'border-[#331a6f] bg-[#331a6f] text-white'
+                    : 'border-slate-300 bg-white'
+                    }`}
                 >
                   {selectedPropertyId === 'ALL' && <Check className="w-3 h-3" />}
                 </div>
@@ -1015,18 +845,16 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                 <div
                   key={prop.id}
                   onClick={() => setSelectedPropertyId(prop.id)}
-                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                    isSelected
-                      ? 'border-[#331a6f] bg-[#331a6f]/5 shadow-xs'
-                      : 'border-slate-200 hover:border-slate-300 bg-white'
-                  }`}
+                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${isSelected
+                    ? 'border-[#331a6f] bg-[#331a6f]/5 shadow-xs'
+                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                          isSelected ? 'bg-[#331a6f] text-white' : 'bg-slate-100 text-slate-600'
-                        }`}
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center ${isSelected ? 'bg-[#331a6f] text-white' : 'bg-slate-100 text-slate-600'
+                          }`}
                       >
                         <Building2 className="w-5 h-5" />
                       </div>
@@ -1037,9 +865,8 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                     </div>
 
                     <div
-                      className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                        isSelected ? 'border-[#331a6f] bg-[#331a6f] text-white' : 'border-slate-300 bg-white'
-                      }`}
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? 'border-[#331a6f] bg-[#331a6f] text-white' : 'border-slate-300 bg-white'
+                        }`}
                     >
                       {isSelected && <Check className="w-3 h-3" />}
                     </div>
@@ -1110,18 +937,16 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                   key={opt.key}
                   type="button"
                   onClick={() => setPeriodType(opt.key)}
-                  className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    isSelected
-                      ? 'border-[#331a6f] bg-[#331a6f]/5 shadow-xs'
-                      : 'border-slate-200 hover:border-slate-300 bg-white'
-                  }`}
+                  className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${isSelected
+                    ? 'border-[#331a6f] bg-[#331a6f]/5 shadow-xs'
+                    : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
                 >
                   <div className="flex items-center justify-between w-full">
                     <span className="text-sm font-black text-slate-900">{opt.title}</span>
                     <div
-                      className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        isSelected ? 'border-[#331a6f] bg-[#331a6f] text-white' : 'border-slate-300 bg-white'
-                      }`}
+                      className={`w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? 'border-[#331a6f] bg-[#331a6f] text-white' : 'border-slate-300 bg-white'
+                        }`}
                     >
                       {isSelected && <Check className="w-2.5 h-2.5" />}
                     </div>
@@ -1232,13 +1057,12 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
             onDragLeave={() => setIsDragOver(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-3xl p-8 sm:p-12 text-center transition-all cursor-pointer flex flex-col items-center justify-center space-y-4 ${
-              isDragOver
-                ? 'border-[#331a6f] bg-[#331a6f]/5 scale-[0.99]'
-                : statementFileName
+            className={`border-2 border-dashed rounded-3xl p-8 sm:p-12 text-center transition-all cursor-pointer flex flex-col items-center justify-center space-y-4 ${isDragOver
+              ? 'border-[#331a6f] bg-[#331a6f]/5 scale-[0.99]'
+              : statementFileName
                 ? 'border-[#331a6f] bg-[#331a6f]/5'
                 : 'border-slate-300 hover:border-[#331a6f] bg-slate-50/50 hover:bg-slate-50'
-            }`}
+              }`}
           >
             <div className="w-14 h-14 rounded-2xl bg-[#331a6f]/10 text-[#331a6f] flex items-center justify-center">
               <Upload className="w-7 h-7" />
@@ -1279,11 +1103,10 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
               <button
                 type="button"
                 onClick={() => handleSelectSample('BK')}
-                className={`p-3.5 rounded-xl border text-left transition-all text-xs font-bold flex items-center justify-between cursor-pointer ${
-                  statementBankName === 'Bank of Kigali' && statementFileName
-                    ? 'border-[#331a6f] bg-[#331a6f]/5 text-[#331a6f]'
-                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                }`}
+                className={`p-3.5 rounded-xl border text-left transition-all text-xs font-bold flex items-center justify-between cursor-pointer ${statementBankName === 'Bank of Kigali' && statementFileName
+                  ? 'border-[#331a6f] bg-[#331a6f]/5 text-[#331a6f]'
+                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
               >
                 <span>Bank of Kigali (BK)</span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -1292,11 +1115,10 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
               <button
                 type="button"
                 onClick={() => handleSelectSample('MOMO')}
-                className={`p-3.5 rounded-xl border text-left transition-all text-xs font-bold flex items-center justify-between cursor-pointer ${
-                  statementBankName === 'MTN MoMo Pay' && statementFileName
-                    ? 'border-[#331a6f] bg-[#331a6f]/5 text-[#331a6f]'
-                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                }`}
+                className={`p-3.5 rounded-xl border text-left transition-all text-xs font-bold flex items-center justify-between cursor-pointer ${statementBankName === 'MTN MoMo Pay' && statementFileName
+                  ? 'border-[#331a6f] bg-[#331a6f]/5 text-[#331a6f]'
+                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
               >
                 <span>MTN MoMo Pay</span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -1305,11 +1127,10 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
               <button
                 type="button"
                 onClick={() => handleSelectSample('IM')}
-                className={`p-3.5 rounded-xl border text-left transition-all text-xs font-bold flex items-center justify-between cursor-pointer ${
-                  statementBankName === 'I&M Bank Rwanda' && statementFileName
-                    ? 'border-[#331a6f] bg-[#331a6f]/5 text-[#331a6f]'
-                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                }`}
+                className={`p-3.5 rounded-xl border text-left transition-all text-xs font-bold flex items-center justify-between cursor-pointer ${statementBankName === 'I&M Bank Rwanda' && statementFileName
+                  ? 'border-[#331a6f] bg-[#331a6f]/5 text-[#331a6f]'
+                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
               >
                 <span>I&M Bank Rwanda</span>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -1387,13 +1208,12 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                 <div key={stage} className="flex items-center justify-between text-xs transition-all">
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
-                        isDone
-                          ? 'bg-emerald-600 text-white'
-                          : isCurrent
+                      className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${isDone
+                        ? 'bg-emerald-600 text-white'
+                        : isCurrent
                           ? 'bg-[#331a6f] text-white animate-pulse'
                           : 'bg-slate-200 text-slate-400'
-                      }`}
+                        }`}
                     >
                       {isDone ? (
                         <Check className="w-3 h-3" />
@@ -1404,13 +1224,12 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                       )}
                     </div>
                     <span
-                      className={`font-semibold ${
-                        isCurrent
-                          ? 'text-[#331a6f] font-bold'
-                          : isDone
+                      className={`font-semibold ${isCurrent
+                        ? 'text-[#331a6f] font-bold'
+                        : isDone
                           ? 'text-slate-800'
                           : 'text-slate-400'
-                      }`}
+                        }`}
                     >
                       {stage}
                     </span>
@@ -1596,11 +1415,10 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                     <button
                       key={f.key}
                       onClick={() => setReportStatusFilter(f.key)}
-                      className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                        reportStatusFilter === f.key
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${reportStatusFilter === f.key
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                        }`}
                     >
                       {f.label}
                     </button>

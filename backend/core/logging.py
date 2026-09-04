@@ -1,11 +1,14 @@
 import logging
 import sys
-from backend.core.config import settings
 
 logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)]
 )
+
+# Suppress verbose third-party loggers
+for logger_name in ["aiosqlite", "passlib", "passlib.utils.compat", "passlib.registry", "sqlalchemy", "sqlalchemy.engine", "asyncio"]:
+    logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 logger = logging.getLogger("notify")

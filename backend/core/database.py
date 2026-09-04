@@ -3,7 +3,7 @@ from sqlalchemy.orm import DeclarativeBase
 from backend.core.config import settings
 
 db_url = settings.DATABASE_URL
-engine_kwargs = {"echo": settings.DEBUG, "future": True}
+engine_kwargs = {"echo": False, "future": True}
 
 if db_url.startswith("sqlite"):
     engine_kwargs["connect_args"] = {"check_same_thread": False}
