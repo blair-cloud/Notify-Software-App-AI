@@ -1,0 +1,128 @@
+[
+  {
+    "id": "user-landlord-001",
+    "first_name": "Jean-Paul",
+    "last_name": "Mugabo",
+    "email": "landlord@notify.test",
+    "phone": "+250788123456",
+    "role": "LANDLORD",
+    "password_hash": "b3fa53320f74cc89de865bf8fc482d9f:189d2449786e8cca2a7bf3cbe3efd8e3f1d70aac4b065f927c9756b43b11c8b4f6f7a76ccf4601f16295f8e41c3e8d53b4b14ce69a7ba202660f307584112051",
+    "status": "ACTIVE",
+    "language": "en",
+    "created_at": "2026-09-03T20:45:41.154Z",
+    "last_login_at": "2026-09-04T08:24:47.676Z",
+    "landlord_profile": {
+      "id": "lp-001",
+      "business_type": "COMPANY",
+      "business_name": "Kigali Commercial Properties Ltd",
+      "address": "KN 4 Ave, Commercial District",
+      "district": "Nyarugenge",
+      "city": "Kigali",
+      "tax_identifier": "100234567"
+    }
+  },
+  {
+    "id": "user-landlord-eric",
+    "first_name": "Eric",
+    "last_name": "Tuyishime",
+    "email": "eric04tme@gmail.com",
+    "phone": "+250788334455",
+    "role": "LANDLORD",
+    "password_hash": "fe910db2123a057620fbfb1cce18506a:a1d45b8ca73c6aaa9be1d2d974c4b629f149fa38af7cbb2cead64c94f8fff527bd7dbbe18f809d27e587dd70b3ecf1defb399146ec52954be09744182d71b010",
+    "status": "ACTIVE",
+    "language": "en",
+    "created_at": "2026-09-03T20:45:41.154Z",
+    "last_login_at": "2026-09-03T20:45:41.154Z",
+    "landlord_profile": {
+      "id": "lp-eric",
+      "business_type": "INDIVIDUAL",
+      "business_name": "Tuyishime Commercial Properties",
+      "address": "KG 9 Ave, Nyarutarama",
+      "district": "Gasabo",
+      "city": "Kigali",
+      "tax_identifier": "100987654"
+    }
+  },
+  {
+    "id": "user-tenant-001",
+    "first_name": "Aline",
+    "last_name": "Uwase",
+    "email": "tenant@notify.test",
+    "username": "tenant_jean",
+    "phone": "+250788654321",
+    "role": "TENANT",
+    "password_hash": "b52ebe7e17087bd86fe8280dc1d825e7:5ec5b8c02f3b5e12afee8fcfcd58e39dd303d5f11dec250fed01e6639998dc5e9ce633c7591926d2d1ef527b1e0fcb3758b27fcfe13df3dd8fc7a240ad09a274",
+    "status": "ACTIVE",
+    "language": "en",
+    "invitation_token": "INV-KGL-2026",
+    "created_at": "2026-09-03T20:45:41.154Z",
+    "last_login_at": "2026-09-04T08:23:49.836Z",
+    "tenant_profile": {
+      "id": "tp-001",
+      "national_id": "1199880012345678",
+      "occupation": "Retail Boutique Owner",
+      "property_name": "Notify Heights Commercial Mall",
+      "unit_number": "B-204",
+      "monthly_rent": 450000
+    }
+  },
+  {
+    "id": "user-admin-001",
+    "first_name": "System",
+    "last_name": "Administrator",
+    "email": "admin@notify.test",
+    "username": "notify_admin",
+    "phone": "+250788000001",
+    "role": "SYSTEM_ADMIN",
+    "password_hash": "3bcf27f22554a9de82d53567b8778873:a93a93fd37af2c715080c17a7a55955fde89a4523ac1ac0af54a6c3851c611cd0601743447233f2cf2222d6d65378d7810008def263ac93c1e4db9f3c65637d4",
+    "status": "ACTIVE",
+    "language": "en",
+    "created_at": "2026-09-03T20:45:41.154Z",
+    "last_login_at": "2026-09-03T20:45:41.154Z"
+  },
+  {
+    "id": "user-tenant-1788468348377",
+    "first_name": "Chantal",
+    "last_name": "Mukamana",
+    "email": "chantal@boutique.rw",
+    "username": "chantal_shop",
+    "phone": "+250788778899",
+    "role": "TENANT",
+    "password_hash": "623c57aaa60f1e48ce0696b10033402a:5fe99be47747c5ff9de46edbca2f6cb903455a060e85baa9fd034683156e227d312f687d8c10703b33f030f4880afb45d0c91ec4b558bf983697686abe9a92f3",
+    "status": "ACTIVE",
+    "language": "en",
+    "invitation_token": "INV-KGL-2026",
+    "created_at": "2026-09-03T20:45:48.420Z",
+    "last_login_at": "2026-09-03T20:45:48.420Z",
+    "tenant_profile": {
+      "id": "tp-1788468348420",
+      "occupation": "Commercial Tenant",
+      "property_name": "Notify Heights Commercial Mall",
+      "unit_number": "B-204",
+      "monthly_rent": 450000
+    }
+  },
+  {
+    "id": "user-landlord-1788468352988",
+    "first_name": "Fabrice",
+    "last_name": "Habimana",
+    "email": "fabrice@kigaliproperties.rw",
+    "phone": "+250788990011",
+    "role": "LANDLORD",
+    "password_hash": "6f89cd433396ac561eb5e611d1e68821:4363a69549578a12820923174f486f106aac8dfbb52854b2ce544f16134bb3864f21e4627ba7f559b5c94d9a716488a5fc51d5ef4db104ef9eb1bc438dc83d06",
+    "status": "ACTIVE",
+    "language": "en",
+    "created_at": "2026-09-03T20:45:53.033Z",
+    "last_login_at": "2026-09-03T20:46:01.763Z",
+    "landlord_profile": {
+      "id": "lp-1788468353033",
+      "business_type": "INDIVIDUAL",
+      "business_name": "Habimana Commercial Holdings",
+      "address": "Kigali CBD",
+      "district": "Nyarugenge",
+      "city": "Kigali"
+    },
+    "reset_token": null,
+    "reset_token_expires_at": null
+  }
+]

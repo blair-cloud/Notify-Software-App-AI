@@ -1,0 +1,44 @@
+[
+  {
+    "id": "inv-001",
+    "token": "INV-KGL-2026",
+    "property_id": "prop-heights",
+    "property_name": "Notify Heights Commercial Mall",
+    "unit_id": "unit-b204",
+    "unit_number": "B-204",
+    "landlord_name": "Jean-Paul Mugabo",
+    "monthly_rent": 450000,
+    "currency": "RWF",
+    "status": "ACTIVE",
+    "created_at": "2026-09-03T20:45:48.376Z",
+    "expires_at": "2026-11-02T20:45:48.376Z"
+  },
+  {
+    "id": "inv-002",
+    "token": "INV-NOTIFY-101",
+    "property_id": "prop-plaza",
+    "property_name": "Kigali Heights Plaza",
+    "unit_id": "unit-a101",
+    "unit_number": "Suite 101",
+    "landlord_name": "Jean-Paul Mugabo",
+    "monthly_rent": 550000,
+    "currency": "RWF",
+    "status": "ACTIVE",
+    "created_at": "2026-09-03T20:45:48.376Z",
+    "expires_at": "2026-11-02T20:45:48.376Z"
+  },
+  {
+    "id": "inv-003",
+    "token": "INV-NOTIFY-102",
+    "property_id": "prop-centenary",
+    "property_name": "Centenary House",
+    "unit_id": "unit-c12",
+    "unit_number": "Shop 12",
+    "landlord_name": "Jean-Paul Mugabo",
+    "monthly_rent": 320000,
+    "currency": "RWF",
+    "status": "ACTIVE",
+    "created_at": "2026-09-03T20:45:48.376Z",
+    "expires_at": "2026-11-02T20:45:48.376Z"
+  }
+]
