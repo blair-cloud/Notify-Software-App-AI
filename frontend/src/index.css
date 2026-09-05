@@ -15,7 +15,7 @@
 /* Subtle repeating staggered/offset grid of square dots (3px × 3px, #C3C3C0) with reduced row spacing on #F4F4F0 */
 .bg-notify-grid {
   background-color: #F4F4F0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect x='0' y='0' width='3' height='3' fill='%23C3C3C0'/%3E%3Crect x='24' y='24' width='3' height='3' fill='%23C3C3C0'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect x='0' y='0' width='3' height='3' fill='%23E0E0DD'/%3E%3Crect x='24' y='24' width='3' height='3' fill='%23E0E0DD'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 48px 48px;
 }
