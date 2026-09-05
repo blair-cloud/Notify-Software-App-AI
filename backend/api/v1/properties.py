@@ -46,3 +46,14 @@ async def update_property(
     import uuid
     service = PropertyService(db)
     return await service.update_property(landlord, uuid.UUID(property_id), req)
+
+@router.delete("/{property_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_property(
+    property_id: str,
+    landlord: LandlordProfile = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    import uuid
+    service = PropertyService(db)
+    await service.delete_property(landlord, uuid.UUID(property_id))
+    return None

@@ -27,6 +27,9 @@ class UnitService:
             unit_type=req.unit_type,
             monthly_rent=req.monthly_rent,
             currency=req.currency,
+            rooms=req.rooms,
+            bathrooms=req.bathrooms,
+            square_meters=req.square_meters,
             description=req.description
         )
         return await self.unit_repo.create(unit)
@@ -46,3 +49,7 @@ class UnitService:
         for field, value in req.model_dump(exclude_unset=True).items():
             setattr(unit, field, value)
         return await self.unit_repo.update(unit)
+
+    async def delete_unit(self, landlord: LandlordProfile, unit_id: uuid.UUID) -> None:
+        unit = await self.get_unit_by_id(landlord, unit_id)
+        await self.unit_repo.delete(unit)

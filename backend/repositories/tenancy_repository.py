@@ -3,7 +3,7 @@ from typing import Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.models import Tenancy, TenancyStatus
+from backend.models import Tenancy, TenancyStatus, TenantProfile
 
 class TenancyRepository:
     def __init__(self, db: AsyncSession):
@@ -13,7 +13,7 @@ class TenancyRepository:
         stmt = (
             select(Tenancy)
             .options(
-                selectinload(Tenancy.tenant),
+                selectinload(Tenancy.tenant).selectinload(TenantProfile.user),
                 selectinload(Tenancy.property),
                 selectinload(Tenancy.unit)
             )
@@ -26,7 +26,7 @@ class TenancyRepository:
         stmt = (
             select(Tenancy)
             .options(
-                selectinload(Tenancy.tenant),
+                selectinload(Tenancy.tenant).selectinload(TenantProfile.user),
                 selectinload(Tenancy.property),
                 selectinload(Tenancy.unit)
             )
@@ -39,7 +39,7 @@ class TenancyRepository:
         stmt = (
             select(Tenancy)
             .options(
-                selectinload(Tenancy.tenant),
+                selectinload(Tenancy.tenant).selectinload(TenantProfile.user),
                 selectinload(Tenancy.property),
                 selectinload(Tenancy.unit)
             )
@@ -52,7 +52,7 @@ class TenancyRepository:
         stmt = (
             select(Tenancy)
             .options(
-                selectinload(Tenancy.tenant),
+                selectinload(Tenancy.tenant).selectinload(TenantProfile.user),
                 selectinload(Tenancy.property),
                 selectinload(Tenancy.unit)
             )

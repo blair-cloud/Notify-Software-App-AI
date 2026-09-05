@@ -11,7 +11,7 @@ class Invitation(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     landlord_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("landlord_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
-    tenant_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    tenant_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     tenant_phone: Mapped[str] = mapped_column(String(50), nullable=False)
     property_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("properties.id", ondelete="CASCADE"), nullable=False)
     unit_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("units.id", ondelete="CASCADE"), nullable=False)

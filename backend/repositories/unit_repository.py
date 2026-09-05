@@ -31,3 +31,7 @@ class UnitRepository:
     async def update(self, unit_obj: Unit) -> Unit:
         await self.db.flush()
         return unit_obj
+
+    async def delete(self, unit_obj: Unit) -> None:
+        await self.db.delete(unit_obj)
+        await self.db.flush()

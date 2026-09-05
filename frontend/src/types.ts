@@ -34,7 +34,9 @@ export interface Unit {
   floor: number;
   unit_type: string;
   bedrooms?: number;
+  rooms?: number;
   bathrooms?: number;
+  square_meters?: number;
   monthly_rent: number;
   currency: string;
   status: UnitStatus;

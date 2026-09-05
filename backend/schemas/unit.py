@@ -8,7 +8,10 @@ class UnitCreate(BaseModel):
     property_id: uuid.UUID
     unit_number: str
     floor: int = 1
-    unit_type: str = "Retail Shop"
+    unit_type: Optional[str] = "Retail Shop"
+    rooms: Optional[int] = None
+    bathrooms: Optional[int] = None
+    square_meters: Optional[float] = None
     monthly_rent: float
     currency: str = "RWF"
     description: Optional[str] = None
@@ -17,6 +20,9 @@ class UnitUpdate(BaseModel):
     unit_number: Optional[str] = None
     floor: Optional[int] = None
     unit_type: Optional[str] = None
+    rooms: Optional[int] = None
+    bathrooms: Optional[int] = None
+    square_meters: Optional[float] = None
     monthly_rent: Optional[float] = None
     currency: Optional[str] = None
     status: Optional[UnitStatus] = None
@@ -28,7 +34,10 @@ class UnitResponse(BaseModel):
     landlord_id: uuid.UUID
     unit_number: str
     floor: int
-    unit_type: str
+    unit_type: Optional[str] = None
+    rooms: Optional[int] = None
+    bathrooms: Optional[int] = None
+    square_meters: Optional[float] = None
     monthly_rent: float
     currency: str
     status: UnitStatus

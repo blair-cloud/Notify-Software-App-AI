@@ -43,3 +43,7 @@ class PropertyService:
         for field, value in req.model_dump(exclude_unset=True).items():
             setattr(prop, field, value)
         return await self.property_repo.update(prop)
+
+    async def delete_property(self, landlord: LandlordProfile, property_id: uuid.UUID) -> None:
+        prop = await self.get_property_by_id(landlord, property_id)
+        await self.property_repo.delete(prop)

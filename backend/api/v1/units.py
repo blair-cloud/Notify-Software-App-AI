@@ -46,3 +46,14 @@ async def update_unit(
     import uuid
     service = UnitService(db)
     return await service.update_unit(landlord, uuid.UUID(unit_id), req)
+
+@router.delete("/{unit_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_unit(
+    unit_id: str,
+    landlord: LandlordProfile = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    import uuid
+    service = UnitService(db)
+    await service.delete_unit(landlord, uuid.UUID(unit_id))
+    return None

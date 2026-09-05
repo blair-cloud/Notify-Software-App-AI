@@ -26,8 +26,8 @@ class Tenancy(Base):
         onupdate=lambda: datetime.now(timezone.utc)
     )
 
-    tenant = relationship("TenantProfile", back_populates="tenancies")
-    landlord = relationship("LandlordProfile", back_populates="tenancies")
-    property = relationship("Property", back_populates="tenancies")
-    unit = relationship("Unit", back_populates="tenancies")
+    tenant = relationship("TenantProfile", back_populates="tenancies", lazy="selectin")
+    landlord = relationship("LandlordProfile", back_populates="tenancies", lazy="selectin")
+    property = relationship("Property", back_populates="tenancies", lazy="selectin")
+    unit = relationship("Unit", back_populates="tenancies", lazy="selectin")
     leases = relationship("Lease", back_populates="tenancy", cascade="all, delete-orphan")

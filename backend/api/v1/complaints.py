@@ -40,6 +40,7 @@ async def create_complaint(
 
 
 @router.get("/tenant", response_model=List[ComplaintResponse])
+@router.get("/tenant/me", response_model=List[ComplaintResponse])
 async def get_tenant_complaints(
     tenant: TenantProfile = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
@@ -48,6 +49,7 @@ async def get_tenant_complaints(
 
 
 @router.get("/landlord", response_model=List[ComplaintResponse])
+@router.get("/landlord/me", response_model=List[ComplaintResponse])
 async def get_landlord_complaints(
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db),
@@ -63,6 +65,7 @@ async def get_all_complaints(
     return await ComplaintService.get_all_complaints(db)
 
 
+@router.get("/landlord/stats", response_model=ComplaintStatsResponse)
 @router.get("/stats/landlord", response_model=ComplaintStatsResponse)
 async def get_landlord_complaint_stats(
     landlord: LandlordProfile = Depends(get_current_landlord),

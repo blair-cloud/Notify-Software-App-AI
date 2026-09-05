@@ -16,6 +16,9 @@ class Unit(Base):
     unit_number: Mapped[str] = mapped_column(String(50), nullable=False)
     floor: Mapped[int] = mapped_column(Integer, default=1)
     unit_type: Mapped[str] = mapped_column(String(100), default="Retail Shop")
+    rooms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bathrooms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    square_meters: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     
     monthly_rent: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(10), default="RWF")

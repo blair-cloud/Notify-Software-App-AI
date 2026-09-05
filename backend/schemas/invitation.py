@@ -5,7 +5,7 @@ import uuid
 from backend.models.role import InvitationStatus
 
 class InvitationCreate(BaseModel):
-    tenant_email: str
+    tenant_email: Optional[str] = None
     tenant_phone: str
     property_id: uuid.UUID
     unit_id: uuid.UUID
@@ -16,7 +16,7 @@ class InvitationAccept(BaseModel):
 class InvitationResponse(BaseModel):
     id: uuid.UUID
     landlord_id: uuid.UUID
-    tenant_email: str
+    tenant_email: Optional[str] = None
     tenant_phone: str
     property_id: uuid.UUID
     unit_id: uuid.UUID

@@ -32,3 +32,17 @@ class LandlordProfileResponse(LandlordProfileBase):
 
     class Config:
         from_attributes = True
+
+
+class LandlordDashboardStatsResponse(BaseModel):
+    total_properties: int = 0
+    total_units: int = 0
+    occupied_units: int = 0
+    vacant_units: int = 0
+    maintenance_units: int = 0
+    expected_monthly_rent: float = 0.0
+    occupancy_rate: float = 0.0
+    leases_expiring_soon_count: int = 0
+
+    class Config:
+        from_attributes = True

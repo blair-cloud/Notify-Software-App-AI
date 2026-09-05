@@ -2679,7 +2679,7 @@ export const api = {
 
   financials: {
     getLandlordFinancials: (landlordId: string) => request<any>(`/financials/landlord/${landlordId}`),
-    getLandlordSummary: (landlordId?: string) => request<any>(`/financials/landlord/${landlordId || 'mock-lp-001'}`),
+    getLandlordSummary: (landlordId?: string) => request<any>('/financials/landlord/me'),
     getTenantFinancials: (tenantId: string) => request<any>(`/financials/tenant/${tenantId}`),
     getTenantSummary: (tenantId?: string) => request<any>(`/financials/tenant/${tenantId || 'mock-tenant-001'}`),
   },
@@ -2889,7 +2889,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    getUserNotifications: (userId: string) => request<any[]>(`/notifications/user/${userId}`),
+    getUserNotifications: (userId: string) => request<any[]>('/notifications'),
     list: (params?: { channel?: string; status?: string; limit?: number; unread_only?: boolean }) => {
       let query = '/notifications';
       if (params) {

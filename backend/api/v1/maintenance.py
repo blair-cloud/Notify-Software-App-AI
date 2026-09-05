@@ -47,6 +47,7 @@ async def create_maintenance_request(
 
 
 @router.get("/tenant", response_model=List[MaintenanceRequestResponse])
+@router.get("/tenant/me", response_model=List[MaintenanceRequestResponse])
 async def get_tenant_maintenance_requests(
     tenant: TenantProfile = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
@@ -55,6 +56,7 @@ async def get_tenant_maintenance_requests(
 
 
 @router.get("/landlord", response_model=List[MaintenanceRequestResponse])
+@router.get("/landlord/me", response_model=List[MaintenanceRequestResponse])
 async def get_landlord_maintenance_requests(
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db),
@@ -70,6 +72,7 @@ async def get_all_maintenance_requests(
     return await MaintenanceService.get_all_requests(db)
 
 
+@router.get("/landlord/stats", response_model=MaintenanceStatsResponse)
 @router.get("/stats/landlord", response_model=MaintenanceStatsResponse)
 async def get_landlord_maintenance_stats(
     landlord: LandlordProfile = Depends(get_current_landlord),

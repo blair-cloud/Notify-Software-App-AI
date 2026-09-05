@@ -19,7 +19,9 @@ router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
 @router.get("", response_model=List[NotificationResponse])
+@router.get("/user/{user_id}", response_model=List[NotificationResponse])
 async def list_notifications(
+    user_id: Optional[str] = None,
     category: Optional[str] = Query(None, description="Filter by category (LEASE_EXPIRY, PAYMENT, MAINTENANCE, COMPLAINT, SYSTEM)"),
     priority: Optional[str] = Query(None, description="Filter by priority (CRITICAL, HIGH, MEDIUM, LOW)"),
     unread_only: bool = Query(False, description="Filter by unread status"),
