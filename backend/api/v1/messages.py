@@ -124,7 +124,12 @@ async def get_messages(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    p_uuid = uuid.UUID(partner_id) if partner_id else None
+    p_uuid = None
+    if partner_id:
+        try:
+            p_uuid = uuid.UUID(partner_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"'{partner_id}' is not a valid conversation id.")
     return await MessageService.get_messages(db, current_user.id, p_uuid)
 
 
@@ -142,5 +147,8 @@ async def mark_messages_read(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    p_uuid = uuid.UUID(partner_id)
+    try:
+        p_uuid = uuid.UUID(partner_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"'{partner_id}' is not a valid conversation id.")
     return await MessageService.mark_as_read(db, current_user.id, p_uuid)

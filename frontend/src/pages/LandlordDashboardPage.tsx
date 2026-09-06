@@ -69,6 +69,7 @@ import {
   Unit,
   Tenant,
   Tenancy,
+  ConversationSummary,
   Lease,
   Invitation,
   Invoice,
@@ -97,6 +98,7 @@ import { LandlordInvoicesTab } from '../components/LandlordInvoicesTab';
 import { LandlordPaymentsTab } from '../components/LandlordPaymentsTab';
 import { LandlordExpensesTab } from '../components/LandlordExpensesTab';
 import { LandlordComplaintsTab } from '../components/LandlordComplaintsTab';
+import { LandlordMessagesTab } from '../components/LandlordMessagesTab';
 import { LandlordAccountTab } from '../components/LandlordAccountTab';
 import { LandlordTrackerTab } from '../components/tracker/LandlordTrackerTab';
 import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
@@ -111,6 +113,7 @@ interface LandlordDashboardPageProps {
 type LandlordTab =
   | 'dashboard'
   | 'tracker'
+  | 'messages'
   | 'maintenance'
   | 'complaints'
   | 'workers'
@@ -136,6 +139,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [units, setUnits] = useState<Unit[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [tenancies, setTenancies] = useState<Tenancy[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -335,7 +339,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         complaintsRes,
         workersRes,
         notifRes,
-        unreadRes
+        unreadRes,
+        conversationsRes
       ] = await Promise.all([
         api.properties.list(),
         api.units.list(),
@@ -353,7 +358,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         api.complaints.getLandlordComplaints(),
         api.maintenance.getWorkers(),
         api.notifications.getUserNotifications(user?.id || 'mock-lp-001'),
-        api.notifications.getUnreadCount()
+        api.notifications.getUnreadCount(),
+        api.messages.getConversations().catch(() => [])
       ]);
 
       setProperties(Array.isArray(propsRes) ? propsRes : ((propsRes as any)?.properties || []));
@@ -373,6 +379,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setComplaints(Array.isArray(complaintsRes) ? complaintsRes : []);
       setWorkers(Array.isArray(workersRes) ? workersRes : []);
       setNotifications(Array.isArray(notifRes) ? notifRes : []);
+      setConversations(Array.isArray(conversationsRes) ? conversationsRes : []);
       setUnreadCount(unreadRes?.unread_count ?? (Array.isArray(notifRes) ? notifRes.filter(n => !n.is_read).length : 0));
 
       if (propsRes && propsRes.length > 0) {
@@ -1310,6 +1317,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
   const expiringSoonLeases = leases.filter((l) => l.status === 'EXPIRING_SOON');
 
+  const unreadMessagesCount = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+
   return (
     <div className="h-screen w-full bg-[#F8FAFC] text-slate-800 font-sans flex flex-col md:flex-row overflow-hidden">
       {/* Sidebar - Keeps existing navbar layout structure with neo-brutalist buttons */}
@@ -1513,6 +1522,23 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           </button>
 
           <button
+            onClick={() => setActiveTab('messages')}
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
+              activeTab === 'messages'
+                ? 'bg-white text-[#331A6F] font-bold shadow-xs'
+                : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Messages</span>
+            {unreadMessagesCount > 0 && (
+              <span className="ml-auto bg-[#008069] text-white font-bold text-[10px] px-1.5 py-0.5 rounded-full">
+                {unreadMessagesCount}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('complaints')}
             className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
               activeTab === 'complaints'
@@ -1597,7 +1623,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       {/* Mobile Drawer Navigation */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-[#331A6F] text-white p-4 border-b border-purple-900 space-y-1.5 max-h-[75vh] overflow-y-auto scrollbar-subtle shrink-0">
-          {(['dashboard', 'tracker', 'properties', 'units', 'tenants', 'leases', 'invitations', 'financials', 'invoices', 'payments', 'expenses', 'maintenance', 'complaints', 'workers', 'account'] as LandlordTab[]).map((tab) => (
+          {(['dashboard', 'tracker', 'properties', 'units', 'tenants', 'leases', 'invitations', 'financials', 'invoices', 'payments', 'expenses', 'messages', 'maintenance', 'complaints', 'workers', 'account'] as LandlordTab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => {
@@ -2026,6 +2052,28 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* 7b. TENANT MESSAGES - direct chat with tenants */}
+            {activeTab === 'messages' && (
+              <div className="space-y-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900">Messages</h1>
+                  <p className="text-sm text-slate-500 mt-0.5">
+                    Chat directly with your tenants. Maintenance requests appear here too.
+                  </p>
+                </div>
+                <LandlordMessagesTab
+                  onOpenMaintenance={(id) => {
+                    const req = maintenanceRequests.find((m) => m.id === id);
+                    if (req) {
+                      setSelectedMaintenance(req);
+                      setActiveTab('maintenance');
+                    }
+                  }}
+                  onRefreshData={fetchData}
+                />
               </div>
             )}
 

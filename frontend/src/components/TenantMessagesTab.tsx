@@ -37,7 +37,9 @@ export const TenantMessagesTab: React.FC<TenantMessagesTabProps> = ({
 }) => {
   const { t } = useLanguage();
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [activePartnerId, setActivePartnerId] = useState<string>('mock-landlord-001');
+  // Empty until a real conversation is loaded - a placeholder id here would be
+  // sent to the API as a conversation id and rejected.
+  const [activePartnerId, setActivePartnerId] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [sending, setSending] = useState<boolean>(false);
@@ -55,10 +57,13 @@ export const TenantMessagesTab: React.FC<TenantMessagesTabProps> = ({
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Mirrors activePartnerId so the polling interval always reads the current one.
+  const activePartnerRef = useRef<string>('');
+  activePartnerRef.current = activePartnerId;
 
   const primaryTenancy = activeTenancies[0];
-  const propertyName = primaryTenancy?.property?.name || 'Kigali City Mall';
-  const unitNumber = primaryTenancy?.unit?.unit_number || 'A-102';
+  const propertyName = primaryTenancy?.property?.name || '';
+  const unitNumber = primaryTenancy?.unit?.unit_number || '';
 
   // Load conversations
   const loadConversations = async () => {
@@ -77,6 +82,10 @@ export const TenantMessagesTab: React.FC<TenantMessagesTabProps> = ({
   };
 
   const loadMessages = async (partnerId: string) => {
+    if (!partnerId) {
+      setMessages([]);
+      return;
+    }
     try {
       const allMsgs = await api.messages.getAll(partnerId);
       setMessages(allMsgs);
@@ -95,6 +104,20 @@ export const TenantMessagesTab: React.FC<TenantMessagesTabProps> = ({
       loadMessages(activePartnerId);
     }
   }, [activePartnerId]);
+
+  // Light polling so the landlord's reply appears without a manual refresh.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadConversations();
+      if (activePartnerRef.current) {
+        api.messages
+          .getAll(activePartnerRef.current)
+          .then(setMessages)
+          .catch(() => undefined);
+      }
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (initialMaintenanceMode) {
@@ -158,7 +181,9 @@ export const TenantMessagesTab: React.FC<TenantMessagesTabProps> = ({
         : undefined;
 
       const newMsg = await api.messages.send({
-        recipient_id: activePartnerId,
+        // With no conversation open yet, let the backend resolve the tenant's
+        // landlord instead of sending an empty recipient.
+        recipient_id: activePartnerId || undefined,
         content: text || (isMaint ? (t.submittedMaintenancePhoto || 'Submitted maintenance photo') : (t.sentAnAttachment || 'Sent an attachment')),
         message_type: isMaint ? 'MAINTENANCE' : 'GENERAL',
         maintenance_title: title,
@@ -171,6 +196,11 @@ export const TenantMessagesTab: React.FC<TenantMessagesTabProps> = ({
       });
 
       setMessages((prev) => [...prev, newMsg]);
+      // First message in a brand new thread: adopt the resolved landlord as
+      // the active conversation so replies land in the right place.
+      if (!activePartnerId && newMsg?.recipient_id) {
+        setActivePartnerId(newMsg.recipient_id);
+      }
       setContent('');
       setAttachmentUrl('');
       setAttachmentName('');

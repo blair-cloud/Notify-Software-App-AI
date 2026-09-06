@@ -7,8 +7,9 @@ root_dir = Path(__file__).resolve().parent.parent
 if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import inspect
 
 from backend.core.config import settings
@@ -71,6 +72,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    """
+    Malformed input (most often a path/query id that is not a UUID) is a client
+    error, not a server crash. Handling it here also keeps the CORS headers on
+    the response - an unhandled exception is turned into a 500 outside the CORS
+    middleware, which the browser then reports as a confusing CORS failure.
+    """
+    detail = "Malformed identifier in request." if "UUID" in str(exc) else f"Invalid request: {exc}"
+    logger.warning(f"400 on {request.method} {request.url.path}: {exc}")
+    return JSONResponse(status_code=400, content={"detail": detail})
 
 # Mount API Routers
 app.include_router(auth.router, prefix="/api/v1")
