@@ -59,15 +59,47 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
   const [newComment, setNewComment] = useState('');
   const [commenting, setCommenting] = useState(false);
 
+  // Shared error banner - only one action can be in flight at a time in this modal
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subject.trim() || !description.trim() || !onCreate) return;
     setSubmitting(true);
+    setErrorMsg(null);
     try {
       await onCreate({ subject, description, category, priority });
       onClose();
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to submit complaint. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAcknowledgeClick = async () => {
+    if (!complaint || !onAcknowledge) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await onAcknowledge(complaint.id);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to acknowledge complaint. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCloseComplaintClick = async () => {
+    if (!complaint || !onCloseComplaint) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await onCloseComplaint(complaint.id);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to close complaint. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -77,6 +109,7 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
     e.preventDefault();
     if (!complaint) return;
     setSubmitting(true);
+    setErrorMsg(null);
     try {
       if (responseAction === 'RESOLVE' && onResolve) {
         await onResolve(complaint.id, { landlord_response: landlordResponseText });
@@ -84,6 +117,8 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
         await onUnderReview(complaint.id, { landlord_response: landlordResponseText || undefined });
       }
       setShowResponseForm(false);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to update complaint. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -93,9 +128,12 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
     e.preventDefault();
     if (!complaint || !onAddComment || !newComment.trim()) return;
     setCommenting(true);
+    setErrorMsg(null);
     try {
       await onAddComment(complaint.id, newComment.trim());
       setNewComment('');
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to send comment. Please try again.');
     } finally {
       setCommenting(false);
     }
@@ -228,6 +266,12 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
+          {errorMsg && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
           {isCreating ? (
             /* CREATE COMPLAINT FORM */
             <form onSubmit={handleCreateSubmit} className="space-y-4">
@@ -368,10 +412,11 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
                   <div className="flex flex-wrap gap-2">
                     {complaint.status === 'SUBMITTED' && onAcknowledge && (
                       <button
-                        onClick={() => onAcknowledge(complaint.id)}
-                        className="px-3.5 py-2 bg-[#331A6F] text-white rounded-xl text-xs font-bold hover:bg-purple-900 cursor-pointer transition-colors"
+                        onClick={handleAcknowledgeClick}
+                        disabled={submitting}
+                        className="px-3.5 py-2 bg-[#331A6F] text-white rounded-xl text-xs font-bold hover:bg-purple-900 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {t.acknowledged} (Acknowledge)
+                        {submitting ? 'Please wait...' : `${t.acknowledged} (Acknowledge)`}
                       </button>
                     )}
 
@@ -381,7 +426,8 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
                           setResponseAction('REVIEW');
                           setShowResponseForm(!showResponseForm);
                         }}
-                        className="px-3.5 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold hover:bg-amber-600 cursor-pointer transition-colors"
+                        disabled={submitting}
+                        className="px-3.5 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold hover:bg-amber-600 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Set Under Review
                       </button>
@@ -393,7 +439,8 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
                           setResponseAction('RESOLVE');
                           setShowResponseForm(!showResponseForm);
                         }}
-                        className="px-3.5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 cursor-pointer transition-colors"
+                        disabled={submitting}
+                        className="px-3.5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Resolve Complaint
                       </button>
@@ -401,10 +448,11 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
 
                     {complaint.status === 'RESOLVED' && onCloseComplaint && (
                       <button
-                        onClick={() => onCloseComplaint(complaint.id)}
-                        className="px-3.5 py-2 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700 cursor-pointer transition-colors"
+                        onClick={handleCloseComplaintClick}
+                        disabled={submitting}
+                        className="px-3.5 py-2 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Close Complaint
+                        {submitting ? 'Please wait...' : 'Close Complaint'}
                       </button>
                     )}
                   </div>
@@ -451,10 +499,11 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
                     <div className="text-xs text-emerald-700">The management has provided a resolution.</div>
                   </div>
                   <button
-                    onClick={() => onCloseComplaint(complaint.id)}
-                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 cursor-pointer transition-colors"
+                    onClick={handleCloseComplaintClick}
+                    disabled={submitting}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Confirm & Close
+                    {submitting ? 'Please wait...' : 'Confirm & Close'}
                   </button>
                 </div>
               )}

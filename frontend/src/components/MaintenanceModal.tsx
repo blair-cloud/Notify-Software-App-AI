@@ -8,6 +8,7 @@ import {
   User,
   CheckCircle,
   AlertTriangle,
+  AlertCircle,
   RotateCcw,
   Send,
   MessageSquare,
@@ -89,15 +90,60 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
   const [newComment, setNewComment] = useState('');
   const [commenting, setCommenting] = useState(false);
 
+  // Shared error banner - only one action can be in flight at a time in this modal
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   if (!isOpen) return null;
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !description.trim() || !onCreate) return;
     setSubmitting(true);
+    setErrorMsg(null);
     try {
       await onCreate({ title, description, category, priority });
       onClose();
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to submit maintenance request. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAcknowledgeClick = async () => {
+    if (!request || !onAcknowledge) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await onAcknowledge(request.id);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to acknowledge request. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleMarkInProgressClick = async () => {
+    if (!request || !onMarkInProgress) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await onMarkInProgress(request.id);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to update status. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddToExpenseClick = async () => {
+    if (!request || !onAddToExpense) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await onAddToExpense(request.id);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to add cost to expenses. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -107,6 +153,7 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
     e.preventDefault();
     if (!request || !onSchedule || !scheduledDate) return;
     setSubmitting(true);
+    setErrorMsg(null);
     try {
       await onSchedule(request.id, {
         scheduled_date: scheduledDate,
@@ -115,6 +162,8 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
         estimated_cost: estimatedCost ? Number(estimatedCost) : undefined,
       });
       setShowScheduleForm(false);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to schedule visit. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -124,12 +173,15 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
     e.preventDefault();
     if (!request || !onResolve) return;
     setSubmitting(true);
+    setErrorMsg(null);
     try {
       await onResolve(request.id, {
         actual_cost: actualCost ? Number(actualCost) : undefined,
         landlord_notes: landlordNotes || undefined,
       });
       setShowResolveForm(false);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to mark as resolved. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -139,9 +191,12 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
     e.preventDefault();
     if (!request || !onReopen || !tenantReopenNotes.trim()) return;
     setSubmitting(true);
+    setErrorMsg(null);
     try {
       await onReopen(request.id, { tenant_notes: tenantReopenNotes });
       setShowReopenForm(false);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to reopen request. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -150,9 +205,12 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
   const handleConfirmSubmit = async () => {
     if (!request || !onConfirmResolution) return;
     setSubmitting(true);
+    setErrorMsg(null);
     try {
       await onConfirmResolution(request.id, { tenant_notes: tenantConfirmNotes });
       setShowConfirmForm(false);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to confirm resolution. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -162,9 +220,12 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
     e.preventDefault();
     if (!request || !onAddComment || !newComment.trim()) return;
     setCommenting(true);
+    setErrorMsg(null);
     try {
       await onAddComment(request.id, newComment.trim());
       setNewComment('');
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to send message. Please try again.');
     } finally {
       setCommenting(false);
     }
@@ -313,6 +374,12 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
+          {errorMsg && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
           {isCreating ? (
             /* CREATE FORM */
             <form onSubmit={handleCreateSubmit} className="space-y-4">
@@ -474,10 +541,11 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
 
                   {isLandlord && !request.expense_id && request.actual_cost && onAddToExpense && (
                     <button
-                      onClick={() => onAddToExpense(request.id)}
-                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-xs cursor-pointer"
+                      onClick={handleAddToExpenseClick}
+                      disabled={submitting}
+                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {t.addToExpenses}
+                      {submitting ? 'Please wait...' : t.addToExpenses}
                     </button>
                   )}
 
@@ -514,17 +582,19 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
                   <div className="flex flex-wrap gap-2">
                     {request.status === 'SUBMITTED' && onAcknowledge && (
                       <button
-                        onClick={() => onAcknowledge(request.id)}
-                        className="px-3.5 py-2 bg-[#331A6F] text-white rounded-xl text-xs font-bold hover:bg-purple-900 cursor-pointer transition-colors"
+                        onClick={handleAcknowledgeClick}
+                        disabled={submitting}
+                        className="px-3.5 py-2 bg-[#331A6F] text-white rounded-xl text-xs font-bold hover:bg-purple-900 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {t.acknowledged} (Acknowledge)
+                        {submitting ? 'Please wait...' : `${t.acknowledged} (Acknowledge)`}
                       </button>
                     )}
 
                     {['SUBMITTED', 'ACKNOWLEDGED', 'REOPENED'].includes(request.status) && (
                       <button
                         onClick={() => setShowScheduleForm(!showScheduleForm)}
-                        className="px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer transition-colors"
+                        disabled={submitting}
+                        className="px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {t.assignWorker}
                       </button>
@@ -532,17 +602,19 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
 
                     {request.status === 'SCHEDULED' && onMarkInProgress && (
                       <button
-                        onClick={() => onMarkInProgress(request.id)}
-                        className="px-3.5 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold hover:bg-amber-600 cursor-pointer transition-colors"
+                        onClick={handleMarkInProgressClick}
+                        disabled={submitting}
+                        className="px-3.5 py-2 bg-amber-500 text-slate-950 rounded-xl text-xs font-bold hover:bg-amber-600 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Start Work ({t.inProgress})
+                        {submitting ? 'Please wait...' : `Start Work (${t.inProgress})`}
                       </button>
                     )}
 
                     {['SCHEDULED', 'IN_PROGRESS', 'REOPENED'].includes(request.status) && (
                       <button
                         onClick={() => setShowResolveForm(!showResolveForm)}
-                        className="px-3.5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 cursor-pointer transition-colors"
+                        disabled={submitting}
+                        className="px-3.5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {t.markResolved}
                       </button>

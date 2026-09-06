@@ -54,6 +54,7 @@ export const LandlordExpensesTab: React.FC<LandlordExpensesTabProps> = ({
   const [propertyFilter, setPropertyFilter] = useState<string>('ALL');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [actionErrorMsg, setActionErrorMsg] = useState<string | null>(null);
 
   // Aggregations
   const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
@@ -86,13 +87,15 @@ export const LandlordExpensesTab: React.FC<LandlordExpensesTabProps> = ({
   const handleDeleteExpense = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this expense record?')) return;
     setDeletingId(id);
+    setActionErrorMsg(null);
     try {
       await api.expenses.delete(id);
       setActionSuccessMsg('Expense deleted successfully.');
       onRefreshData();
       setTimeout(() => setActionSuccessMsg(null), 4000);
     } catch (err: any) {
-      alert('Failed to delete expense: ' + err.message);
+      setActionErrorMsg(err.message || 'Failed to delete expense. Please try again.');
+      setTimeout(() => setActionErrorMsg(null), 6000);
     } finally {
       setDeletingId(null);
     }
@@ -147,6 +150,17 @@ export const LandlordExpensesTab: React.FC<LandlordExpensesTabProps> = ({
             <span>{actionSuccessMsg}</span>
           </div>
           <button onClick={() => setActionSuccessMsg(null)} className="text-emerald-700 hover:text-emerald-900 cursor-pointer">
+            Dismiss
+          </button>
+        </div>
+      )}
+      {actionErrorMsg && (
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex items-center justify-between text-xs font-bold shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600" />
+            <span>{actionErrorMsg}</span>
+          </div>
+          <button onClick={() => setActionErrorMsg(null)} className="text-rose-700 hover:text-rose-900 cursor-pointer">
             Dismiss
           </button>
         </div>

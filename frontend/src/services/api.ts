@@ -179,11 +179,18 @@ function handleMockRequest(endpoint: string, options: RequestInit = {}): any {
 
     if (method === 'DELETE') {
       const index = MOCK_PROPERTIES.findIndex((p) => p.id === propId);
-      if (index !== -1) {
-        // Soft delete / archive if property has units
-        MOCK_PROPERTIES[index].status = 'ARCHIVED';
-        return MOCK_PROPERTIES[index];
+      if (index === -1) throw new ApiError(404, 'Property not found');
+
+      const hasOccupiedUnit = MOCK_UNITS.some((u) => u.property_id === propId && u.status === 'OCCUPIED');
+      if (hasOccupiedUnit) {
+        throw new ApiError(409, 'Cannot delete a property that has occupied units. End all tenancies first.');
       }
+
+      MOCK_PROPERTIES.splice(index, 1);
+      for (let i = MOCK_UNITS.length - 1; i >= 0; i--) {
+        if (MOCK_UNITS[i].property_id === propId) MOCK_UNITS.splice(i, 1);
+      }
+      return { message: 'Property deleted' };
     }
   }
 
@@ -232,10 +239,14 @@ function handleMockRequest(endpoint: string, options: RequestInit = {}): any {
 
     if (method === 'DELETE') {
       const index = MOCK_UNITS.findIndex((u) => u.id === unitId);
-      if (index !== -1) {
-        MOCK_UNITS.splice(index, 1);
-        return { message: 'Unit deleted' };
+      if (index === -1) throw new ApiError(404, 'Unit not found');
+
+      if (MOCK_UNITS[index].status === 'OCCUPIED') {
+        throw new ApiError(409, 'Cannot delete an occupied unit. End the tenancy first.');
       }
+
+      MOCK_UNITS.splice(index, 1);
+      return { message: 'Unit deleted' };
     }
   }
 
@@ -2301,8 +2312,17 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
     let data: any = null;
     const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      data = await response.json();
+    // A 204 (or otherwise empty) body must never be parsed as JSON - some
+    // proxies/servers still attach a JSON content-type header with no body.
+    if (response.status !== 204 && contentType && contentType.includes('application/json')) {
+      const text = await response.text();
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = null;
+        }
+      }
     }
 
     if (!response.ok) {

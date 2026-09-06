@@ -52,6 +52,13 @@ export const LandlordComplaintsTab: React.FC<LandlordComplaintsTabProps> = ({
   const [showStatusMenu, setShowStatusMenu] = useState<boolean>(false);
   const [showInfoDrawer, setShowInfoDrawer] = useState<boolean>(false);
   const [attachmentName, setAttachmentName] = useState<string>('');
+  const [changingStatus, setChangingStatus] = useState<boolean>(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const showToast = (type: 'success' | 'error', text: string) => {
+    setToast({ type, text });
+    setTimeout(() => setToast((current) => (current?.text === text ? null : current)), type === 'success' ? 4000 : 6000);
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -115,7 +122,7 @@ export const LandlordComplaintsTab: React.FC<LandlordComplaintsTabProps> = ({
         textareaRef.current.style.height = 'auto';
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to send message');
+      showToast('error', err.message || 'Failed to send message. Please try again.');
     } finally {
       setSending(false);
     }
@@ -134,10 +141,27 @@ export const LandlordComplaintsTab: React.FC<LandlordComplaintsTabProps> = ({
     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
   };
 
+  const STATUS_LABELS: Record<ComplaintStatus, string> = {
+    SUBMITTED: 'Submitted',
+    ACKNOWLEDGED: 'Acknowledged',
+    UNDER_REVIEW: 'Under Review',
+    RESOLVED: 'Resolved',
+    CLOSED: 'Closed',
+    REJECTED: 'Rejected',
+  };
+
   const handleQuickStatusChange = async (newStatus: ComplaintStatus) => {
-    if (!activeComplaint) return;
+    if (!activeComplaint || changingStatus) return;
     setShowStatusMenu(false);
 
+    // Resolving requires a note for the tenant; bail out cleanly if the landlord cancels the prompt.
+    let responseText: string | undefined;
+    if (newStatus === 'RESOLVED') {
+      responseText = prompt('Enter resolution note for tenant:', 'Issue has been mediated and resolved.') || undefined;
+      if (!responseText) return;
+    }
+
+    setChangingStatus(true);
     try {
       if (newStatus === 'ACKNOWLEDGED') {
         await onAcknowledge(activeComplaint.id);
@@ -145,15 +169,17 @@ export const LandlordComplaintsTab: React.FC<LandlordComplaintsTabProps> = ({
         await onUnderReview(activeComplaint.id, {
           landlord_response: activeComplaint.landlord_response || 'We are actively investigating this issue.',
         });
-      } else if (newStatus === 'RESOLVED') {
-        const responseText = prompt('Enter resolution note for tenant:', 'Issue has been mediated and resolved.') || 'Resolved by landlord.';
+      } else if (newStatus === 'RESOLVED' && responseText) {
         await onResolve(activeComplaint.id, { landlord_response: responseText });
       } else if (newStatus === 'CLOSED') {
         await onCloseComplaint(activeComplaint.id);
       }
+      showToast('success', `Complaint status updated to "${STATUS_LABELS[newStatus]}".`);
       if (onRefresh) onRefresh();
     } catch (err: any) {
-      alert(err.message || 'Failed to update status');
+      showToast('error', err.message || 'Failed to update complaint status. Please try again.');
+    } finally {
+      setChangingStatus(false);
     }
   };
 
@@ -213,7 +239,31 @@ export const LandlordComplaintsTab: React.FC<LandlordComplaintsTabProps> = ({
   const comments: ComplaintComment[] = activeComplaint?.comments || [];
 
   return (
-    <div className="h-[calc(100vh-120px)] min-h-[580px] w-full bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col md:flex-row">
+    <div className="relative h-[calc(100vh-120px)] min-h-[580px] w-full bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col md:flex-row">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-bold flex items-center gap-2 ${
+            toast.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          )}
+          <span>{toast.text}</span>
+          <button
+            onClick={() => setToast(null)}
+            className={toast.type === 'success' ? 'text-emerald-600 hover:text-emerald-800 ml-1' : 'text-rose-600 hover:text-rose-800 ml-1'}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* 1. LEFT CONVERSATION LIST PANEL */}
       <div
         className={`w-full md:w-80 lg:w-96 border-r border-slate-200 flex flex-col bg-white shrink-0 h-full ${
@@ -410,28 +460,32 @@ export const LandlordComplaintsTab: React.FC<LandlordComplaintsTabProps> = ({
                       </div>
                       <button
                         onClick={() => handleQuickStatusChange('ACKNOWLEDGED')}
-                        className="w-full px-3 py-1.5 text-left hover:bg-purple-50 text-purple-900 font-medium flex items-center gap-2 cursor-pointer"
+                        disabled={changingStatus}
+                        className="w-full px-3 py-1.5 text-left hover:bg-purple-50 text-purple-900 font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span className="w-2 h-2 rounded-full bg-purple-600"></span>
                         <span>Acknowledge</span>
                       </button>
                       <button
                         onClick={() => handleQuickStatusChange('UNDER_REVIEW')}
-                        className="w-full px-3 py-1.5 text-left hover:bg-amber-50 text-amber-900 font-medium flex items-center gap-2 cursor-pointer"
+                        disabled={changingStatus}
+                        className="w-full px-3 py-1.5 text-left hover:bg-amber-50 text-amber-900 font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span className="w-2 h-2 rounded-full bg-amber-600"></span>
                         <span>Mark Under Review</span>
                       </button>
                       <button
                         onClick={() => handleQuickStatusChange('RESOLVED')}
-                        className="w-full px-3 py-1.5 text-left hover:bg-emerald-50 text-emerald-900 font-medium flex items-center gap-2 cursor-pointer"
+                        disabled={changingStatus}
+                        className="w-full px-3 py-1.5 text-left hover:bg-emerald-50 text-emerald-900 font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
                         <span>Mark as Resolved</span>
                       </button>
                       <button
                         onClick={() => handleQuickStatusChange('CLOSED')}
-                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 text-slate-700 font-medium flex items-center gap-2 cursor-pointer"
+                        disabled={changingStatus}
+                        className="w-full px-3 py-1.5 text-left hover:bg-slate-100 text-slate-700 font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <span className="w-2 h-2 rounded-full bg-slate-500"></span>
                         <span>Close Complaint</span>

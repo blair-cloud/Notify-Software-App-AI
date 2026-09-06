@@ -53,6 +53,7 @@ export const LandlordPaymentsTab: React.FC<LandlordPaymentsTabProps> = ({
   const [rejectModalPayment, setRejectModalPayment] = useState<Payment | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [actionErrorMsg, setActionErrorMsg] = useState<string | null>(null);
 
   const pendingPayments = payments.filter(
     (p) => p.status === 'AWAITING_VERIFICATION' || p.status === 'PENDING'
@@ -66,13 +67,15 @@ export const LandlordPaymentsTab: React.FC<LandlordPaymentsTabProps> = ({
   // Handle Verify
   const handleVerify = async (paymentId: string) => {
     setVerifyingId(paymentId);
+    setActionErrorMsg(null);
     try {
       await api.payments.verifyPayment(paymentId, 'mock-lp-001', true, 'Payment verified by Landlord');
       setActionSuccessMsg('Payment verified successfully! Invoice balance updated and official receipt generated.');
       onRefreshData();
       setTimeout(() => setActionSuccessMsg(null), 5000);
     } catch (err: any) {
-      alert('Verification failed: ' + (err.message || 'Error'));
+      setActionErrorMsg(err.message || 'Failed to verify payment. Please try again.');
+      setTimeout(() => setActionErrorMsg(null), 6000);
     } finally {
       setVerifyingId(null);
     }
@@ -84,6 +87,7 @@ export const LandlordPaymentsTab: React.FC<LandlordPaymentsTabProps> = ({
     if (!rejectModalPayment) return;
 
     setVerifyingId(rejectModalPayment.id);
+    setActionErrorMsg(null);
     try {
       await api.payments.verifyPayment(
         rejectModalPayment.id,
@@ -97,7 +101,8 @@ export const LandlordPaymentsTab: React.FC<LandlordPaymentsTabProps> = ({
       onRefreshData();
       setTimeout(() => setActionSuccessMsg(null), 5000);
     } catch (err: any) {
-      alert('Rejection failed: ' + (err.message || 'Error'));
+      setActionErrorMsg(err.message || 'Failed to reject payment. Please try again.');
+      setTimeout(() => setActionErrorMsg(null), 6000);
     } finally {
       setVerifyingId(null);
     }
@@ -158,6 +163,17 @@ export const LandlordPaymentsTab: React.FC<LandlordPaymentsTabProps> = ({
             <span>{actionSuccessMsg}</span>
           </div>
           <button onClick={() => setActionSuccessMsg(null)} className="text-emerald-700 hover:text-emerald-900 cursor-pointer">
+            Dismiss
+          </button>
+        </div>
+      )}
+      {actionErrorMsg && (
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex items-center justify-between text-xs font-bold shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600" />
+            <span>{actionErrorMsg}</span>
+          </div>
+          <button onClick={() => setActionErrorMsg(null)} className="text-rose-700 hover:text-rose-900 cursor-pointer">
             Dismiss
           </button>
         </div>

@@ -93,6 +93,7 @@ export const LandlordAccountTab: React.FC<LandlordAccountTabProps> = ({
     reminder_0d: true,
   });
   const [notifSaving, setNotifSaving] = useState(false);
+  const [notifError, setNotifError] = useState<string | null>(null);
   const [notifSuccess, setNotifSuccess] = useState(false);
 
   useEffect(() => {
@@ -182,17 +183,24 @@ export const LandlordAccountTab: React.FC<LandlordAccountTabProps> = ({
   };
 
   const handleToggleNotif = async (key: keyof NotificationPreference) => {
+    if (notifSaving) return;
+
+    const previous = notifPrefs;
     const updated = { ...notifPrefs, [key]: !notifPrefs[key] };
     setNotifPrefs(updated);
     setNotifSaving(true);
     setNotifSuccess(false);
+    setNotifError(null);
 
     try {
       await api.notifications.updatePreferences(updated);
       setNotifSuccess(true);
       setTimeout(() => setNotifSuccess(false), 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to update notification prefs', err);
+      setNotifPrefs(previous);
+      setNotifError(err?.message || 'Failed to update notification preference. Please try again.');
+      setTimeout(() => setNotifError(null), 5000);
     } finally {
       setNotifSaving(false);
     }
@@ -628,6 +636,12 @@ export const LandlordAccountTab: React.FC<LandlordAccountTabProps> = ({
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
                 <Check className="w-3.5 h-3.5" />
                 Preferences Saved
+              </span>
+            )}
+            {notifError && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full">
+                <AlertCircle className="w-3.5 h-3.5" />
+                {notifError}
               </span>
             )}
           </div>

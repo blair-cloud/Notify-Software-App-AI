@@ -32,6 +32,7 @@ export interface Translations {
   everythingInOnePlace: string;
   yourMallUnderControl: string;
   valuePropSubtitle: string;
+  certifiedBy: string;
   openFeaturePage: string;
   featureManageUnitsTitle: string;
   featureManageUnitsDesc: string;
@@ -642,6 +643,7 @@ export const translations: Record<Language, Translations> = {
     everythingInOnePlace: 'Everything in one place',
     yourMallUnderControl: 'Your mall, under control.',
     valuePropSubtitle: 'Notify brings your rental operations, tenants, payments, and reporting together in one simple workspace.',
+    certifiedBy: 'Notify is certified by',
     openFeaturePage: 'Open feature page',
     featureManageUnitsTitle: 'Manage Units',
     featureManageUnitsDesc: 'Track every shop, office, kiosk, and commercial space from one place.',
@@ -1251,6 +1253,7 @@ export const translations: Record<Language, Translations> = {
     everythingInOnePlace: 'Byose mu kiganza kimwe',
     yourMallUnderControl: 'Inzu yawe y\'ubucuruzi iratekanye.',
     valuePropSubtitle: 'Notify ihuza ibikorwa by\'ubukode, abakodesha, ubwishyu, no gutanga raporo mu rugendo rworoshye.',
+    certifiedBy: 'Notify yemejwe na',
     openFeaturePage: 'Fungura iyi paji',
     featureManageUnitsTitle: 'Gucunga Inzu',
     featureManageUnitsDesc: 'Kurikirana buri iduka, ibiro, kiyosike, n\'ubucuruzi bwose mu hantu hamwe.',
@@ -1860,6 +1863,7 @@ export const translations: Record<Language, Translations> = {
     everythingInOnePlace: 'Tout au même endroit',
     yourMallUnderControl: 'Votre centre commercial, sous contrôle.',
     valuePropSubtitle: 'Notify rassemble vos opérations de location, vos locataires, vos paiements et vos rapports dans un espace de travail unique.',
+    certifiedBy: 'Notify est certifié par',
     openFeaturePage: 'Ouvrir la page',
     featureManageUnitsTitle: 'Gérer les Unités',
     featureManageUnitsDesc: 'Suivez chaque boutique, bureau, kiosque et espace commercial à partir d\'un seul endroit.',

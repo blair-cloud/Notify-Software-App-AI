@@ -43,6 +43,7 @@ export const SendReminderModal: React.FC<SendReminderModalProps> = ({
   const [sendEmail, setSendEmail] = useState(true);
   const [customNote, setCustomNote] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const getTemplateText = () => {
     switch (reminderType) {
@@ -68,13 +69,13 @@ export const SendReminderModal: React.FC<SendReminderModalProps> = ({
   const handleSendReminder = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSending(true);
+    setErrorMsg(null);
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 700));
 
       const messageContent = getTemplateText();
 
-      // Trigger notification creation via mock api
       await api.notifications.create({
         user_id: tenant.id,
         type: reminderType as any,
@@ -94,12 +95,11 @@ export const SendReminderModal: React.FC<SendReminderModalProps> = ({
       if (sendSms) channelsUsed.push(`SMS (${tenant.phone})`);
       if (sendEmail) channelsUsed.push(`Email (${tenant.email})`);
 
-      onSuccess(`Rent reminder successfully dispatched via ${channelsUsed.join(', ')} to ${tenant.first_name} ${tenant.last_name}.`);
+      onSuccess(`Reminder sent successfully to ${tenant.first_name} ${tenant.last_name} via ${channelsUsed.join(', ') || 'the selected channels'}.`);
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      onSuccess(`Reminder logged and queued for delivery to ${tenant.first_name}.`);
-      onClose();
+      setErrorMsg(err?.message || 'Failed to send reminder. Please try again.');
     } finally {
       setIsSending(false);
     }
@@ -137,6 +137,13 @@ export const SendReminderModal: React.FC<SendReminderModalProps> = ({
 
         {/* Body Form */}
         <form onSubmit={handleSendReminder} className="p-6 space-y-4 text-xs">
+          {errorMsg && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           {/* Target details */}
           <div className="p-3.5 bg-purple-50/70 border border-purple-100 rounded-xl flex items-center justify-between">
             <div>

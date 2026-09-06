@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Users, Phone, UserCheck, Plus, ShieldCheck, Wrench, Briefcase } from 'lucide-react';
+import { X, Users, Phone, UserCheck, Plus, ShieldCheck, Wrench, Briefcase, AlertCircle } from 'lucide-react';
 import { MaintenanceWorker } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -23,6 +23,7 @@ export const WorkerModal: React.FC<WorkerModalProps> = ({
   const [specialization, setSpecialization] = useState('Plumbing');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -30,12 +31,15 @@ export const WorkerModal: React.FC<WorkerModalProps> = ({
     e.preventDefault();
     if (!name.trim() || !phone.trim()) return;
     setSubmitting(true);
+    setErrorMsg(null);
     try {
       await onAddWorker({ name, phone, specialization, notes: notes || undefined });
       setName('');
       setPhone('');
       setNotes('');
       setShowAddForm(false);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to add technician. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -76,7 +80,10 @@ export const WorkerModal: React.FC<WorkerModalProps> = ({
               {workers.length} Registered Technicians
             </span>
             <button
-              onClick={() => setShowAddForm(!showAddForm)}
+              onClick={() => {
+                setErrorMsg(null);
+                setShowAddForm(!showAddForm);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#331A6F] text-white rounded-xl text-xs font-extrabold border-2 border-black shadow-[0.5px_0.5px_0_#000] hover:bg-purple-900 active:translate-x-[1px] active:translate-y-[1px] cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -88,6 +95,12 @@ export const WorkerModal: React.FC<WorkerModalProps> = ({
           {showAddForm && (
             <form onSubmit={handleSubmit} className="p-4 bg-slate-50 rounded-2xl border-2 border-black shadow-[0.5px_0.5px_0_#000] space-y-3">
               <div className="font-extrabold text-xs text-slate-900">Add New Technician</div>
+              {errorMsg && (
+                <div className="p-2.5 bg-rose-50 border border-rose-300 text-rose-800 text-[11px] rounded-lg flex items-center gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">{t.workerName} *</label>

@@ -148,6 +148,7 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
   const [selectedTenantForIndividualRemind, setSelectedTenantForIndividualRemind] = useState<TenantTrackerRow | null>(null);
   const [individualReminderCustomMsg, setIndividualReminderCustomMsg] = useState<string>('');
   const [isSendingReminders, setIsSendingReminders] = useState<boolean>(false);
+  const [isMatching, setIsMatching] = useState<boolean>(false);
 
   // Notifications
   const [notification, setNotification] = useState<{ message: string; isError?: boolean } | null>(null);
@@ -527,14 +528,16 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
       showNotification('Please select an active tenant invoice to credit', true);
       return;
     }
+    if (isMatching) return;
 
+    setIsMatching(true);
     try {
       await api.tracker.manualMatch({
         transaction_id: selectedTxnForMatch.id,
         invoice_id: selectedInvoiceForMatch,
         notes: matchNotes || 'Manual match verified in tracker',
       });
-      showNotification('Transaction matched successfully');
+      showNotification('Transaction matched successfully. Receipt issued.');
       setIsManualMatchModalOpen(false);
       setSelectedTxnForMatch(null);
       setSelectedInvoiceForMatch('');
@@ -542,7 +545,9 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
       fetchReportData();
       onRefreshAllData();
     } catch (err: any) {
-      showNotification(err.message || 'Failed to complete manual match', true);
+      showNotification(err.message || 'Failed to complete manual match. Please try again.', true);
+    } finally {
+      setIsMatching(false);
     }
   };
 
@@ -1693,15 +1698,17 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 onClick={() => setIsManualMatchModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-bold cursor-pointer"
+                disabled={isMatching}
+                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-bold cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmManualMatch}
-                className="px-5 py-2.5 rounded-xl bg-[#331a6f] text-white hover:bg-[#251352] text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                disabled={isMatching}
+                className="px-5 py-2.5 rounded-xl bg-[#331a6f] text-white hover:bg-[#251352] text-xs font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-50"
               >
-                Confirm Match & Issue Receipt
+                {isMatching ? 'Matching...' : 'Confirm Match & Issue Receipt'}
               </button>
             </div>
           </div>

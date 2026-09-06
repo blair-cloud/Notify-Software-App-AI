@@ -41,6 +41,7 @@ export const NotificationPreferencesModal: React.FC<NotificationPreferencesModal
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [preferences, setPreferences] = useState<NotificationPreference>({
     lease_expiry_in_app: true,
@@ -81,6 +82,7 @@ export const NotificationPreferencesModal: React.FC<NotificationPreferencesModal
   // Automation state
   const [processing, setProcessing] = useState<boolean>(false);
   const [automationResult, setAutomationResult] = useState<ProcessRemindersResult | null>(null);
+  const [automationError, setAutomationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -111,12 +113,15 @@ export const NotificationPreferencesModal: React.FC<NotificationPreferencesModal
   const handleSavePreferences = async () => {
     setSaving(true);
     setSaveSuccess(false);
+    setSaveError(null);
     try {
       await api.notifications.updatePreferences(preferences);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save preferences', err);
+      setSaveError(err?.message || 'Failed to save preferences. Please try again.');
+      setTimeout(() => setSaveError(null), 6000);
     } finally {
       setSaving(false);
     }
@@ -125,6 +130,7 @@ export const NotificationPreferencesModal: React.FC<NotificationPreferencesModal
   const handleRunReminders = async () => {
     setProcessing(true);
     setAutomationResult(null);
+    setAutomationError(null);
     try {
       const res = await api.notifications.processReminders();
       setAutomationResult(res);
@@ -134,6 +140,7 @@ export const NotificationPreferencesModal: React.FC<NotificationPreferencesModal
       setLogs(updatedLogs);
     } catch (err: any) {
       console.error('Failed to run reminders', err);
+      setAutomationError(err?.message || 'Failed to run the reminder cycle. Please try again.');
     } finally {
       setProcessing(false);
     }
@@ -370,6 +377,10 @@ export const NotificationPreferencesModal: React.FC<NotificationPreferencesModal
                   <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5 animate-in fade-in">
                     <CheckCircle2 className="w-4 h-4" /> Preferences saved successfully!
                   </span>
+                ) : saveError ? (
+                  <span className="text-xs font-bold text-rose-600 flex items-center gap-1.5 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4" /> {saveError}
+                  </span>
                 ) : (
                   <span className="text-xs text-slate-400">Changes apply to all future automated cycles</span>
                 )}
@@ -413,6 +424,14 @@ export const NotificationPreferencesModal: React.FC<NotificationPreferencesModal
                   </button>
                 </div>
               </div>
+
+              {/* Automation Error */}
+              {automationError && (
+                <div className="p-4 border border-rose-200 bg-rose-50 rounded-2xl flex items-center gap-2 text-xs font-bold text-rose-800 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{automationError}</span>
+                </div>
+              )}
 
               {/* Automation Results Card */}
               {automationResult && (

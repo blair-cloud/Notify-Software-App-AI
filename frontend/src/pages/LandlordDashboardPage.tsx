@@ -61,6 +61,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import {
   Property,
   Unit,
@@ -154,6 +155,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [actionErrorMsg, setActionErrorMsg] = useState<string | null>(null);
 
   // Filter & Search states
   const [propertySearch, setPropertySearch] = useState('');
@@ -237,16 +239,52 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [propSector, setPropSector] = useState('Kacyiru');
   const [propDesc, setPropDesc] = useState('');
 
+  // Form states - Edit Property
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [editPropName, setEditPropName] = useState('');
+  const [editPropType, setEditPropType] = useState<any>('APARTMENT');
+  const [editPropAddress, setEditPropAddress] = useState('');
+  const [editPropDistrict, setEditPropDistrict] = useState('');
+  const [editPropSector, setEditPropSector] = useState('');
+  const [editPropDesc, setEditPropDesc] = useState('');
+  const [isSavingProperty, setIsSavingProperty] = useState(false);
+
   // Form states - Unit
   const [selectedPropIdForUnit, setSelectedPropIdForUnit] = useState('');
   const [unitNumber, setUnitNumber] = useState('');
   const [unitFloor, setUnitFloor] = useState(1);
-  const [unitType, setUnitType] = useState('2 Bedroom');
-  const [unitBedrooms, setUnitBedrooms] = useState(2);
-  const [unitBathrooms, setUnitBathrooms] = useState(1);
+  const [unitRooms, setUnitRooms] = useState('');
+  const [unitBathrooms, setUnitBathrooms] = useState('');
+  const [unitSquareMeters, setUnitSquareMeters] = useState('');
   const [unitRent, setUnitRent] = useState(300000);
   const [unitCurrency, setUnitCurrency] = useState('RWF');
   const [unitDesc, setUnitDesc] = useState('');
+
+  // Form states - Edit Unit
+  const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
+  const [editUnitNumber, setEditUnitNumber] = useState('');
+  const [editUnitFloor, setEditUnitFloor] = useState(1);
+  const [editUnitRooms, setEditUnitRooms] = useState('');
+  const [editUnitBathrooms, setEditUnitBathrooms] = useState('');
+  const [editUnitSquareMeters, setEditUnitSquareMeters] = useState('');
+  const [editUnitRent, setEditUnitRent] = useState(0);
+  const [isSavingUnit, setIsSavingUnit] = useState(false);
+
+  // Deletion confirmation state - Properties & Units
+  const [propertyPendingDelete, setPropertyPendingDelete] = useState<Property | null>(null);
+  const [isDeletingProperty, setIsDeletingProperty] = useState(false);
+  const [unitPendingDelete, setUnitPendingDelete] = useState<Unit | null>(null);
+  const [isDeletingUnit, setIsDeletingUnit] = useState(false);
+
+  // Per-row loading guards - Leases & Tenancies
+  const [activatingLeaseId, setActivatingLeaseId] = useState<string | null>(null);
+  const [endingTenancyId, setEndingTenancyId] = useState<string | null>(null);
+
+  // Submitting guards - Property / Unit / Invitation / Lease creation forms
+  const [isCreatingProperty, setIsCreatingProperty] = useState(false);
+  const [isCreatingUnit, setIsCreatingUnit] = useState(false);
+  const [isCreatingInvitation, setIsCreatingInvitation] = useState(false);
+  const [isCreatingLease, setIsCreatingLease] = useState(false);
 
   // Form states - Invite Tenant
   const [inviteEmail, setInviteEmail] = useState('');
@@ -257,7 +295,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Form states - Create Lease & Tenancy
-  const [leaseTenantEmail, setLeaseTenantEmail] = useState('');
+  const [leaseTenantId, setLeaseTenantId] = useState('');
   const [leasePropId, setLeasePropId] = useState('');
   const [leaseUnitId, setLeaseUnitId] = useState('');
   const [leaseStartDate, setLeaseStartDate] = useState(new Date().toISOString().split('T')[0]);
@@ -356,6 +394,25 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     fetchData();
   }, []);
 
+  // Shared success/error toast helpers - each call clears the other channel and
+  // auto-dismisses only itself, so a fast follow-up message is never wiped out
+  // by a stale timeout from a previous one.
+  const showSuccess = (message: string, durationMs: number = 4000) => {
+    setActionErrorMsg(null);
+    setSuccessMsg(message);
+    setTimeout(() => {
+      setSuccessMsg((current) => (current === message ? null : current));
+    }, durationMs);
+  };
+
+  const showError = (message: string, durationMs: number = 6000) => {
+    setSuccessMsg(null);
+    setActionErrorMsg(message);
+    setTimeout(() => {
+      setActionErrorMsg((current) => (current === message ? null : current));
+    }, durationMs);
+  };
+
   // Filter vacant units for dropdowns
   const vacantUnitsForInvite = units.filter(
     (u) =>
@@ -369,8 +426,21 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       (u.status === 'VACANT' || u.status === 'vacant' || u.status === 'RESERVED')
   );
 
+  // The tenants list has one row per tenancy, so the same tenant can appear more
+  // than once (e.g. an ended tenancy plus a current one). De-dupe by tenant id
+  // for the "select a tenant" dropdown, which only cares about the person.
+  const uniqueTenantsForLease = React.useMemo(() => {
+    const seen = new Set<string>();
+    return tenants.filter((t) => {
+      if (seen.has(t.id)) return false;
+      seen.add(t.id);
+      return true;
+    });
+  }, [tenants]);
+
   const handleCreateProperty = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsCreatingProperty(true);
     try {
       await api.properties.create({
         name: propName,
@@ -385,49 +455,144 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setPropAddress('');
       setPropDesc('');
       setShowAddPropertyModal(false);
-      setSuccessMsg('Property created successfully!');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Property created successfully.');
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to create property');
+      showError(err.message || 'Failed to create property.');
+    } finally {
+      setIsCreatingProperty(false);
+    }
+  };
+
+  const handleOpenEditProperty = (prop: Property) => {
+    setEditingProperty(prop);
+    setEditPropName(prop.name || '');
+    setEditPropType(prop.property_type || 'APARTMENT');
+    setEditPropAddress(prop.address || '');
+    setEditPropDistrict(prop.district || '');
+    setEditPropSector(prop.sector || '');
+    setEditPropDesc(prop.description || '');
+  };
+
+  const handleUpdateProperty = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProperty) return;
+    setIsSavingProperty(true);
+    try {
+      await api.properties.update(editingProperty.id, {
+        name: editPropName,
+        property_type: editPropType,
+        address: editPropAddress,
+        district: editPropDistrict,
+        sector: editPropSector,
+        description: editPropDesc,
+      });
+
+      setEditingProperty(null);
+      showSuccess('Property updated successfully.');
+      fetchData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to update property.');
+    } finally {
+      setIsSavingProperty(false);
     }
   };
 
   const handleCreateUnit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsCreatingUnit(true);
     try {
       await api.units.create({
         property_id: selectedPropIdForUnit,
         unit_number: unitNumber,
         floor: Number(unitFloor),
-        unit_type: unitType,
-        bedrooms: Number(unitBedrooms),
-        bathrooms: Number(unitBathrooms),
+        rooms: unitRooms.trim() === '' ? undefined : Number(unitRooms),
+        bathrooms: unitBathrooms.trim() === '' ? undefined : Number(unitBathrooms),
+        square_meters: unitSquareMeters.trim() === '' ? undefined : Number(unitSquareMeters),
         monthly_rent: Number(unitRent),
         currency: unitCurrency,
         description: unitDesc,
       });
 
       setUnitNumber('');
+      setUnitRooms('');
+      setUnitBathrooms('');
+      setUnitSquareMeters('');
       setUnitDesc('');
       setShowAddUnitModal(false);
-      setSuccessMsg('Unit created successfully!');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Unit created successfully.');
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to create unit');
+      showError(err.message || 'Failed to create unit.');
+    } finally {
+      setIsCreatingUnit(false);
+    }
+  };
+
+  const handleOpenEditUnit = (unit: Unit) => {
+    setEditingUnit(unit);
+    setEditUnitNumber(unit.unit_number || '');
+    setEditUnitFloor(unit.floor ?? 1);
+    setEditUnitRooms(unit.rooms !== undefined && unit.rooms !== null ? String(unit.rooms) : '');
+    setEditUnitBathrooms(unit.bathrooms !== undefined && unit.bathrooms !== null ? String(unit.bathrooms) : '');
+    setEditUnitSquareMeters(
+      unit.square_meters !== undefined && unit.square_meters !== null ? String(unit.square_meters) : ''
+    );
+    setEditUnitRent(unit.monthly_rent || 0);
+  };
+
+  const handleUpdateUnit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUnit) return;
+    setIsSavingUnit(true);
+    try {
+      await api.units.update(editingUnit.id, {
+        unit_number: editUnitNumber,
+        floor: Number(editUnitFloor),
+        rooms: editUnitRooms.trim() === '' ? null : Number(editUnitRooms),
+        bathrooms: editUnitBathrooms.trim() === '' ? null : Number(editUnitBathrooms),
+        square_meters: editUnitSquareMeters.trim() === '' ? null : Number(editUnitSquareMeters),
+        monthly_rent: Number(editUnitRent),
+      });
+
+      setEditingUnit(null);
+      showSuccess('Unit updated successfully!');
+      fetchData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to update unit');
+    } finally {
+      setIsSavingUnit(false);
+    }
+  };
+
+  const handleConfirmDeleteUnit = async () => {
+    if (!unitPendingDelete) return;
+    const deletedUnitId = unitPendingDelete.id;
+    setIsDeletingUnit(true);
+    try {
+      await api.units.delete(deletedUnitId);
+      // Remove immediately from local state so it disappears without waiting on a full refetch
+      setUnits((prev) => prev.filter((u) => u.id !== deletedUnitId));
+      setUnitPendingDelete(null);
+      showSuccess('Unit deleted successfully!');
+      fetchData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to delete unit');
+    } finally {
+      setIsDeletingUnit(false);
     }
   };
 
   const handleCreateInvitation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteUnitId) {
-      alert('Please select a vacant unit for this invitation');
+      showError('Please select a vacant unit for this invitation.');
       return;
     }
+    setIsCreatingInvitation(true);
     try {
       const res = await api.invitations.create({
-        tenant_email: inviteEmail,
+        tenant_email: inviteEmail.trim() ? inviteEmail.trim() : null,
         tenant_phone: invitePhone,
         property_id: invitePropId,
         unit_id: inviteUnitId,
@@ -435,35 +600,43 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
       setCreatedInviteResult(res);
       setInviteEmail('');
-      setSuccessMsg('Invitation generated successfully!');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Vacancy assigned successfully. Invitation link generated.');
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to create invitation');
+      showError(err.message || 'Failed to assign vacancy to tenant.');
+    } finally {
+      setIsCreatingInvitation(false);
     }
   };
 
   const handleCreateLeaseAndTenancy = async (e: React.FormEvent) => {
     e.preventDefault();
     setLeaseError(null);
+
+    // Validate tenant selection
+    if (!leaseTenantId) {
+      setLeaseError('Please select the tenant this lease is being created for.');
+      return;
+    }
+
+    // Validate unit occupancy
+    const targetUnit = units.find((u) => u.id === leaseUnitId);
+    if (targetUnit && targetUnit.status === 'OCCUPIED') {
+      setLeaseError('Double occupancy prevented: Unit is already occupied by an active tenancy.');
+      return;
+    }
+
+    // Check document validation: Required for Activation, optional for Draft
+    if (!leaseIsDraft && !leaseUploadedDoc?.file && !leaseUploadedDoc?.fileName) {
+      setLeaseError('Lease agreement document is required before this lease can be activated.');
+      return;
+    }
+
+    setIsCreatingLease(true);
     try {
-      // Validate unit occupancy
-      const targetUnit = units.find((u) => u.id === leaseUnitId);
-      if (targetUnit && targetUnit.status === 'OCCUPIED') {
-        setLeaseError('Double occupancy prevented: Unit is already occupied by an active tenancy.');
-        return;
-      }
-
-      // Check document validation: Required for Activation, optional for Draft
-      if (!leaseIsDraft && !leaseUploadedDoc?.file && !leaseUploadedDoc?.fileName) {
-        setLeaseError('Lease agreement document is required before this lease can be activated.');
-        return;
-      }
-
       // Create tenancy first
       const newTenancy = await api.tenancies.create({
-        tenant_id: 'mock-tenant-001',
-        landlord_id: user?.id || 'mock-lp-001',
+        tenant_id: leaseTenantId,
         property_id: leasePropId,
         unit_id: leaseUnitId,
         start_date: leaseStartDate,
@@ -486,32 +659,43 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         status: leaseIsDraft ? 'DRAFT' : 'ACTIVE',
       });
 
-      // If document was attached, upload it directly associated with this lease
-      if (leaseUploadedDoc && createdLease?.id) {
-        await api.leases.uploadDocument(createdLease.id, {
-          file_name: leaseUploadedDoc.fileName || 'lease_agreement.pdf',
-          document_name: leaseUploadedDoc.documentName || 'Official Signed Lease Agreement',
-          file_size: leaseUploadedDoc.fileSize || 2048500,
-          file_type: leaseUploadedDoc.fileType || 'application/pdf',
-          file_data_base64: leaseUploadedDoc.previewUrl,
-          uploaded_by_role: 'LANDLORD',
-          uploaded_by_id: user?.id || 'mock-lp-001',
-          change_summary: 'Initial signed lease agreement uploaded during lease creation.',
-        });
-      }
-
       setShowCreateLeaseModal(false);
       setLeaseUploadedDoc(null);
       setLeaseIsDraft(false);
-      setSuccessMsg(
+      setLeaseTenantId('');
+      showSuccess(
         leaseIsDraft
-          ? 'Draft lease agreement saved!'
-          : 'Lease agreement and tenancy successfully created & activated with official signed document!'
+          ? 'Lease created successfully. Saved as a draft — upload the signed document to activate it.'
+          : 'Lease created successfully.'
       );
-      setTimeout(() => setSuccessMsg(null), 4000);
       fetchData();
+
+      // Document upload is a secondary step - its failure must not hide the
+      // fact that the lease and tenancy were already created successfully.
+      if (leaseUploadedDoc && createdLease?.id) {
+        try {
+          await api.leases.uploadDocument(createdLease.id, {
+            file_name: leaseUploadedDoc.fileName || 'lease_agreement.pdf',
+            document_name: leaseUploadedDoc.documentName || 'Official Signed Lease Agreement',
+            file_size: leaseUploadedDoc.fileSize || 2048500,
+            file_type: leaseUploadedDoc.fileType || 'application/pdf',
+            file_data: leaseUploadedDoc.previewUrl,
+            version_notes: 'Initial signed agreement uploaded during lease creation.',
+            uploaded_by: `${user?.first_name || 'Landlord'} ${user?.last_name || ''}`.trim() || 'Landlord',
+            uploaded_by_role: 'LANDLORD',
+          });
+          fetchData();
+        } catch (docErr: any) {
+          showError(
+            docErr.message ||
+              'Lease was created, but the signed document could not be attached. Please upload it from the Documents tab.'
+          );
+        }
+      }
     } catch (err: any) {
-      setLeaseError(err.message || 'Failed to create lease');
+      setLeaseError(err.message || 'Failed to create lease.');
+    } finally {
+      setIsCreatingLease(false);
     }
   };
 
@@ -522,150 +706,65 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         uploaded_by_role: 'LANDLORD',
         uploaded_by_id: user?.id || 'mock-lp-001',
       });
-      setSuccessMsg('Lease agreement document uploaded & version history updated!');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Lease agreement document uploaded & version history updated!');
       await fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to upload document version');
+      showError(err.message || 'Failed to upload document version');
     }
   };
 
   const handleActivateDraftLease = async (lease: Lease) => {
     if (!lease.agreement_document && !lease.has_signed_document) {
       setSelectedLeaseForDocModal(lease);
-      setSuccessMsg('Please upload the signed lease agreement document to activate this lease.');
-      setTimeout(() => setSuccessMsg(null), 5000);
+      showSuccess('Please upload the signed lease agreement document to activate this lease.', 5000);
       return;
     }
 
+    setActivatingLeaseId(lease.id);
     try {
       await api.leases.activate(lease.id);
-      setSuccessMsg(`Lease ${lease.id} is now ACTIVE and compliant!`);
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Lease activated successfully.');
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to activate lease');
+      showError(err.message || 'Failed to activate lease.');
+    } finally {
+      setActivatingLeaseId(null);
     }
   };
 
-  const handleArchiveProperty = async (propId: string) => {
-    if (confirm('Are you sure you want to archive this property? Existing units and leases will be soft-deleted/archived.')) {
-      try {
-        await api.properties.delete(propId);
-        setSuccessMsg('Property archived successfully');
-        setTimeout(() => setSuccessMsg(null), 3000);
-        fetchData();
-      } catch (err: any) {
-        alert(err.message || 'Failed to archive property');
-      }
+  const handleConfirmDeleteProperty = async () => {
+    if (!propertyPendingDelete) return;
+    const deletedPropertyId = propertyPendingDelete.id;
+    setIsDeletingProperty(true);
+    try {
+      await api.properties.delete(deletedPropertyId);
+      // Remove immediately from local state (and its now-deleted units) so it
+      // disappears without waiting on a full refetch
+      setProperties((prev) => prev.filter((p) => p.id !== deletedPropertyId));
+      setUnits((prev) => prev.filter((u) => u.property_id !== deletedPropertyId));
+      setPropertyPendingDelete(null);
+      showSuccess('Property deleted successfully', 3000);
+      fetchData();
+    } catch (err: any) {
+      showError(err.message || 'Failed to delete property');
+    } finally {
+      setIsDeletingProperty(false);
     }
   };
 
   const handleEndTenancy = async (tenancyId: string) => {
-    if (confirm('Are you sure you want to end this tenancy? The unit will automatically be marked as VACANT.')) {
-      try {
-        await api.tenancies.end(tenancyId);
-        setSuccessMsg('Tenancy ended and unit set to Vacant.');
-        setTimeout(() => setSuccessMsg(null), 3000);
-        fetchData();
-      } catch (err: any) {
-        alert(err.message || 'Failed to end tenancy');
-      }
-    }
-  };
-
-  const handleVerifyPayment = async (paymentId: string, verify: boolean, rejectionReason?: string) => {
-    try {
-      await api.payments.verifyPayment(paymentId, verify, rejectionReason);
-      setSuccessMsg(verify ? 'Payment verified and official receipt generated!' : 'Payment rejected.');
-      setTimeout(() => setSuccessMsg(null), 4000);
-      fetchData();
-    } catch (err: any) {
-      alert(err.message || 'Verification update failed');
-    }
-  };
-
-  const handleBatchGenerateInvoices = async () => {
-    try {
-      const activeLeases = leases.filter(l => l.status === 'ACTIVE' || l.status === 'EXPIRING_SOON');
-      if (activeLeases.length === 0) {
-        alert('No active leases found to generate invoices for.');
-        return;
-      }
-      let count = 0;
-      for (const l of activeLeases) {
-        await api.invoices.create({
-          lease_id: l.id,
-          property_id: l.property_id,
-          unit_id: l.unit_id,
-          period_start: new Date().toISOString().slice(0, 8) + '01',
-          period_end: new Date().toISOString().slice(0, 10),
-          due_date: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
-          rent_amount: l.monthly_rent || 350000,
-          currency: 'RWF',
-          notes: 'Standard Monthly Rent Invoice'
-        });
-        count++;
-      }
-      setSuccessMsg(`Generated ${count} monthly invoices successfully!`);
-      setTimeout(() => setSuccessMsg(null), 4000);
-      fetchData();
-    } catch (err: any) {
-      alert(err.message || 'Failed to generate batch invoices');
-    }
-  };
-
-  const handleCreateCustomInvoice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!invLeaseId) {
-      alert('Please select an active lease');
+    if (!confirm('Are you sure you want to end this tenancy? The unit will automatically be marked as VACANT.')) {
       return;
     }
-    const targetLease = leases.find(l => l.id === invLeaseId);
+    setEndingTenancyId(tenancyId);
     try {
-      await api.invoices.create({
-        lease_id: invLeaseId,
-        property_id: targetLease?.property_id || properties[0]?.id || '',
-        unit_id: targetLease?.unit_id || units[0]?.id || '',
-        period_start: invPeriodStart,
-        period_end: invPeriodEnd,
-        due_date: invDueDate,
-        rent_amount: Number(invRentAmount),
-        currency: 'RWF',
-        notes: invNotes || 'Custom Rent Invoice'
-      });
-      setShowCreateInvoiceModal(false);
-      setSuccessMsg('Invoice generated successfully!');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      await api.tenancies.end(tenancyId);
+      showSuccess('Tenancy ended successfully. The unit is now vacant.', 3000);
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to create invoice');
-    }
-  };
-
-  const handleRecordExpense = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!expPropId) {
-      alert('Please select a property');
-      return;
-    }
-    try {
-      await api.expenses.create({
-        property_id: expPropId,
-        unit_id: expUnitId || undefined,
-        category: expCategory,
-        amount: Number(expAmount),
-        currency: 'RWF',
-        description: expDescription,
-        expense_date: expDate
-      });
-      setShowRecordExpenseModal(false);
-      setExpDescription('');
-      setSuccessMsg('Expense recorded successfully!');
-      setTimeout(() => setSuccessMsg(null), 4000);
-      fetchData();
-    } catch (err: any) {
-      alert(err.message || 'Failed to record expense');
+      showError(err.message || 'Failed to end tenancy.');
+    } finally {
+      setEndingTenancyId(null);
     }
   };
 
@@ -691,8 +790,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     setIsRecordPaymentModalOpen(false);
     setRecordPaymentTenantId(undefined);
     setRecordPaymentInvoiceId(undefined);
-    setSuccessMsg('Payment logged successfully and verified receipt issued!');
-    setTimeout(() => setSuccessMsg(null), 4000);
+    showSuccess('Payment logged successfully and verified receipt issued!');
     fetchData();
     if (receipt) {
       setSelectedReceipt(receipt);
@@ -703,8 +801,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     setIsSendReminderModalOpen(false);
     setReminderTenant(null);
     setReminderInvoice(null);
-    setSuccessMsg(msg || 'Payment reminder sent successfully!');
-    setTimeout(() => setSuccessMsg(null), 4000);
+    showSuccess(msg || 'Payment reminder sent successfully!');
     fetchData();
   };
 
@@ -712,14 +809,13 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const handleAcknowledgeMaintenance = async (id: string) => {
     try {
       await api.maintenance.acknowledgeRequest(id);
-      setSuccessMsg('Maintenance request acknowledged.');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Maintenance request acknowledged.');
       fetchData();
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) => (prev ? { ...prev, status: 'ACKNOWLEDGED' } : null));
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to acknowledge maintenance');
+      showError(err.message || 'Failed to acknowledge maintenance');
     }
   };
 
@@ -735,8 +831,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   ) => {
     try {
       await api.maintenance.scheduleRequest(id, data);
-      setSuccessMsg('Maintenance visit scheduled and assigned.');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Maintenance visit scheduled and assigned.');
       fetchData();
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) =>
@@ -753,21 +848,20 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         );
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to schedule maintenance');
+      showError(err.message || 'Failed to schedule maintenance');
     }
   };
 
   const handleMarkMaintenanceInProgress = async (id: string) => {
     try {
       await api.maintenance.markInProgress(id);
-      setSuccessMsg('Maintenance marked as in progress.');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Maintenance marked as in progress.');
       fetchData();
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) => (prev ? { ...prev, status: 'IN_PROGRESS' } : null));
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to update maintenance status');
+      showError(err.message || 'Failed to update maintenance status');
     }
   };
 
@@ -777,8 +871,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   ) => {
     try {
       await api.maintenance.resolveRequest(id, data);
-      setSuccessMsg('Maintenance marked as resolved. Awaiting tenant confirmation.');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Maintenance marked as resolved. Awaiting tenant confirmation.');
       fetchData();
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) =>
@@ -793,18 +886,17 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         );
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to resolve maintenance');
+      showError(err.message || 'Failed to resolve maintenance');
     }
   };
 
   const handleAddToExpenseMaintenance = async (id: string) => {
     try {
       await api.maintenance.addToExpenses(id);
-      setSuccessMsg('Maintenance cost added to property expenses successfully!');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Maintenance cost added to property expenses successfully!');
       fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to add to expenses');
+      showError(err.message || 'Failed to add to expenses');
     }
   };
 
@@ -832,7 +924,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         );
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to add comment');
+      showError(err.message || 'Failed to add comment');
     }
   };
 
@@ -840,22 +932,20 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const handleAcknowledgeComplaint = async (id: string) => {
     try {
       await api.complaints.acknowledgeComplaint(id);
-      setSuccessMsg('Complaint acknowledged.');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Complaint acknowledged.');
       fetchData();
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) => (prev ? { ...prev, status: 'ACKNOWLEDGED' } : null));
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to acknowledge complaint');
+      showError(err.message || 'Failed to acknowledge complaint');
     }
   };
 
   const handleUnderReviewComplaint = async (id: string, data?: { landlord_response?: string }) => {
     try {
       await api.complaints.markUnderReview(id, data);
-      setSuccessMsg('Complaint moved to under review with official response.');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Complaint moved to under review with official response.');
       fetchData();
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) =>
@@ -869,15 +959,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         );
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to review complaint');
+      showError(err.message || 'Failed to review complaint');
     }
   };
 
   const handleResolveComplaint = async (id: string, data: { landlord_response: string }) => {
     try {
       await api.complaints.resolveComplaint(id, data);
-      setSuccessMsg('Complaint marked as resolved.');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Complaint marked as resolved.');
       fetchData();
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) =>
@@ -891,21 +980,20 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         );
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to resolve complaint');
+      showError(err.message || 'Failed to resolve complaint');
     }
   };
 
   const handleCloseComplaint = async (id: string) => {
     try {
       await api.complaints.closeComplaint(id);
-      setSuccessMsg('Complaint closed.');
-      setTimeout(() => setSuccessMsg(null), 4000);
+      showSuccess('Complaint closed.');
       fetchData();
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) => (prev ? { ...prev, status: 'CLOSED' } : null));
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to close complaint');
+      showError(err.message || 'Failed to close complaint');
     }
   };
 
@@ -933,7 +1021,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         );
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to add comment');
+      showError(err.message || 'Failed to add comment');
     }
   };
 
@@ -944,14 +1032,12 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     specialization: string;
     notes?: string;
   }) => {
-    try {
-      await api.maintenance.createWorker(data);
-      setSuccessMsg('Technician added to directory successfully.');
-      setTimeout(() => setSuccessMsg(null), 4000);
-      fetchData();
-    } catch (err: any) {
-      alert(err.message || 'Failed to add worker');
-    }
+    // Intentionally does not catch: WorkerModal awaits this call and only
+    // clears/closes its form on success, so a failure must propagate and be
+    // shown inline in the modal rather than being swallowed here.
+    await api.maintenance.createWorker(data);
+    showSuccess('Technician added to directory successfully.');
+    fetchData();
   };
 
   // Phase 4 & Phase 5: Notification Handlers
@@ -964,6 +1050,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (err: any) {
       console.error('Failed to mark read', err);
+      showError(err.message || 'Failed to mark notification as read.');
     }
   };
 
@@ -972,8 +1059,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       await api.notifications.markAllAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
+      showSuccess('All notifications marked as read.');
     } catch (err: any) {
       console.error('Failed to mark all read', err);
+      showError(err.message || 'Failed to mark all notifications as read.');
     }
   };
 
@@ -982,8 +1071,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       await api.notifications.delete(id);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
       setUnreadCount((prev) => Math.max(0, prev - 1));
+      showSuccess('Notification deleted.');
     } catch (err: any) {
       console.error('Failed to delete notification', err);
+      showError(err.message || 'Failed to delete notification.');
     }
   };
 
@@ -991,11 +1082,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     setIsProcessingReminders(true);
     try {
       const res = await api.notifications.processReminders();
-      setSuccessMsg(`Automated reminder engine executed! ${res.reminders_created} lease reminders created.`);
-      setTimeout(() => setSuccessMsg(null), 5000);
+      showSuccess(`Automated reminder engine executed! ${res.reminders_created} lease reminders created.`, 5000);
       await fetchData();
     } catch (err: any) {
-      alert(err.message || 'Failed to process reminders');
+      showError(err.message || 'Failed to process reminders');
     } finally {
       setIsProcessingReminders(false);
     }
@@ -1544,6 +1634,19 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
               <span>{successMsg}</span>
             </div>
             <button onClick={() => setSuccessMsg(null)} className="text-emerald-600 hover:text-emerald-800">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Error toast / notification banner */}
+        {actionErrorMsg && (
+          <div className="mb-6 bg-rose-50 border border-rose-200 text-rose-800 text-sm px-4 py-3 rounded-lg flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+              <span>{actionErrorMsg}</span>
+            </div>
+            <button onClick={() => setActionErrorMsg(null)} className="text-rose-600 hover:text-rose-800">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -2151,9 +2254,16 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                               View Units
                             </button>
                             <button
-                              onClick={() => handleArchiveProperty(prop.id)}
+                              onClick={() => handleOpenEditProperty(prop)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-[#331A6F] hover:bg-purple-50 transition-colors cursor-pointer"
+                              title="Edit Property"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setPropertyPendingDelete(prop)}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                              title="Archive Property"
+                              title="Delete Property"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -2281,25 +2391,42 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                                 )}
                               </td>
                               <td className="py-4 px-4 text-right">
-                                {unit.status === 'VACANT' ? (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {unit.status === 'VACANT' ? (
+                                    <button
+                                      onClick={() => {
+                                        setInvitePropId(unit.property_id);
+                                        setInviteUnitId(unit.id);
+                                        setShowInviteModal(true);
+                                      }}
+                                      className="px-3 py-1.5 rounded-lg bg-[#331A6F] text-white text-[11px] font-semibold hover:bg-[#251352] transition-colors cursor-pointer"
+                                    >
+                                      Assign Tenant
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => setActiveTab('leases')}
+                                      className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-semibold hover:bg-slate-200 transition-colors cursor-pointer"
+                                    >
+                                      View Lease
+                                    </button>
+                                  )}
                                   <button
-                                    onClick={() => {
-                                      setInvitePropId(unit.property_id);
-                                      setInviteUnitId(unit.id);
-                                      setShowInviteModal(true);
-                                    }}
-                                    className="px-3 py-1.5 rounded-lg bg-[#331A6F] text-white text-[11px] font-semibold hover:bg-[#251352] transition-colors cursor-pointer"
+                                    onClick={() => handleOpenEditUnit(unit)}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-[#331A6F] hover:bg-purple-50 transition-colors cursor-pointer"
+                                    title="Edit Unit"
                                   >
-                                    Assign Tenant
+                                    <Edit className="w-3.5 h-3.5" />
                                   </button>
-                                ) : (
                                   <button
-                                    onClick={() => setActiveTab('leases')}
-                                    className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-semibold hover:bg-slate-200 transition-colors cursor-pointer"
+                                    onClick={() => setUnitPendingDelete(unit)}
+                                    disabled={unit.status === 'OCCUPIED'}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                                    title={unit.status === 'OCCUPIED' ? 'End the tenancy before deleting this unit' : 'Delete Unit'}
                                   >
-                                    View Lease
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
-                                )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -2370,7 +2497,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {filteredTenants.map((t) => (
-                          <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
+                          <tr key={t.tenancy_id || t.id} className="hover:bg-slate-50/60 transition-colors">
                             <td className="py-4 px-4 font-bold text-slate-900">
                               <div className="flex items-center gap-2">
                                 <div className="w-7 h-7 rounded-full bg-purple-100 text-[#331A6F] flex items-center justify-center font-bold text-xs">
@@ -2620,16 +2747,18 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                                 {l.status === 'DRAFT' && (
                                   <button
                                     onClick={() => handleActivateDraftLease(l)}
-                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors cursor-pointer shadow-xs"
+                                    disabled={activatingLeaseId === l.id}
+                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
-                                    Activate
+                                    {activatingLeaseId === l.id ? 'Activating...' : 'Activate'}
                                   </button>
                                 )}
                                 <button
                                   onClick={() => handleEndTenancy(l.tenancy_id)}
-                                  className="px-2.5 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-700 text-[11px] font-semibold transition-colors cursor-pointer"
+                                  disabled={endingTenancyId === l.tenancy_id}
+                                  className="px-2.5 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-700 text-[11px] font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  Terminate
+                                  {endingTenancyId === l.tenancy_id ? 'Ending...' : 'Terminate'}
                                 </button>
                               </div>
                             </td>
@@ -2688,7 +2817,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                       <tbody className="divide-y divide-slate-100">
                         {invitations.map((inv) => (
                           <tr key={inv.id} className="hover:bg-slate-50/60 transition-colors">
-                            <td className="py-4 px-4 font-bold text-slate-900">{inv.tenant_email || inv.email}</td>
+                            <td className="py-4 px-4 font-bold text-slate-900">
+                              {inv.tenant_email || inv.email || <span className="text-slate-400 italic font-normal">No email provided</span>}
+                            </td>
                             <td className="py-4 px-4">{inv.tenant_phone || inv.phone}</td>
                             <td className="py-4 px-4 font-medium text-slate-800">
                               {inv.property_name} ({inv.unit_number})
@@ -2831,15 +2962,133 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 <button
                   type="button"
                   onClick={() => setShowAddPropertyModal(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600 hover:bg-slate-50"
+                  disabled={isCreatingProperty}
+                  className="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#331A6F] text-white rounded-lg font-semibold hover:bg-[#251352]"
+                  disabled={isCreatingProperty}
+                  className="px-4 py-2 bg-[#331A6F] text-white rounded-lg font-semibold hover:bg-[#251352] disabled:opacity-50"
                 >
-                  Save Property
+                  {isCreatingProperty ? 'Saving...' : 'Save Property'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 1B. EDIT PROPERTY MODAL */}
+      {editingProperty && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+          onClick={() => !isSavingProperty && setEditingProperty(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Edit Property</h3>
+              <button
+                onClick={() => setEditingProperty(null)}
+                disabled={isSavingProperty}
+                className="text-slate-400 hover:text-slate-600 p-1 disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateProperty} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Property Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editPropName}
+                  onChange={(e) => setEditPropName(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#331A6F]/30"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Property Type</label>
+                <select
+                  value={editPropType}
+                  onChange={(e) => setEditPropType(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none"
+                >
+                  <option value="APARTMENT">Apartment Complex</option>
+                  <option value="COMMERCIAL">Commercial Complex</option>
+                  <option value="HOUSE">Single Family House</option>
+                  <option value="OFFICE">Office Building</option>
+                  <option value="MIXED_USE">Mixed-Use</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">District *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPropDistrict}
+                    onChange={(e) => setEditPropDistrict(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Sector *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPropSector}
+                    onChange={(e) => setEditPropSector(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Address *</label>
+                <input
+                  type="text"
+                  required
+                  value={editPropAddress}
+                  onChange={(e) => setEditPropAddress(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  placeholder="Brief description of amenities or location..."
+                  value={editPropDesc}
+                  onChange={(e) => setEditPropDesc(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingProperty(null)}
+                  disabled={isSavingProperty}
+                  className="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProperty}
+                  className="px-4 py-2 bg-[#331A6F] text-white rounded-lg font-semibold hover:bg-[#251352] disabled:opacity-50"
+                >
+                  {isSavingProperty ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -2907,12 +3156,13 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-1">
-                  <label className="block text-slate-700 font-semibold mb-1">Bedrooms</label>
+                  <label className="block text-slate-700 font-semibold mb-1">Rooms</label>
                   <input
                     type="number"
                     min={0}
-                    value={unitBedrooms}
-                    onChange={(e) => setUnitBedrooms(Number(e.target.value))}
+                    placeholder="Optional"
+                    value={unitRooms}
+                    onChange={(e) => setUnitRooms(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
                   />
                 </div>
@@ -2920,19 +3170,22 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <label className="block text-slate-700 font-semibold mb-1">Bathrooms</label>
                   <input
                     type="number"
-                    min={1}
+                    min={0}
+                    placeholder="Optional"
                     value={unitBathrooms}
-                    onChange={(e) => setUnitBathrooms(Number(e.target.value))}
+                    onChange={(e) => setUnitBathrooms(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
                   />
                 </div>
                 <div className="col-span-1">
-                  <label className="block text-slate-700 font-semibold mb-1">Type</label>
+                  <label className="block text-slate-700 font-semibold mb-1">Square meters</label>
                   <input
-                    type="text"
-                    value={unitType}
-                    onChange={(e) => setUnitType(e.target.value)}
-                    placeholder="2 Bedroom"
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    placeholder="Optional"
+                    value={unitSquareMeters}
+                    onChange={(e) => setUnitSquareMeters(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
                   />
                 </div>
@@ -2955,15 +3208,142 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 <button
                   type="button"
                   onClick={() => setShowAddUnitModal(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600 hover:bg-slate-50"
+                  disabled={isCreatingUnit}
+                  className="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#331A6F] text-white rounded-lg font-semibold hover:bg-[#251352]"
+                  disabled={isCreatingUnit}
+                  className="px-4 py-2 bg-[#331A6F] text-white rounded-lg font-semibold hover:bg-[#251352] disabled:opacity-50"
                 >
-                  Save Unit
+                  {isCreatingUnit ? 'Saving...' : 'Save Unit'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2B. EDIT UNIT MODAL */}
+      {editingUnit && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
+          onClick={() => !isSavingUnit && setEditingUnit(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Edit Unit</h3>
+              <button
+                onClick={() => setEditingUnit(null)}
+                disabled={isSavingUnit}
+                className="text-slate-400 hover:text-slate-600 p-1 disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateUnit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Property</label>
+                <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-500">
+                  {properties.find((p) => p.id === editingUnit.property_id)?.name || 'Property'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Unit Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editUnitNumber}
+                    onChange={(e) => setEditUnitNumber(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Floor *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={editUnitFloor}
+                    onChange={(e) => setEditUnitFloor(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-1">
+                  <label className="block text-slate-700 font-semibold mb-1">Rooms</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Optional"
+                    value={editUnitRooms}
+                    onChange={(e) => setEditUnitRooms(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+                <div className="col-span-1">
+                  <label className="block text-slate-700 font-semibold mb-1">Bathrooms</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Optional"
+                    value={editUnitBathrooms}
+                    onChange={(e) => setEditUnitBathrooms(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+                <div className="col-span-1">
+                  <label className="block text-slate-700 font-semibold mb-1">Square meters</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    placeholder="Optional"
+                    value={editUnitSquareMeters}
+                    onChange={(e) => setEditUnitSquareMeters(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Monthly Rent (RWF) *</label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step={5000}
+                  value={editUnitRent}
+                  onChange={(e) => setEditUnitRent(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none font-bold text-slate-900"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingUnit(null)}
+                  disabled={isSavingUnit}
+                  className="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingUnit}
+                  className="px-4 py-2 bg-[#331A6F] text-white rounded-lg font-semibold hover:bg-[#251352] disabled:opacity-50"
+                >
+                  {isSavingUnit ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -3086,11 +3466,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Tenant Email *</label>
+                  <label className="block text-slate-700 font-semibold mb-1">Tenant Email (optional)</label>
                   <input
                     type="email"
-                    required
-                    placeholder="tenant@example.com"
+                    placeholder="tenant@example.com (optional)"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
@@ -3112,16 +3491,17 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => setShowInviteModal(false)}
-                    className="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600 hover:bg-slate-50"
+                    disabled={isCreatingInvitation}
+                    className="px-4 py-2 border border-slate-300 rounded-lg font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={!inviteUnitId}
+                    disabled={!inviteUnitId || isCreatingInvitation}
                     className="px-4 py-2 bg-[#331A6F] text-white rounded-lg font-semibold hover:bg-[#251352] disabled:opacity-50"
                   >
-                    Generate Invite Link
+                    {isCreatingInvitation ? 'Assigning...' : 'Generate Invite Link'}
                   </button>
                 </div>
               </form>
@@ -3138,6 +3518,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             setShowCreateLeaseModal(false);
             setLeaseError(null);
             setLeaseUploadedDoc(null);
+            setLeaseTenantId('');
           }}
         >
           <div
@@ -3156,6 +3537,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   setShowCreateLeaseModal(false);
                   setLeaseError(null);
                   setLeaseUploadedDoc(null);
+                  setLeaseTenantId('');
                 }}
                 className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
               >
@@ -3251,6 +3633,29 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 </div>
               </div>
 
+              {/* Tenant Selection */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Tenant *</label>
+                <select
+                  required
+                  value={leaseTenantId}
+                  onChange={(e) => setLeaseTenantId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#331A6F]/20"
+                >
+                  <option value="">-- Choose Tenant --</option>
+                  {uniqueTenantsForLease.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.first_name} {t.last_name} ({t.email})
+                    </option>
+                  ))}
+                </select>
+                {tenants.length === 0 && (
+                  <p className="text-[11px] text-amber-600 mt-1">
+                    No tenants yet. Use "Assign Tenant" from the Units tab to invite one first.
+                  </p>
+                )}
+              </div>
+
               {/* Dates */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -3324,17 +3729,24 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 <button
                   type="button"
                   onClick={() => setShowCreateLeaseModal(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                  disabled={isCreatingLease}
+                  className="px-4 py-2 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={!leaseUnitId}
+                  disabled={!leaseUnitId || !leaseTenantId || isCreatingLease}
                   className="px-5 py-2.5 bg-[#331A6F] text-white rounded-xl font-bold hover:bg-[#251352] disabled:opacity-50 transition-all cursor-pointer shadow-md flex items-center gap-2"
                 >
                   <FileCheck className="w-4 h-4" />
-                  <span>{leaseIsDraft ? 'Save as Draft' : 'Create & Activate Lease'}</span>
+                  <span>
+                    {isCreatingLease
+                      ? 'Creating Lease...'
+                      : leaseIsDraft
+                      ? 'Save as Draft'
+                      : 'Create & Activate Lease'}
+                  </span>
                 </button>
               </div>
             </form>
@@ -3644,6 +4056,41 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           userRole="LANDLORD"
         />
       )}
+
+      {/* Delete Property Confirmation */}
+      <ConfirmDialog
+        open={!!propertyPendingDelete}
+        title="Delete this property?"
+        message={
+          <>
+            You are about to permanently delete{' '}
+            <strong className="text-slate-900">{propertyPendingDelete?.name}</strong> and all of its units.
+            This action cannot be undone. Properties with occupied units cannot be deleted until the
+            tenancy has ended.
+          </>
+        }
+        confirmLabel="Delete Property"
+        isLoading={isDeletingProperty}
+        onConfirm={handleConfirmDeleteProperty}
+        onCancel={() => setPropertyPendingDelete(null)}
+      />
+
+      {/* Delete Unit Confirmation */}
+      <ConfirmDialog
+        open={!!unitPendingDelete}
+        title="Delete this unit?"
+        message={
+          <>
+            You are about to permanently delete unit{' '}
+            <strong className="text-slate-900">{unitPendingDelete?.unit_number}</strong>. This action
+            cannot be undone.
+          </>
+        }
+        confirmLabel="Delete Unit"
+        isLoading={isDeletingUnit}
+        onConfirm={handleConfirmDeleteUnit}
+        onCancel={() => setUnitPendingDelete(null)}
+      />
     </div>
   );
 };

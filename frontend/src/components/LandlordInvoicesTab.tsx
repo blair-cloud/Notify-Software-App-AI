@@ -49,7 +49,8 @@ export const LandlordInvoicesTab: React.FC<LandlordInvoicesTabProps> = ({
   const [propertyFilter, setPropertyFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [isGeneratingBatch, setIsGeneratingBatch] = useState<boolean>(false);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   // Summary figures
   const totalInvoiced = invoices.reduce((acc, i) => acc + (i.total_amount || 0), 0);
@@ -82,11 +83,12 @@ export const LandlordInvoicesTab: React.FC<LandlordInvoicesTabProps> = ({
     setActionMessage(null);
     try {
       await api.invoices.generateMonthlyInvoices();
-      setActionMessage('Successfully generated monthly rent invoices for all active leases.');
+      setActionMessage({ type: 'success', text: 'Monthly rent invoices generated successfully for all active leases.' });
       onRefreshData();
       setTimeout(() => setActionMessage(null), 5000);
     } catch (err: any) {
-      setActionMessage('Failed to batch generate invoices: ' + (err.message || 'Error'));
+      setActionMessage({ type: 'error', text: err.message || 'Failed to generate monthly invoices. Please try again.' });
+      setTimeout(() => setActionMessage(null), 6000);
     } finally {
       setIsGeneratingBatch(false);
     }
@@ -94,13 +96,18 @@ export const LandlordInvoicesTab: React.FC<LandlordInvoicesTabProps> = ({
 
   const handleCancelInvoice = async (invoiceId: string) => {
     if (!window.confirm('Are you sure you want to cancel / void this invoice?')) return;
+    setCancellingId(invoiceId);
+    setActionMessage(null);
     try {
       await api.invoices.cancel(invoiceId);
-      setActionMessage('Invoice cancelled successfully.');
+      setActionMessage({ type: 'success', text: 'Invoice cancelled successfully.' });
       onRefreshData();
       setTimeout(() => setActionMessage(null), 4000);
     } catch (err: any) {
-      alert('Failed to cancel invoice: ' + err.message);
+      setActionMessage({ type: 'error', text: err.message || 'Failed to cancel invoice. Please try again.' });
+      setTimeout(() => setActionMessage(null), 6000);
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -174,12 +181,25 @@ export const LandlordInvoicesTab: React.FC<LandlordInvoicesTabProps> = ({
     <div className="space-y-6">
       {/* Action Toast Notification */}
       {actionMessage && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center justify-between text-xs font-bold shadow-sm">
+        <div
+          className={`p-4 rounded-2xl flex items-center justify-between text-xs font-bold shadow-sm ${
+            actionMessage.type === 'success'
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border border-rose-200 text-rose-800'
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>{actionMessage}</span>
+            {actionMessage.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600" />
+            )}
+            <span>{actionMessage.text}</span>
           </div>
-          <button onClick={() => setActionMessage(null)} className="text-emerald-700 hover:text-emerald-900 cursor-pointer">
+          <button
+            onClick={() => setActionMessage(null)}
+            className={actionMessage.type === 'success' ? 'text-emerald-700 hover:text-emerald-900 cursor-pointer' : 'text-rose-700 hover:text-rose-900 cursor-pointer'}
+          >
             Dismiss
           </button>
         </div>
@@ -426,8 +446,9 @@ export const LandlordInvoicesTab: React.FC<LandlordInvoicesTabProps> = ({
                           {inv.status !== 'CANCELLED' && inv.amount_paid === 0 && (
                             <button
                               onClick={() => handleCancelInvoice(inv.id)}
+                              disabled={cancellingId === inv.id}
                               title="Cancel / Void Invoice"
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Ban className="w-4 h-4" />
                             </button>

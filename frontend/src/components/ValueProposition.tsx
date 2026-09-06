@@ -2,6 +2,8 @@ import React from 'react';
 import { FeatureCard } from './FeatureCard';
 import { FeatureItem } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import cyberLogo from '../assets/images/cyber.png';
+import rdbLogo from '../assets/images/RDB.png';
 
 interface ValuePropositionProps {
   onSelectFeature?: (featureKey: string) => void;
@@ -59,6 +61,27 @@ export const ValueProposition: React.FC<ValuePropositionProps> = ({ onSelectFeat
               onClick={() => onSelectFeature && onSelectFeature(feature.pageKey)}
             />
           ))}
+        </div>
+
+      </div>
+
+      {/* Certifications */}
+      <hr className="mt-16 sm:mt-20 border-t-2 border-black" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10 sm:mt-14 text-center">
+        <p className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-6">
+          {t.certifiedBy}
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-10 sm:gap-16">
+          <img
+            src={cyberLogo}
+            alt="Cyber security certification"
+            className="h-24 sm:h-28 w-auto object-contain"
+          />
+          <img
+            src={rdbLogo}
+            alt="Rwanda Development Board (RDB)"
+            className="h-24 sm:h-28 w-auto object-contain"
+          />
         </div>
       </div>
     </section>
