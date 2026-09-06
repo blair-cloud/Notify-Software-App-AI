@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   FileSpreadsheet,
   Image as ImageIcon,
-  HardDrive
+  HardDrive,
+  Download
 } from 'lucide-react';
 import { LeaseAgreementDocument, LeaseDocumentVersion } from '../types';
 
@@ -124,16 +125,14 @@ export const LeaseDocumentUploadSection: React.FC<LeaseDocumentUploadSectionProp
       });
     }, 80);
 
-    setTimeout(() => {
+    // Read the real file content as a base64 data URL so the exact uploaded
+    // document (not a placeholder) can later be viewed and downloaded.
+    const reader = new FileReader();
+    reader.onload = () => {
       clearInterval(interval);
       setUploadProgress(null);
 
-      // Create preview if image or pdf
-      let previewUrl: string | undefined = undefined;
-      if (file.type.startsWith('image/')) {
-        previewUrl = URL.createObjectURL(file);
-      }
-
+      const previewUrl = typeof reader.result === 'string' ? reader.result : undefined;
       const defaultDocName = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
 
       const newFileState: UploadedFileState = {
@@ -149,7 +148,13 @@ export const LeaseDocumentUploadSection: React.FC<LeaseDocumentUploadSectionProp
       setUploadedFile(newFileState);
       setIsReplacing(false);
       onDocumentChange(newFileState);
-    }, 350);
+    };
+    reader.onerror = () => {
+      clearInterval(interval);
+      setUploadProgress(null);
+      setErrorMessage('Failed to read the selected file. Please try again.');
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -474,10 +479,10 @@ export const LeaseDocumentUploadSection: React.FC<LeaseDocumentUploadSectionProp
           onClick={() => setShowPreviewModal(false)}
         >
           <div
-            className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-gray-800 rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-y-auto flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary-600" />
                 <h3 className="font-bold text-gray-900 dark:text-white">
@@ -494,7 +499,7 @@ export const LeaseDocumentUploadSection: React.FC<LeaseDocumentUploadSectionProp
             </div>
 
             {/* Document metadata display */}
-            <div className="p-4 bg-gray-50 dark:bg-gray-900/60 rounded-xl space-y-2 text-xs">
+            <div className="p-4 bg-gray-50 dark:bg-gray-900/60 rounded-xl space-y-2 text-xs shrink-0">
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-gray-400">File Name:</span>{' '}
@@ -521,46 +526,43 @@ export const LeaseDocumentUploadSection: React.FC<LeaseDocumentUploadSectionProp
               </div>
             </div>
 
-            {/* Stylized Document Mockup Preview */}
-            <div className="p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl space-y-4 font-serif text-gray-800 dark:text-gray-200 shadow-xs">
-              <div className="text-center pb-4 border-b border-gray-200 dark:border-gray-800">
-                <h2 className="text-lg font-bold uppercase tracking-wider text-gray-900 dark:text-white">
-                  Residential Tenancy & Lease Agreement
-                </h2>
-                <p className="text-xs text-gray-500 font-sans mt-1">
-                  Republic of Rwanda • Official Legal Contract Record
-                </p>
-              </div>
-
-              <div className="space-y-2 text-xs leading-relaxed font-sans">
-                <p>
-                  <strong>Document Title:</strong> {uploadedFile.documentName}
-                </p>
-                <p>
-                  <strong>Lease Reference:</strong> {leaseId}
-                </p>
-                <p className="text-gray-600 dark:text-gray-400 italic">
-                  This document serves as the binding, verified lease agreement executed between the
-                  Lessor (Landlord / Property Manager) and the Lessee (Tenant) for the designated
-                  premises, governed by the standard tenancy laws and terms registered on the Notify
-                  Property Operating System.
-                </p>
-              </div>
-
-              <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                  <span className="text-xs font-sans font-semibold text-emerald-700 dark:text-emerald-400">
-                    Notarized & Digitally Stamped
-                  </span>
+            {/* Real Document Preview */}
+            <div className="flex-1 min-h-[50vh] bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden flex items-center justify-center">
+              {!uploadedFile.previewUrl ? (
+                <div className="text-center p-8 text-gray-500 text-xs">
+                  <AlertCircle className="w-8 h-8 mx-auto mb-2 text-amber-500" />
+                  Preview unavailable for this file. Please download it to view the contents.
                 </div>
-                <span className="text-[11px] font-sans text-gray-400">
-                  Version {currentDocument?.version || 1} • Stored in Cloud Storage
-                </span>
-              </div>
+              ) : uploadedFile.fileType.startsWith('image/') ? (
+                <img
+                  src={uploadedFile.previewUrl}
+                  alt={uploadedFile.documentName}
+                  className="max-w-full max-h-[65vh] object-contain"
+                />
+              ) : uploadedFile.fileType === 'application/pdf' ? (
+                <iframe
+                  src={uploadedFile.previewUrl}
+                  title={uploadedFile.documentName}
+                  className="w-full h-[65vh] bg-white"
+                />
+              ) : (
+                <div className="text-center p-8 text-gray-500 text-xs">
+                  <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                  Inline preview isn't available for this file type. Download it to view the full document.
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-700 shrink-0">
+              {uploadedFile.previewUrl && (
+                <a
+                  href={uploadedFile.previewUrl}
+                  download={uploadedFile.fileName}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-lg shadow-xs flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download
+                </a>
+              )}
               <button
                 type="button"
                 onClick={() => setShowPreviewModal(false)}

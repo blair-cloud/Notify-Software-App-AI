@@ -1,9 +1,10 @@
 import uuid
 from typing import Sequence
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.core.exceptions import NotFoundException, ForbiddenException
+from backend.core.exceptions import NotFoundException, ForbiddenException, ConflictException
 from backend.core.permissions import verify_landlord_ownership
-from backend.models import Unit, LandlordProfile
+from backend.models import Unit, LandlordProfile, UnitStatus
 from backend.repositories.unit_repository import UnitRepository
 from backend.repositories.property_repository import PropertyRepository
 from backend.schemas.unit import UnitCreate, UnitUpdate
@@ -52,4 +53,12 @@ class UnitService:
 
     async def delete_unit(self, landlord: LandlordProfile, unit_id: uuid.UUID) -> None:
         unit = await self.get_unit_by_id(landlord, unit_id)
-        await self.unit_repo.delete(unit)
+        if unit.status == UnitStatus.OCCUPIED:
+            raise ConflictException("Cannot delete an occupied unit. End the tenancy first.")
+        try:
+            await self.unit_repo.delete(unit)
+        except IntegrityError:
+            await self.db.rollback()
+            raise ConflictException(
+                "Cannot delete this unit because it has associated lease, tenancy, or invitation records."
+            )

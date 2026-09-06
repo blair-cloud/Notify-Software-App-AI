@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.database import get_db
 from backend.core.dependencies import get_current_landlord, get_current_tenant
+from backend.core.exceptions import ForbiddenException
 from backend.models import LandlordProfile, TenantProfile
 from backend.services.financial_service import FinancialService
 
@@ -31,5 +32,11 @@ async def get_my_tenant_financials(
 
 
 @router.get("/tenant/{tenant_id}")
-async def get_tenant_financials(tenant_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_tenant_financials(
+    tenant_id: uuid.UUID,
+    tenant: TenantProfile = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    if tenant.id != tenant_id:
+        raise ForbiddenException("Isolation violation: You are not authorized to view this financial summary")
     return await FinancialService.get_tenant_financial_overview(db, tenant_id)

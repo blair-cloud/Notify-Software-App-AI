@@ -1,7 +1,86 @@
+import asyncio
 import logging
+import smtplib
+from email.message import EmailMessage
 from typing import Optional, Dict, Any
 
+from backend.core.config import settings
+from backend.integrations.delivery import (
+    DeliveryResult,
+    PermanentDeliveryError,
+    TransientDeliveryError,
+    is_valid_email,
+    send_with_retry,
+    skipped,
+)
+
 logger = logging.getLogger("email_service")
+
+
+def _send_smtp_blocking(to_email: str, subject: str, body: str, html_content: Optional[str]) -> None:
+    if not settings.SMTP_HOST:
+        raise PermanentDeliveryError("SMTP host is not configured")
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = f"{settings.EMAIL_FROM_NAME} <{settings.EMAIL_FROM}>"
+    msg["To"] = to_email
+    msg.set_content(body)
+    if html_content:
+        msg.add_alternative(html_content, subtype="html")
+
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=settings.DELIVERY_TIMEOUT_SECONDS) as server:
+        if settings.SMTP_USE_TLS:
+            server.starttls()
+        if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
+            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+        server.send_message(msg)
+
+
+async def _send_smtp(to_email: str, subject: str, body: str, html_content: Optional[str]) -> Dict[str, Any]:
+    try:
+        await asyncio.to_thread(_send_smtp_blocking, to_email, subject, body, html_content)
+    except (smtplib.SMTPAuthenticationError, smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused) as exc:
+        raise PermanentDeliveryError(str(exc))
+    except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, TimeoutError, OSError) as exc:
+        raise TransientDeliveryError(str(exc))
+    return {"message_id": None}
+
+
+async def _simulate(to_email: str, subject: str, body: str, metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    logger.info("=" * 60)
+    logger.info(f"📬 [NOTIFY EMAIL SIMULATED] To: {to_email}")
+    logger.info(f"📋 Subject: {subject}")
+    logger.info(f"📄 Body: {body}")
+    if metadata:
+        logger.info(f"🏷️  Metadata: {metadata}")
+    logger.info("=" * 60)
+    return {"simulated": True}
+
+
+async def send_email_message(
+    to_email: Optional[str],
+    subject: str,
+    body: str,
+    html_content: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> DeliveryResult:
+    """Deliver one email, retrying transient SMTP failures."""
+    if not is_valid_email(to_email):
+        return skipped("EMAIL", to_email or "", "No valid email address on file")
+    if not body or not body.strip():
+        return skipped("EMAIL", to_email, "Message body is empty")
+
+    address = to_email.strip()
+    if (settings.EMAIL_PROVIDER or "").lower() == "smtp":
+        return await send_with_retry(
+            "EMAIL", address, "smtp", lambda: _send_smtp(address, subject, body, html_content)
+        )
+
+    return await send_with_retry(
+        "EMAIL", address, "simulated", lambda: _simulate(address, subject, body, metadata), max_attempts=1
+    )
+
 
 async def send_email(
     to_email: str,
@@ -10,23 +89,9 @@ async def send_email(
     html_content: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None
 ) -> bool:
-    """
-    Sends an email to the specified recipient.
-    In development and sandbox mode, formats and logs the outbound email with complete metadata.
-    In production, connects to SMTP/Mailgun/SendGrid/AWS SES.
-    """
-    try:
-        logger.info("=" * 60)
-        logger.info(f"📬 [NOTIFY EMAIL DISPATCHER] To: {to_email}")
-        logger.info(f"📋 Subject: {subject}")
-        logger.info(f"📄 Body: {body}")
-        if metadata:
-            logger.info(f"🏷️  Metadata: {metadata}")
-        logger.info("=" * 60)
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
-        return False
+    """Backwards-compatible boolean wrapper used by existing callers."""
+    result = await send_email_message(to_email, subject, body, html_content, metadata)
+    return result.ok
 
 
 def render_lease_expiry_email_html(

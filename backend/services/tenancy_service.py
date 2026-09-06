@@ -42,13 +42,13 @@ class TenancyService:
             raise ConflictException("This unit is already occupied by another tenant.")
 
         # 4. Verify tenant exists
-        stmt_user = await self.user_repo.get_by_id(req.tenant_id)
-        if not stmt_user or not stmt_user.tenant_profile:
+        tenant_profile = await self.user_repo.get_tenant_profile_by_id(req.tenant_id)
+        if not tenant_profile:
             raise NotFoundException("Tenant profile not found")
 
         # 5. Create tenancy
         tenancy = Tenancy(
-            tenant_id=stmt_user.tenant_profile.id,
+            tenant_id=tenant_profile.id,
             landlord_id=landlord.id,
             property_id=req.property_id,
             unit_id=req.unit_id,
@@ -62,7 +62,10 @@ class TenancyService:
         unit.status = UnitStatus.OCCUPIED
         await self.unit_repo.update(unit)
 
-        return tenancy
+        # Re-fetch with relationships eager-loaded so response serialization
+        # (TenancyResponse.tenant/property/unit) never triggers a lazy load
+        # outside of an async context.
+        return await self.tenancy_repo.get_by_id(tenancy.id)
 
     async def list_landlord_tenancies(self, landlord: LandlordProfile) -> Sequence[Tenancy]:
         return await self.tenancy_repo.list_by_landlord(landlord.id)

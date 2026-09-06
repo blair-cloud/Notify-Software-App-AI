@@ -14,7 +14,9 @@ import {
   HardDrive,
   Clock,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Lease, LeaseAgreementDocument, LeaseDocumentVersion } from '../types';
 import { LeaseDocumentUploadSection } from './LeaseDocumentUploadSection';
@@ -25,22 +27,36 @@ interface LeaseDocumentDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUploadNewVersion: (leaseId: string, docData: any) => Promise<void>;
+  onSignLease?: (leaseId: string, signatureName: string) => Promise<void>;
   userRole?: string;
 }
+
+export const TENANT_DOC_STATUS_META: Record<string, { label: string; className: string }> = {
+  NO_DOCUMENT: { label: 'No Document Yet', className: 'bg-gray-100 text-gray-600 border-gray-300' },
+  PENDING_SIGNATURE: { label: 'Pending Signature', className: 'bg-amber-100 text-amber-800 border-amber-300' },
+  SIGNED: { label: 'Signed', className: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+  UPLOADED: { label: 'Uploaded', className: 'bg-blue-100 text-blue-800 border-blue-300' },
+};
 
 export const LeaseDocumentDetailsModal: React.FC<LeaseDocumentDetailsModalProps> = ({
   lease,
   isOpen,
   onClose,
   onUploadNewVersion,
+  onSignLease,
   userRole = 'LANDLORD',
 }) => {
   const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'VIEW' | 'HISTORY' | 'REPLACE'>('VIEW');
+  const isTenant = userRole === 'TENANT';
+  const [activeTab, setActiveTab] = useState<'VIEW' | 'HISTORY' | 'REPLACE' | 'SIGN'>('VIEW');
   const [newVersionDoc, setNewVersionDoc] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showEmbeddedPreview, setShowEmbeddedPreview] = useState(true);
+  const [signatureName, setSignatureName] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [isSigning, setIsSigning] = useState(false);
 
   if (!isOpen) return null;
 
@@ -79,7 +95,7 @@ export const LeaseDocumentDetailsModal: React.FC<LeaseDocumentDetailsModalProps>
       setSuccessMessage(t.newDocumentVersionUploadedSuccess || 'New document version uploaded successfully!');
       setTimeout(() => {
         setSuccessMessage(null);
-        setActiveTab('VIEW');
+        onClose();
       }, 1200);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to upload new document version.');
@@ -88,33 +104,53 @@ export const LeaseDocumentDetailsModal: React.FC<LeaseDocumentDetailsModalProps>
     }
   };
 
-  const handleDownload = (versionToDownload?: LeaseDocumentVersion) => {
-    const fileName = versionToDownload?.file_name || doc?.file_name || `${lease.property_name || 'Property'}_Lease_Agreement.pdf`;
-    
-    // Create simulated file download
-    const content = `NOTIFY PROPERTY OPERATING SYSTEM - OFFICIAL LEASE AGREEMENT\n` +
-      `===============================================================\n` +
-      `Lease ID: ${lease.id}\n` +
-      `Property: ${lease.property_name || 'N/A'}\n` +
-      `Unit: ${lease.unit_number || 'N/A'}\n` +
-      `Tenant: ${lease.tenant_name || 'N/A'}\n` +
-      `Monthly Rent: ${lease.monthly_rent?.toLocaleString()} ${lease.currency || 'RWF'}\n` +
-      `Term: ${lease.start_date} to ${lease.end_date}\n` +
-      `Version: v${versionToDownload?.version || doc?.version || 1}\n` +
-      `Storage Path: ${versionToDownload?.storage_path || doc?.storage_path || 'leases/' + lease.id + '/agreement/v1/' + fileName}\n` +
-      `Compliance: VERIFIED\n` +
-      `===============================================================\n` +
-      `This is a registered and countersigned lease contract record.`;
+  const handleSignLease = async () => {
+    if (!onSignLease) return;
+    const trimmedName = signatureName.trim();
+    if (!trimmedName) {
+      setErrorMessage('Please type your full legal name to sign this lease.');
+      return;
+    }
+    if (!agreedToTerms) {
+      setErrorMessage('Please confirm that you have read and agree to the lease terms.');
+      return;
+    }
 
-    const blob = new Blob([content], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
+    try {
+      setIsSigning(true);
+      setErrorMessage(null);
+      await onSignLease(lease.id, trimmedName);
+      setSuccessMessage('Lease signed successfully!');
+      setTimeout(() => {
+        setSuccessMessage(null);
+        onClose();
+      }, 1200);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to sign the lease. Please try again.');
+    } finally {
+      setIsSigning(false);
+    }
+  };
+
+  const handleDownload = (versionToDownload?: LeaseDocumentVersion) => {
+    const target = versionToDownload || doc;
+    const fileName = target?.file_name || `${lease.property_name || 'Property'}_Lease_Agreement.pdf`;
+
+    if (!target?.file_data) {
+      setErrorMessage(
+        'The original file for this version was not stored and cannot be downloaded. Please upload a new version.'
+      );
+      return;
+    }
+
+    // The stored file_data is already a data: URL captured from the real
+    // uploaded file, so it can be used directly as a download link.
     const a = document.createElement('a');
-    a.href = url;
+    a.href = target.file_data;
     a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -180,17 +216,30 @@ export const LeaseDocumentDetailsModal: React.FC<LeaseDocumentDetailsModalProps>
             <History className="w-4 h-4" /> {t.versionHistory || 'Version History'} ({history.length || 1})
           </button>
 
-          {userRole !== 'TENANT' && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('REPLACE')}
+            className={`pb-2 border-b-2 transition-colors flex items-center gap-1.5 ${
+              activeTab === 'REPLACE'
+                ? 'border-primary-600 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            <Upload className="w-4 h-4" />
+            {isTenant ? ('Upload Signed Copy') : (t.uploadNewVersion || 'Upload New Version')}
+          </button>
+
+          {isTenant && onSignLease && (
             <button
               type="button"
-              onClick={() => setActiveTab('REPLACE')}
+              onClick={() => setActiveTab('SIGN')}
               className={`pb-2 border-b-2 transition-colors flex items-center gap-1.5 ${
-                activeTab === 'REPLACE'
+                activeTab === 'SIGN'
                   ? 'border-primary-600 text-primary-600 dark:text-primary-400'
                   : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
-              <Upload className="w-4 h-4" /> {t.uploadNewVersion || 'Upload New Version'}
+              <ShieldCheck className="w-4 h-4" /> {'Sign Digitally'}
             </button>
           )}
         </div>
@@ -208,6 +257,26 @@ export const LeaseDocumentDetailsModal: React.FC<LeaseDocumentDetailsModalProps>
             <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
             {errorMessage}
           </div>
+        )}
+
+        {/* Tenant Signature / Compliance Status */}
+        <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700">
+          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+            {'Tenant Document Status'}
+          </span>
+          <span
+            className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+              (TENANT_DOC_STATUS_META[lease.tenant_document_status || 'NO_DOCUMENT'] || TENANT_DOC_STATUS_META.NO_DOCUMENT).className
+            }`}
+          >
+            {(TENANT_DOC_STATUS_META[lease.tenant_document_status || 'NO_DOCUMENT'] || TENANT_DOC_STATUS_META.NO_DOCUMENT).label}
+          </span>
+        </div>
+        {lease.tenant_document_status === 'SIGNED' && lease.tenant_signature_name && (
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 -mt-2">
+            {'Signed by'} <strong className="text-gray-700 dark:text-gray-300">{lease.tenant_signature_name}</strong>
+            {lease.tenant_signed_at && ` on ${new Date(lease.tenant_signed_at).toLocaleString()}`}
+          </p>
         )}
 
         {/* TAB 1: VIEW CURRENT DOCUMENT */}
@@ -235,14 +304,53 @@ export const LeaseDocumentDetailsModal: React.FC<LeaseDocumentDetailsModalProps>
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDownload()}
-                      className="px-3 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
-                    >
-                      <Download className="w-3.5 h-3.5" /> {t.downloadAgreement || 'Download Agreement'}
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShowEmbeddedPreview((prev) => !prev)}
+                        className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
+                      >
+                        {showEmbeddedPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {showEmbeddedPreview ? 'Hide Preview' : 'View Document'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownload()}
+                        className="px-3 py-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" /> {t.downloadAgreement || 'Download Agreement'}
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Embedded preview of the exact uploaded file */}
+                  {showEmbeddedPreview && (
+                    <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                      {!doc.file_data ? (
+                        <div className="p-6 text-center text-xs text-gray-500 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                          <AlertCircle className="w-6 h-6 mx-auto mb-2 text-amber-500" />
+                          The original file for this version was not stored and cannot be previewed.
+                        </div>
+                      ) : doc.file_type?.startsWith('image/') ? (
+                        <img
+                          src={doc.file_data}
+                          alt={doc.document_name}
+                          className="max-w-full max-h-[60vh] mx-auto rounded-lg border border-gray-200 dark:border-gray-700"
+                        />
+                      ) : doc.file_type === 'application/pdf' ? (
+                        <iframe
+                          src={doc.file_data}
+                          title={doc.document_name}
+                          className="w-full h-[60vh] rounded-lg border border-gray-200 dark:border-gray-700 bg-white"
+                        />
+                      ) : (
+                        <div className="p-6 text-center text-xs text-gray-500 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                          <FileText className="w-6 h-6 mx-auto mb-2 text-gray-400" />
+                          Inline preview isn't available for this file type ({doc.file_type}). Use Download to view the full document.
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-gray-200 dark:border-gray-700 text-xs">
                     <div className="space-y-1">
@@ -320,15 +428,15 @@ export const LeaseDocumentDetailsModal: React.FC<LeaseDocumentDetailsModalProps>
                 <p className="text-xs text-gray-600 dark:text-gray-400 max-w-md mx-auto">
                   {t.draftLeaseNotice || 'This lease is currently in draft or incomplete state. A signed lease agreement document is required before this lease can be activated.'}
                 </p>
-                {userRole !== 'TENANT' && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('REPLACE')}
-                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold shadow-xs"
-                  >
-                    {t.uploadAgreementDocumentNow || 'Upload Agreement Document Now'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('REPLACE')}
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-xs font-semibold shadow-xs"
+                >
+                  {isTenant
+                    ? ('Upload Signed Copy')
+                    : (t.uploadAgreementDocumentNow || 'Upload Agreement Document Now')}
+                </button>
               </div>
             )}
           </div>
@@ -434,8 +542,73 @@ export const LeaseDocumentDetailsModal: React.FC<LeaseDocumentDetailsModalProps>
           </div>
         )}
 
+        {/* TAB 4: SIGN DIGITALLY (tenant only) */}
+        {activeTab === 'SIGN' && (
+          <div className="space-y-4">
+            {!hasDoc ? (
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-300">
+                {'There is no lease agreement document to sign yet. Please wait for your landlord to upload one, or upload a signed copy yourself.'}
+              </div>
+            ) : lease.tenant_document_status === 'SIGNED' ? (
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                {'You have already signed this lease agreement.'}
+                {lease.tenant_signature_name && ` (${lease.tenant_signature_name})`}
+              </div>
+            ) : (
+              <>
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl text-xs text-blue-900 dark:text-blue-300">
+                  {'Review the current document (Current Document tab) before signing. By typing your full legal name below and confirming, you are digitally signing this lease agreement.'}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    {'Full Legal Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={signatureName}
+                    onChange={(e) => setSignatureName(e.target.value)}
+                    placeholder={lease.tenant_name || 'e.g. Jane Uwase'}
+                    className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-1 focus:ring-primary-500"
+                  />
+                </div>
+
+                <label className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>{'I have read and agree to the terms of this lease agreement, and I confirm this constitutes my digital signature.'}</span>
+                </label>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('VIEW')}
+                    className="px-4 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 rounded-lg"
+                  >
+                    {t.cancel || 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSignLease}
+                    disabled={isSigning || !signatureName.trim() || !agreedToTerms}
+                    className="px-4 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg shadow-xs flex items-center gap-1.5"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    {isSigning ? ('Signing...') : ('Sign Lease')}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Footer for VIEW/HISTORY tabs */}
-        {activeTab !== 'REPLACE' && (
+        {activeTab !== 'REPLACE' && activeTab !== 'SIGN' && (
           <div className="flex justify-end pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"

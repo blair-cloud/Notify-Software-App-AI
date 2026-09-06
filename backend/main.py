@@ -9,6 +9,7 @@ if str(root_dir) not in sys.path:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect
 
 from backend.core.config import settings
 from backend.core.database import engine, Base
@@ -21,11 +22,34 @@ from backend.api.v1 import (
 )
 
 
+def _sync_missing_columns(conn):
+    """create_all() creates missing tables but never alters existing ones, so a
+    newly declared column leaves older databases broken until they are recreated."""
+    inspector = inspect(conn)
+    existing_tables = set(inspector.get_table_names())
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue
+        present = {c["name"] for c in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in present:
+                continue
+            if not column.nullable and column.server_default is None:
+                logger.warning(
+                    f"Cannot auto-add non-nullable column {table.name}.{column.name}; migrate manually."
+                )
+                continue
+            col_type = column.type.compile(conn.dialect)
+            conn.exec_driver_sql(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}')
+            logger.info(f"Added missing column {table.name}.{column.name}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Initializing Notify FastAPI application...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_sync_missing_columns)
     logger.info("Database schemas created/verified successfully.")
     yield
     logger.info("Shutting down Notify FastAPI application...")

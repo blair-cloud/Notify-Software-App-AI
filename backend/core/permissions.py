@@ -23,3 +23,14 @@ def verify_tenant_tenancy(tenant: TenantProfile, tenancy: Tenancy):
         raise ForbiddenException("Tenant profile required")
     if tenancy.tenant_id != tenant.id:
         raise ForbiddenException("Isolation violation: You are not authorized for this tenancy")
+
+
+def verify_tenant_ownership(tenant: TenantProfile, resource_tenant_id: uuid.UUID, resource_name: str = "Resource"):
+    """
+    Enforces Tenant Isolation Rule for resources keyed directly by tenant_id
+    (e.g. leases): a tenant may only access resources where tenant_id = their own.
+    """
+    if not tenant:
+        raise ForbiddenException("Tenant profile required")
+    if tenant.id != resource_tenant_id:
+        raise ForbiddenException(f"Isolation violation: You do not own this {resource_name}")

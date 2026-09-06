@@ -29,6 +29,51 @@ class Settings(BaseSettings):
     STORAGE_AVATARS_BUCKET: str = "notify-avatars"
     STORAGE_PROPERTY_IMAGES_BUCKET: str = "notify-property-images"
 
+    # ------------------------------------------------------------------
+    # Outbound communication channels.
+    # Every channel falls back to SIMULATED delivery when its provider is not
+    # configured: the message is logged and reported back with
+    # `simulated: true` so nothing ever claims a real send that did not happen.
+    # ------------------------------------------------------------------
+    DELIVERY_MAX_ATTEMPTS: int = 3
+    DELIVERY_RETRY_BASE_DELAY: float = 0.5
+    DELIVERY_TIMEOUT_SECONDS: float = 15.0
+    DEFAULT_COUNTRY_CODE: str = "+250"  # Rwanda
+
+    # SMS - "africastalking" | "twilio" | "" (simulated)
+    SMS_PROVIDER: str = ""
+    SMS_SENDER_ID: str = "NOTIFY"
+    AFRICASTALKING_USERNAME: Optional[str] = None
+    AFRICASTALKING_API_KEY: Optional[str] = None
+    AFRICASTALKING_BASE_URL: str = "https://api.africastalking.com/version1/messaging"
+
+    # Twilio powers both SMS and WhatsApp when selected
+    TWILIO_ACCOUNT_SID: Optional[str] = None
+    TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_SMS_FROM: Optional[str] = None
+
+    # WhatsApp - "twilio" | "meta" | "" (simulated)
+    WHATSAPP_PROVIDER: str = ""
+    TWILIO_WHATSAPP_FROM: Optional[str] = None
+    META_WHATSAPP_PHONE_NUMBER_ID: Optional[str] = None
+    META_WHATSAPP_TOKEN: Optional[str] = None
+    META_WHATSAPP_API_VERSION: str = "v21.0"
+
+    # Email - "smtp" | "" (simulated)
+    EMAIL_PROVIDER: str = ""
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_USE_TLS: bool = True
+    EMAIL_FROM: str = "no-reply@notify.rw"
+    EMAIL_FROM_NAME: str = "Notify Kigali"
+
+    # Machine translation for custom reminder text - "libretranslate" | "" (off)
+    TRANSLATION_PROVIDER: str = ""
+    LIBRETRANSLATE_URL: str = "https://libretranslate.com/translate"
+    LIBRETRANSLATE_API_KEY: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE) if ENV_FILE.exists() else None,
         extra="ignore"

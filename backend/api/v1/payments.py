@@ -6,8 +6,10 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db
+from backend.core.dependencies import get_current_tenant
+from backend.core.exceptions import ForbiddenException
 from backend.services.payment_service import PaymentService
-from backend.models import PaymentMethod, PaymentChannel, PaymentStatus
+from backend.models import PaymentMethod, PaymentChannel, PaymentStatus, TenantProfile
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -116,6 +118,20 @@ async def get_landlord_payments(landlord_id: uuid.UUID, db: AsyncSession = Depen
     return await PaymentService.get_payments_for_landlord(db, landlord_id)
 
 
+@router.get("/tenant/me", response_model=List[PaymentSchema])
+async def get_my_payments(
+    tenant: TenantProfile = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    return await PaymentService.get_payments_for_tenant(db, tenant.id)
+
+
 @router.get("/tenant/{tenant_id}", response_model=List[PaymentSchema])
-async def get_tenant_payments(tenant_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_tenant_payments(
+    tenant_id: uuid.UUID,
+    tenant: TenantProfile = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    if tenant.id != tenant_id:
+        raise ForbiddenException("Isolation violation: You are not authorized to view these payments")
     return await PaymentService.get_payments_for_tenant(db, tenant_id)

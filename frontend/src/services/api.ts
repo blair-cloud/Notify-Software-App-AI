@@ -28,6 +28,12 @@ import {
   MOCK_BANK_STATEMENTS,
   MOCK_BANK_TRANSACTIONS,
 } from '../utils/mockAuth';
+import type {
+  BulkSendResult,
+  LocalizedMessages,
+  MessageTemplate,
+  TranslateResult,
+} from '../types';
 
 
 const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/api/v1';
@@ -52,6 +58,91 @@ function getAuthHeaders(): Record<string, string> {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
+}
+
+// --- Demo-mode fixtures for the communication endpoints ---------------------
+const MOCK_COMM_LANGUAGES = [
+  { code: 'EN', label: 'English' },
+  { code: 'FR', label: 'Français' },
+  { code: 'RW', label: 'Kinyarwanda' },
+];
+
+const MOCK_MESSAGE_TEMPLATES: MessageTemplate[] = [
+  {
+    code: 'RENT_DUE_3D',
+    label: 'Rent due in 3 days',
+    category: 'RENT_DUE',
+    priority: 'HIGH',
+    title: {
+      EN: 'Rent due in 3 days: {{unit_number}}',
+      FR: 'Loyer dû dans 3 jours : {{unit_number}}',
+      RW: "Ubukode bugomba kwishyurwa mu minsi 3: {{unit_number}}",
+    },
+    body: {
+      EN: 'Hello {{tenant_name}}, rent of {{currency}} {{amount}} for Unit {{unit_number}} is due in 3 days, on {{due_date}}. Please arrange payment in good time. Thank you.',
+      FR: "Bonjour {{tenant_name}}, le loyer de {{currency}} {{amount}} pour l'unité {{unit_number}} est dû dans 3 jours, le {{due_date}}. Merci d'effectuer le paiement à temps.",
+      RW: "Muraho {{tenant_name}}, ubukode bwa {{currency}} {{amount}} bw'inzu {{unit_number}} bugomba kwishyurwa mu minsi 3, ku itariki {{due_date}}. Mwakwitegura kwishyura ku gihe. Murakoze.",
+    },
+  },
+  {
+    code: 'RENT_OVERDUE_3D',
+    label: 'Rent 3 days overdue',
+    category: 'RENT_DUE',
+    priority: 'CRITICAL',
+    title: {
+      EN: 'Second notice - overdue rent: {{unit_number}}',
+      FR: 'Deuxième avis - loyer en retard : {{unit_number}}',
+      RW: 'Itangazo rya kabiri - ubukode butarishyuwe: {{unit_number}}',
+    },
+    body: {
+      EN: 'Dear {{tenant_name}}, rent of {{currency}} {{amount}} for Unit {{unit_number}} is 3 days overdue. Please pay today or contact property management to agree on a plan.',
+      FR: "Cher/Chère {{tenant_name}}, le loyer de {{currency}} {{amount}} pour l'unité {{unit_number}} a 3 jours de retard. Merci de payer aujourd'hui ou de contacter la gestion.",
+      RW: "Muraho {{tenant_name}}, ubukode bwa {{currency}} {{amount}} bw'inzu {{unit_number}} bumaze iminsi 3 butishyuwe. Mwishyure uyu munsi cyangwa muvugane n'ubuyobozi.",
+    },
+  },
+  {
+    code: 'LEASE_EXPIRY_30D',
+    label: 'Lease expiring in 30 days',
+    category: 'LEASE_EXPIRY',
+    priority: 'MEDIUM',
+    title: {
+      EN: 'Lease expiring soon: {{unit_number}}',
+      FR: 'Bail bientôt expiré : {{unit_number}}',
+      RW: "Amasezerano y'ubukode agiye kurangira: {{unit_number}}",
+    },
+    body: {
+      EN: 'Dear {{tenant_name}}, your lease for Unit {{unit_number}} at {{property_name}} ends on {{end_date}} (in 30 days). Please let us know whether you intend to renew.',
+      FR: "Cher/Chère {{tenant_name}}, votre bail pour l'unité {{unit_number}} à {{property_name}} se termine le {{end_date}} (dans 30 jours). Merci de nous indiquer si vous souhaitez le renouveler.",
+      RW: "Muraho {{tenant_name}}, amasezerano y'ubukode bw'inzu {{unit_number}} muri {{property_name}} arangira ku itariki {{end_date}} (mu minsi 30). Mutumenyeshe niba mwifuza kuyavugurura.",
+    },
+  },
+  {
+    code: 'CUSTOM',
+    label: 'Custom message',
+    category: 'SYSTEM',
+    priority: 'MEDIUM',
+    title: {
+      EN: 'Message from {{property_name}}',
+      FR: 'Message de {{property_name}}',
+      RW: 'Ubutumwa buturuka {{property_name}}',
+    },
+    body: { EN: '{{custom_note}}', FR: '{{custom_note}}', RW: '{{custom_note}}' },
+  },
+];
+
+const MOCK_DELIVERY_HISTORY: any[] = [];
+
+function renderMockPlaceholders(text: string, variables: Record<string, any>): string {
+  let out = text || '';
+  Object.entries(variables || {}).forEach(([key, value]) => {
+    out = out.split(`{{${key}}}`).join(value === null || value === undefined ? '' : String(value));
+  });
+  while (out.includes('{{') && out.includes('}}')) {
+    const start = out.indexOf('{{');
+    const end = out.indexOf('}}', start);
+    out = out.slice(0, start) + out.slice(end + 2);
+  }
+  return out.split(/\s+/).join(' ').trim();
 }
 
 function handleMockRequest(endpoint: string, options: RequestInit = {}): any {
@@ -247,6 +338,133 @@ function handleMockRequest(endpoint: string, options: RequestInit = {}): any {
 
       MOCK_UNITS.splice(index, 1);
       return { message: 'Unit deleted' };
+    }
+  }
+
+  // Leases - tenant-facing "my lease" routes (mirrors backend /leases/me...)
+  if (endpoint.startsWith('/leases/me')) {
+    const parts = endpoint.split('?')[0].split('/');
+    const leaseId = parts[3];
+    const subAction = parts[4];
+    const currentTenantId = getMockUserByToken(token)?.id || 'mock-tenant-001';
+
+    const decorateWithTenantStatus = (lease: any) => {
+      const doc = lease.agreement_document;
+      let tenant_document_status = 'NO_DOCUMENT';
+      if (doc) {
+        if (lease.tenant_signed_at) tenant_document_status = 'SIGNED';
+        else if (doc.uploaded_by_role === 'TENANT') tenant_document_status = 'UPLOADED';
+        else tenant_document_status = 'PENDING_SIGNATURE';
+      }
+      return { ...lease, tenant_document_status };
+    };
+
+    if (method === 'GET' && !leaseId) {
+      return MOCK_LEASES.filter((l) => l.tenant_id === currentTenantId).map(decorateWithTenantStatus);
+    }
+
+    if (method === 'GET' && leaseId) {
+      const lease = MOCK_LEASES.find((l) => l.id === leaseId && l.tenant_id === currentTenantId);
+      if (!lease) throw new ApiError(404, 'Lease not found');
+      return decorateWithTenantStatus(lease);
+    }
+
+    const index = MOCK_LEASES.findIndex((l) => l.id === leaseId && l.tenant_id === currentTenantId);
+    if (index === -1) throw new ApiError(404, 'Lease not found');
+
+    if (subAction === 'sign' && method === 'POST') {
+      const body = JSON.parse((options.body as string) || '{}');
+      if (!MOCK_LEASES[index].agreement_document) {
+        throw new ApiError(409, 'There is no lease agreement document to sign yet.');
+      }
+      const signatureName = (body.signature_name || '').trim();
+      if (!signatureName) {
+        throw new ApiError(409, 'Please provide your full legal name to sign this lease.');
+      }
+      MOCK_LEASES[index] = {
+        ...MOCK_LEASES[index],
+        tenant_signed_at: new Date().toISOString(),
+        tenant_signature_name: signatureName,
+      };
+      MOCK_NOTIFICATIONS.unshift({
+        id: `notif-${Date.now()}`,
+        user_id: MOCK_LEASES[index].landlord_id || 'mock-lp-001',
+        type: 'LEASE_SIGNED',
+        title: 'Lease Signed by Tenant',
+        message: `${signatureName} digitally signed the lease agreement for Unit ${MOCK_LEASES[index].unit_number || ''}.`,
+        category: 'LEASE_EXPIRY',
+        priority: 'MEDIUM',
+        channel: 'IN_APP',
+        status: 'SENT',
+        is_read: false,
+        created_at: new Date().toISOString(),
+      });
+      return decorateWithTenantStatus(MOCK_LEASES[index]);
+    }
+
+    if (subAction === 'document' && method === 'POST') {
+      const body = JSON.parse((options.body as string) || '{}');
+      const lease = MOCK_LEASES[index];
+      const existingDoc = lease.agreement_document;
+      const prevHistory = existingDoc?.history || lease.document_history || [];
+      const newVersionNum = (existingDoc?.version || 0) + 1;
+      const fileName = body.file_name || `${lease.property_name || 'Property'}_${lease.unit_number || 'Unit'}_Tenant_Signed_Copy_v${newVersionNum}.pdf`;
+      const docName = body.document_name || fileName;
+      const storagePath = `leases/${lease.id}/agreement/v${newVersionNum}/${fileName}`;
+      const nowIso = new Date().toISOString();
+
+      const newVersionEntry = {
+        version: newVersionNum,
+        document_name: docName,
+        file_name: fileName,
+        file_type: body.file_type || 'application/pdf',
+        file_size: body.file_size || 2500000,
+        storage_path: storagePath,
+        file_data: body.file_data,
+        uploaded_by: body.uploaded_by || 'Tenant',
+        uploaded_by_role: 'TENANT',
+        uploaded_at: nowIso,
+        version_notes: body.version_notes || `Tenant-uploaded signed copy (v${newVersionNum}).`,
+        status: 'ACTIVE' as const,
+      };
+
+      const updatedHistory = prevHistory.map((v: any) => ({ ...v, status: 'SUPERSEDED' }));
+      updatedHistory.push(newVersionEntry);
+
+      const updatedAgreementDoc = {
+        ...(existingDoc || {}),
+        id: existingDoc?.id || `doc-${Date.now()}`,
+        lease_id: lease.id,
+        doc_type: 'LEASE_AGREEMENT',
+        ...newVersionEntry,
+        history: updatedHistory,
+      };
+
+      MOCK_LEASES[index] = {
+        ...lease,
+        agreement_document: updatedAgreementDoc,
+        document_history: updatedHistory,
+        has_signed_document: true,
+        compliance_status: 'COMPLETE',
+        tenant_signed_at: null,
+        tenant_signature_name: null,
+      };
+
+      MOCK_NOTIFICATIONS.unshift({
+        id: `notif-${Date.now()}`,
+        user_id: lease.landlord_id || 'mock-lp-001',
+        type: 'LEASE_AGREEMENT_UPLOADED',
+        title: 'Tenant Uploaded Signed Lease Copy',
+        message: `A signed copy (v${newVersionNum}) was uploaded by the tenant for Unit ${lease.unit_number || ''}.`,
+        category: 'LEASE_EXPIRY',
+        priority: 'MEDIUM',
+        channel: 'IN_APP',
+        status: 'SENT',
+        is_read: false,
+        created_at: nowIso,
+      });
+
+      return decorateWithTenantStatus(MOCK_LEASES[index]);
     }
   }
 
@@ -1800,6 +2018,136 @@ function handleMockRequest(endpoint: string, options: RequestInit = {}): any {
     return MOCK_COMPLAINTS;
   }
 
+  // Landlord broadcast / reminder endpoints (mirrors backend /messages/*).
+  if (endpoint.startsWith('/messages/templates')) {
+    return { languages: MOCK_COMM_LANGUAGES, templates: MOCK_MESSAGE_TEMPLATES };
+  }
+
+  if (endpoint.startsWith('/messages/preview')) {
+    const body = JSON.parse((options.body as string) || '{}');
+    const tpl =
+      MOCK_MESSAGE_TEMPLATES.find((t) => t.code === body.template_code) ||
+      MOCK_MESSAGE_TEMPLATES[MOCK_MESSAGE_TEMPLATES.length - 1];
+    const messages: any = {};
+    ['EN', 'FR', 'RW'].forEach((lang) => {
+      messages[lang] = {
+        title: renderMockPlaceholders(tpl.title[lang] || tpl.title.EN, body.variables || {}),
+        body: renderMockPlaceholders(tpl.body[lang] || tpl.body.EN, body.variables || {}),
+      };
+      const override = (body.overrides || {})[lang];
+      if (override?.title) messages[lang].title = override.title;
+      if (override?.body) messages[lang].body = override.body;
+    });
+    return { messages };
+  }
+
+  if (endpoint.startsWith('/messages/translate')) {
+    const body = JSON.parse((options.body as string) || '{}');
+    const source = (body.source_language || 'EN').toUpperCase();
+    const targets: string[] = body.target_languages || ['EN', 'FR', 'RW'];
+    const translations: Record<string, string | null> = {};
+    const untranslated: string[] = [];
+    targets.forEach((lang) => {
+      if (lang === source) {
+        translations[lang] = body.text;
+      } else {
+        // Demo mode has no translation provider, exactly like an unconfigured backend.
+        translations[lang] = null;
+        untranslated.push(lang);
+      }
+    });
+    return {
+      source_language: source,
+      translations,
+      untranslated_languages: untranslated,
+      notice: untranslated.length
+        ? 'Automatic translation is unavailable for these languages - please write or edit them before sending.'
+        : null,
+    };
+  }
+
+  if (endpoint.startsWith('/messages/delivery-history')) {
+    return MOCK_DELIVERY_HISTORY;
+  }
+
+  if (endpoint.startsWith('/messages/bulk')) {
+    const body = JSON.parse((options.body as string) || '{}');
+    const channels: string[] = body.channels || ['IN_APP'];
+    const results = (body.recipient_ids || []).map((rid: string) => {
+      const tenant =
+        MOCK_TENANTS.find((t) => t.id === rid) || MOCK_TENANTS.find((t: any) => t.user_id === rid);
+      const language = (body.force_language || tenant?.preferred_language || 'EN').toUpperCase();
+      const picked = (body.messages || {})[language] || (body.messages || {}).EN || {};
+      const vars = {
+        tenant_name: tenant?.first_name || 'Tenant',
+        unit_number: tenant?.unit_number || '',
+        property_name: tenant?.property_name || '',
+        ...(body.variables || {}),
+      };
+      const title = renderMockPlaceholders(picked.title || '', vars);
+      const content = renderMockPlaceholders(picked.body || '', vars);
+
+      const channelResults = channels.map((channel) => {
+        const recipient =
+          channel === 'EMAIL' ? tenant?.email || '' :
+          channel === 'IN_APP' ? tenant?.name || 'Tenant' : tenant?.phone || '';
+        if (channel !== 'IN_APP' && !recipient) {
+          return {
+            channel, recipient: '', status: 'SKIPPED', provider: 'simulated',
+            simulated: true, attempts: 0,
+            error: channel === 'EMAIL' ? 'No valid email address on file' : 'No valid phone number on file',
+          };
+        }
+        if (channel === 'IN_APP') {
+          MOCK_NOTIFICATIONS.unshift({
+            id: `notif-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+            user_id: (tenant as any)?.user_id || tenant?.id || rid,
+            type: 'LANDLORD_MESSAGE',
+            title: title || 'Message from your property manager',
+            message: content,
+            category: body.category || 'SYSTEM',
+            priority: body.priority || 'MEDIUM',
+            channel: 'IN_APP',
+            status: 'SENT',
+            is_read: false,
+            created_at: new Date().toISOString(),
+          });
+        }
+        return {
+          channel, recipient, status: 'SENT', provider: 'simulated',
+          simulated: true, attempts: 1, error: null,
+        };
+      });
+
+      return {
+        tenant_id: tenant?.id || rid,
+        user_id: (tenant as any)?.user_id || tenant?.id || rid,
+        name: tenant?.name || 'Tenant',
+        language,
+        phone: tenant?.phone,
+        email: tenant?.email,
+        title,
+        body: content,
+        channels: channelResults,
+        delivered: channelResults.some((c) => c.status === 'SENT'),
+      };
+    });
+
+    const flat = results.flatMap((r: any) => r.channels);
+    return {
+      batch_id: `batch-${Date.now()}`,
+      template_code: body.template_code || 'CUSTOM',
+      channels,
+      total_recipients: results.length,
+      recipients_delivered: results.filter((r: any) => r.delivered).length,
+      recipients_failed: results.filter((r: any) => !r.delivered).length,
+      channel_sent: flat.filter((c: any) => c.status === 'SENT').length,
+      channel_failed: flat.filter((c: any) => c.status === 'FAILED').length,
+      channel_skipped: flat.filter((c: any) => c.status === 'SKIPPED').length,
+      results,
+    };
+  }
+
   // Messages & WhatsApp-style Chat System (Unified Messages + Real-Time Maintenance Linking)
   if (endpoint.startsWith('/messages')) {
     if (endpoint.includes('/conversations')) {
@@ -2488,6 +2836,19 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(renewData),
       }),
+    // Tenant-facing "my lease" endpoints - scoped server-side to the caller.
+    listMine: () => request<any[]>('/leases/me'),
+    getMine: (id: string) => request<any>(`/leases/me/${id}`),
+    uploadDocumentMine: (id: string, docData: any) =>
+      request<any>(`/leases/me/${id}/document`, {
+        method: 'POST',
+        body: JSON.stringify(docData),
+      }),
+    signMine: (id: string, signatureName: string) =>
+      request<any>(`/leases/me/${id}/sign`, {
+        method: 'POST',
+        body: JSON.stringify({ signature_name: signatureName }),
+      }),
   },
 
   // Documents
@@ -2601,7 +2962,7 @@ export const api = {
         method: 'DELETE',
       }),
     getLandlordInvoices: (landlordId: string) => request<any[]>(`/invoices/landlord/${landlordId}`),
-    getTenantInvoices: (tenantId: string) => request<any[]>(`/invoices/tenant/${tenantId}`),
+    getTenantInvoices: () => request<any[]>('/invoices/tenant/me'),
     getDetails: (invoiceId: string) => request<any>(`/invoices/${invoiceId}`),
     generateMonthlyInvoices: () =>
       request<any[]>('/invoices/generate', {
@@ -2654,14 +3015,14 @@ export const api = {
     },
 
     getLandlordPayments: (landlordId: string) => request<any[]>(`/payments/landlord/${landlordId}`),
-    getTenantPayments: (tenantId: string) => request<any[]>(`/payments/tenant/${tenantId}`),
+    getTenantPayments: () => request<any[]>('/payments/tenant/me'),
   },
 
   receipts: {
     list: () => request<any[]>('/receipts'),
     getReceipt: (receiptId: string) => request<any>(`/receipts/${receiptId}`),
     getReceiptByPayment: (paymentId: string) => request<any>(`/receipts/payment/${paymentId}`),
-    getTenantReceipts: (tenantId: string) => request<any[]>(`/receipts/tenant/${tenantId}`),
+    getTenantReceipts: () => request<any[]>('/receipts/tenant/me'),
     getLandlordReceipts: (landlordId: string) => request<any[]>(`/receipts/landlord/${landlordId}`),
   },
 
@@ -2700,8 +3061,8 @@ export const api = {
   financials: {
     getLandlordFinancials: (landlordId: string) => request<any>(`/financials/landlord/${landlordId}`),
     getLandlordSummary: (landlordId?: string) => request<any>('/financials/landlord/me'),
-    getTenantFinancials: (tenantId: string) => request<any>(`/financials/tenant/${tenantId}`),
-    getTenantSummary: (tenantId?: string) => request<any>(`/financials/tenant/${tenantId || 'mock-tenant-001'}`),
+    getTenantFinancials: () => request<any>('/financials/tenant/me'),
+    getTenantSummary: () => request<any>('/financials/tenant/me'),
   },
 
   // --- PHASE 4 MAINTENANCE & COMPLAINT SERVICES ---
@@ -2904,11 +3265,9 @@ export const api = {
   },
 
   notifications: {
-    create: (data: any) =>
-      request<any>('/notifications', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
+    // Note: there is no POST /notifications endpoint. Landlord-initiated
+    // messages and reminders go through api.messages.sendBulk, which creates
+    // the notification alongside the actual SMS/WhatsApp/email delivery.
     getUserNotifications: (userId: string) => request<any[]>('/notifications'),
     list: (params?: { channel?: string; status?: string; limit?: number; unread_only?: boolean }) => {
       let query = '/notifications';
@@ -3000,6 +3359,39 @@ export const api = {
       request<any>(`/messages/read/${partnerId}`, {
         method: 'POST',
       }),
+
+    // Landlord broadcast / reminders - same backend tables as the 1:1 chat.
+    getTemplates: () =>
+      request<{ languages: { code: string; label: string }[]; templates: MessageTemplate[] }>(
+        '/messages/templates'
+      ),
+    preview: (data: { template_code: string; variables?: Record<string, any>; overrides?: LocalizedMessages }) =>
+      request<{ messages: LocalizedMessages }>('/messages/preview', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    translate: (data: { text: string; source_language: string; target_languages?: string[] }) =>
+      request<TranslateResult>('/messages/translate', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    sendBulk: (data: {
+      recipient_ids: string[];
+      channels: string[];
+      template_code: string;
+      messages: LocalizedMessages;
+      variables?: Record<string, any>;
+      category?: string;
+      priority?: string;
+      entity_type?: string;
+      entity_id?: string;
+      force_language?: string | null;
+    }) =>
+      request<BulkSendResult>('/messages/bulk', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getDeliveryHistory: (limit = 200) => request<any[]>(`/messages/delivery-history?limit=${limit}`),
   },
 
   tracker: {

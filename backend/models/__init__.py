@@ -40,6 +40,7 @@ from backend.models.property import Property
 from backend.models.unit import Unit
 from backend.models.tenancy import Tenancy
 from backend.models.lease import Lease
+from backend.models.lease_document import LeaseDocument
 from backend.models.invitation import Invitation
 from backend.models.session import Session
 from backend.models.notification import (
@@ -114,6 +115,7 @@ __all__ = [
     "Unit",
     "Tenancy",
     "Lease",
+    "LeaseDocument",
     "Invitation",
     "Session",
     "Notification",

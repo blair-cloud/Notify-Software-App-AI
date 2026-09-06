@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   Clock,
   ChevronRight,
+  ChevronLeft,
   Eye,
   Calendar,
   CheckCircle2,
@@ -62,6 +63,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { LeaseAgreementPreviewModal } from '../components/LeaseAgreementPreviewModal';
 import {
   Property,
   Unit,
@@ -94,7 +96,6 @@ import { LandlordFinancialOverviewTab } from '../components/LandlordFinancialOve
 import { LandlordInvoicesTab } from '../components/LandlordInvoicesTab';
 import { LandlordPaymentsTab } from '../components/LandlordPaymentsTab';
 import { LandlordExpensesTab } from '../components/LandlordExpensesTab';
-import { LandlordDocumentsTab } from '../components/LandlordDocumentsTab';
 import { LandlordComplaintsTab } from '../components/LandlordComplaintsTab';
 import { LandlordAccountTab } from '../components/LandlordAccountTab';
 import { LandlordTrackerTab } from '../components/tracker/LandlordTrackerTab';
@@ -121,7 +122,6 @@ type LandlordTab =
   | 'units'
   | 'tenants'
   | 'leases'
-  | 'documents'
   | 'invitations'
   | 'account'
   | 'profile';
@@ -165,6 +165,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [tenantSearch, setTenantSearch] = useState('');
   const [leaseSearch, setLeaseSearch] = useState('');
   const [leaseStatusFilter, setLeaseStatusFilter] = useState('ALL');
+  const [leasePage, setLeasePage] = useState(1);
+  const LEASES_PER_PAGE = 5;
 
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('ALL');
@@ -309,6 +311,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [leaseIsDraft, setLeaseIsDraft] = useState(false);
   const [leaseUploadedDoc, setLeaseUploadedDoc] = useState<any | null>(null);
   const [selectedLeaseForDocModal, setSelectedLeaseForDocModal] = useState<Lease | null>(null);
+  const [previewLeaseId, setPreviewLeaseId] = useState<string | null>(null);
 
   // Load portfolio data
   const fetchData = async () => {
@@ -1157,6 +1160,17 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     return matchesStatus && matchesSearch;
   });
 
+  const leaseTotalPages = Math.max(1, Math.ceil(filteredLeases.length / LEASES_PER_PAGE));
+  const leaseCurrentPage = Math.min(leasePage, leaseTotalPages);
+  const paginatedLeases = filteredLeases.slice(
+    (leaseCurrentPage - 1) * LEASES_PER_PAGE,
+    leaseCurrentPage * LEASES_PER_PAGE
+  );
+
+  useEffect(() => {
+    setLeasePage(1);
+  }, [leaseSearch, leaseStatusFilter]);
+
   const filteredInvoices = invoices.filter((i) => {
     const matchesStatus =
       invoiceStatusFilter === 'ALL'
@@ -1402,18 +1416,6 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           </button>
 
           <button
-            onClick={() => setActiveTab('documents')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'documents'
-                ? 'bg-white text-[#331A6F] font-bold shadow-xs'
-                : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Documents</span>
-          </button>
-
-          <button
             onClick={() => setActiveTab('invitations')}
             className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
               activeTab === 'invitations'
@@ -1595,7 +1597,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       {/* Mobile Drawer Navigation */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-[#331A6F] text-white p-4 border-b border-purple-900 space-y-1.5 max-h-[75vh] overflow-y-auto scrollbar-subtle shrink-0">
-          {(['dashboard', 'tracker', 'properties', 'units', 'tenants', 'leases', 'documents', 'invitations', 'financials', 'invoices', 'payments', 'expenses', 'maintenance', 'complaints', 'workers', 'account'] as LandlordTab[]).map((tab) => (
+          {(['dashboard', 'tracker', 'properties', 'units', 'tenants', 'leases', 'invitations', 'financials', 'invoices', 'payments', 'expenses', 'maintenance', 'complaints', 'workers', 'account'] as LandlordTab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => {
@@ -2680,7 +2682,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {filteredLeases.map((l) => (
+                        {paginatedLeases.map((l) => (
                           <tr key={l.id} className="hover:bg-slate-50/60 transition-colors">
                             <td className="py-4 px-4 font-mono text-[11px] text-slate-500">{l.id}</td>
                             <td className="py-4 px-4 font-bold text-slate-900">{l.tenant_name || 'Test Tenant'}</td>
@@ -2708,7 +2710,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-50 text-[#331A6F] border border-purple-200 text-[11px] font-bold hover:bg-purple-100 transition-colors cursor-pointer"
                                 >
                                   <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
-                                  <span>v{l.agreement_document?.version_number || 1} Document</span>
+                                  <span>v{l.agreement_document?.version || 1} Document</span>
                                 </button>
                               ) : (
                                 <button
@@ -2737,6 +2739,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             </td>
                             <td className="py-4 px-4 text-right">
                               <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => setPreviewLeaseId(l.id)}
+                                  className="px-2.5 py-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-[#331A6F] text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                                  title="View / Preview the formatted lease document"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View</span>
+                                </button>
                                 <button
                                   onClick={() => setSelectedLeaseForDocModal(l)}
                                   className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer"
@@ -2767,21 +2777,46 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Pagination */}
+                  {filteredLeases.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-slate-100">
+                      <div className="text-xs text-slate-500">
+                        Showing{' '}
+                        <span className="font-semibold text-slate-700">
+                          {(leaseCurrentPage - 1) * LEASES_PER_PAGE + 1}
+                        </span>
+                        {'–'}
+                        <span className="font-semibold text-slate-700">
+                          {Math.min(leaseCurrentPage * LEASES_PER_PAGE, filteredLeases.length)}
+                        </span>{' '}
+                        of <span className="font-semibold text-slate-700">{filteredLeases.length}</span> leases
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setLeasePage((p) => Math.max(1, p - 1))}
+                          disabled={leaseCurrentPage === 1}
+                          className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          title="Previous page"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="text-xs font-semibold text-slate-700 px-2">
+                          Page {leaseCurrentPage} of {leaseTotalPages}
+                        </span>
+                        <button
+                          onClick={() => setLeasePage((p) => Math.min(leaseTotalPages, p + 1))}
+                          disabled={leaseCurrentPage === leaseTotalPages}
+                          className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          title="Next page"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-
-            {/* DOCUMENTS TAB */}
-            {activeTab === 'documents' && (
-              <LandlordDocumentsTab
-                leases={leases}
-                properties={properties}
-                tenants={tenants}
-                onUploadDocument={handleUploadDocumentForLease}
-                onOpenCreateLease={() => setShowCreateLeaseModal(true)}
-                onSelectLeaseForDocument={(lease) => setSelectedLeaseForDocModal(lease)}
-                onCreateNewLease={() => setShowCreateLeaseModal(true)}
-              />
             )}
 
             {/* 6. INVITATIONS TAB */}
@@ -2818,9 +2853,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                         {invitations.map((inv) => (
                           <tr key={inv.id} className="hover:bg-slate-50/60 transition-colors">
                             <td className="py-4 px-4 font-bold text-slate-900">
-                              {inv.tenant_email || inv.email || <span className="text-slate-400 italic font-normal">No email provided</span>}
+                              {inv.tenant_email || <span className="text-slate-400 italic font-normal">No email provided</span>}
                             </td>
-                            <td className="py-4 px-4">{inv.tenant_phone || inv.phone}</td>
+                            <td className="py-4 px-4">{inv.tenant_phone}</td>
                             <td className="py-4 px-4 font-medium text-slate-800">
                               {inv.property_name} ({inv.unit_number})
                             </td>
@@ -3772,6 +3807,12 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         />
       )}
 
+      {/* LEASE AGREEMENT DOCUMENT PREVIEW (formatted, printable contract) */}
+      <LeaseAgreementPreviewModal
+        leaseId={previewLeaseId}
+        onClose={() => setPreviewLeaseId(null)}
+      />
+
       {/* 5. TENANT PROFILE & HISTORY MODAL */}
       {selectedTenantForProfile && (
         <div
@@ -3936,6 +3977,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           setReminderInvoice(null);
         }}
         tenant={reminderTenant}
+        tenants={tenants}
         invoice={reminderInvoice}
         onSuccess={handleReminderSent}
       />
@@ -4041,21 +4083,6 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         units={units}
         initialExpense={selectedExpenseForEdit}
       />
-
-      {/* Lease Document Details Modal */}
-      {selectedLeaseForDocModal && (
-        <LeaseDocumentDetailsModal
-          lease={selectedLeaseForDocModal}
-          isOpen={true}
-          onClose={() => setSelectedLeaseForDocModal(null)}
-          onUploadNewVersion={async (leaseId, docData) => {
-            await handleUploadDocumentForLease(leaseId, docData);
-            const updated = leases.find((l) => l.id === leaseId);
-            if (updated) setSelectedLeaseForDocModal(updated);
-          }}
-          userRole="LANDLORD"
-        />
-      )}
 
       {/* Delete Property Confirmation */}
       <ConfirmDialog

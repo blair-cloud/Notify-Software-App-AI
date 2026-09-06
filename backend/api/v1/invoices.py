@@ -6,8 +6,10 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db
+from backend.core.dependencies import get_current_tenant
+from backend.core.exceptions import ForbiddenException
+from backend.models import InvoiceStatus, InvoiceType, TenantProfile
 from backend.services.invoice_service import InvoiceService
-from backend.models import InvoiceStatus, InvoiceType
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
@@ -52,8 +54,23 @@ async def get_landlord_invoices(landlord_id: uuid.UUID, db: AsyncSession = Depen
     return await InvoiceService.get_invoices_for_landlord(db, landlord_id)
 
 
+@router.get("/tenant/me", response_model=List[InvoiceSchema])
+async def get_my_invoices(
+    tenant: TenantProfile = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    await InvoiceService.update_overdue_statuses(db)
+    return await InvoiceService.get_invoices_for_tenant(db, tenant.id)
+
+
 @router.get("/tenant/{tenant_id}", response_model=List[InvoiceSchema])
-async def get_tenant_invoices(tenant_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_tenant_invoices(
+    tenant_id: uuid.UUID,
+    tenant: TenantProfile = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    if tenant.id != tenant_id:
+        raise ForbiddenException("Isolation violation: You are not authorized to view these invoices")
     await InvoiceService.update_overdue_statuses(db)
     return await InvoiceService.get_invoices_for_tenant(db, tenant_id)
 

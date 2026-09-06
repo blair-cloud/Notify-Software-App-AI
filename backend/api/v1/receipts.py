@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.core.database import get_db
-from backend.models import Receipt
+from backend.core.dependencies import get_current_tenant
+from backend.core.exceptions import ForbiddenException
+from backend.models import Receipt, TenantProfile
 
 router = APIRouter(prefix="/receipts", tags=["Receipts"])
 
@@ -56,8 +58,24 @@ async def get_receipt_by_payment(payment_id: uuid.UUID, db: AsyncSession = Depen
     return receipt
 
 
+@router.get("/tenant/me", response_model=List[ReceiptSchema])
+async def get_my_receipts(
+    tenant: TenantProfile = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(Receipt).where(Receipt.tenant_id == tenant.id).order_by(Receipt.issued_at.desc())
+    res = await db.execute(stmt)
+    return list(res.scalars().all())
+
+
 @router.get("/tenant/{tenant_id}", response_model=List[ReceiptSchema])
-async def get_tenant_receipts(tenant_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_tenant_receipts(
+    tenant_id: uuid.UUID,
+    tenant: TenantProfile = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db)
+):
+    if tenant.id != tenant_id:
+        raise ForbiddenException("Isolation violation: You are not authorized to view these receipts")
     stmt = select(Receipt).where(Receipt.tenant_id == tenant_id).order_by(Receipt.issued_at.desc())
     res = await db.execute(stmt)
     return list(res.scalars().all())

@@ -53,6 +53,8 @@ async def list_landlord_tenants(
         tenant_entry = {
             "id": str(tp.id) if tp else str(t.tenant_id),
             "tenant_id": str(tp.id) if tp else str(t.tenant_id),
+            # The user id is what messaging/notifications are addressed to.
+            "user_id": str(u.id) if u else None,
             "tenancy_id": str(t.id),
             "first_name": u.first_name if u else "Tenant",
             "last_name": u.last_name if u else "",

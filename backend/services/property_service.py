@@ -1,16 +1,19 @@
 import uuid
 from typing import Sequence
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.core.exceptions import NotFoundException, ForbiddenException
+from backend.core.exceptions import NotFoundException, ForbiddenException, ConflictException
 from backend.core.permissions import verify_landlord_ownership
-from backend.models import Property, LandlordProfile
+from backend.models import Property, LandlordProfile, UnitStatus
 from backend.repositories.property_repository import PropertyRepository
+from backend.repositories.unit_repository import UnitRepository
 from backend.schemas.property import PropertyCreate, PropertyUpdate
 
 class PropertyService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.property_repo = PropertyRepository(db)
+        self.unit_repo = UnitRepository(db)
 
     async def create_property(self, landlord: LandlordProfile, req: PropertyCreate) -> Property:
         prop = Property(
@@ -46,4 +49,15 @@ class PropertyService:
 
     async def delete_property(self, landlord: LandlordProfile, property_id: uuid.UUID) -> None:
         prop = await self.get_property_by_id(landlord, property_id)
-        await self.property_repo.delete(prop)
+        units = await self.unit_repo.list_by_property(property_id)
+        if any(u.status == UnitStatus.OCCUPIED for u in units):
+            raise ConflictException(
+                "Cannot delete a property that has occupied units. End all tenancies first."
+            )
+        try:
+            await self.property_repo.delete(prop)
+        except IntegrityError:
+            await self.db.rollback()
+            raise ConflictException(
+                "Cannot delete this property because related records (leases, tenancies, invoices) still reference it."
+            )

@@ -51,6 +51,7 @@ export interface Unit {
 
 export interface Tenant {
   id: string;
+  user_id?: string;
   tenancy_id?: string;
   first_name: string;
   last_name: string;
@@ -149,8 +150,19 @@ export interface Lease {
   property_id?: string;
   unit_id?: string;
   tenant_name?: string;
+  tenant_email?: string;
+  tenant_phone?: string;
+  tenant_national_id?: string;
   property_name?: string;
+  property_address?: string;
+  property_district?: string;
   unit_number?: string;
+  unit_floor?: number;
+  landlord_name?: string;
+  landlord_business_name?: string;
+  landlord_phone?: string;
+  landlord_email?: string;
+  landlord_address?: string;
   start_date: string;
   end_date: string;
   monthly_rent: number;
@@ -170,11 +182,14 @@ export interface Lease {
   document_history?: LeaseDocumentVersion[];
   renewal_of_lease_id?: string;
   renewal_count?: number;
+  tenant_signed_at?: string;
+  tenant_signature_name?: string;
+  tenant_document_status?: 'NO_DOCUMENT' | 'PENDING_SIGNATURE' | 'SIGNED' | 'UPLOADED';
 }
 
 export interface Invitation {
   id: string;
-  tenant_email: string;
+  tenant_email?: string;
   tenant_phone: string;
   property_id: string;
   property_name?: string;
@@ -929,3 +944,71 @@ export interface TrackerDashboardData {
 
 
 
+
+// ---------------------------------------------------------------------------
+// Communication: landlord -> tenant messages, reminders and delivery results.
+// Mirrors backend/services/communication_service.py.
+// ---------------------------------------------------------------------------
+export type CommunicationLanguage = 'EN' | 'FR' | 'RW';
+export type CommunicationChannel = 'IN_APP' | 'SMS' | 'WHATSAPP' | 'EMAIL';
+export type DeliveryStatus = 'SENT' | 'FAILED' | 'SKIPPED';
+
+export interface LocalizedMessage {
+  title?: string;
+  body?: string;
+}
+
+export type LocalizedMessages = Record<string, LocalizedMessage>;
+
+export interface MessageTemplate {
+  code: string;
+  label: string;
+  category: string;
+  priority: string;
+  title: Record<string, string>;
+  body: Record<string, string>;
+}
+
+export interface TranslateResult {
+  source_language: string;
+  translations: Record<string, string | null>;
+  untranslated_languages: string[];
+  notice: string | null;
+}
+
+export interface ChannelDeliveryResult {
+  channel: CommunicationChannel | string;
+  recipient: string;
+  status: DeliveryStatus;
+  provider: string;
+  simulated: boolean;
+  attempts: number;
+  error: string | null;
+  provider_message_id?: string | null;
+}
+
+export interface RecipientDeliveryResult {
+  tenant_id: string;
+  user_id: string;
+  name: string;
+  language: string;
+  phone?: string;
+  email?: string;
+  title: string;
+  body: string;
+  channels: ChannelDeliveryResult[];
+  delivered: boolean;
+}
+
+export interface BulkSendResult {
+  batch_id: string;
+  template_code: string;
+  channels: string[];
+  total_recipients: number;
+  recipients_delivered: number;
+  recipients_failed: number;
+  channel_sent: number;
+  channel_failed: number;
+  channel_skipped: number;
+  results: RecipientDeliveryResult[];
+}

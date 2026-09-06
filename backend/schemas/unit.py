@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 import uuid
@@ -9,9 +9,9 @@ class UnitCreate(BaseModel):
     unit_number: str
     floor: int = 1
     unit_type: Optional[str] = "Retail Shop"
-    rooms: Optional[int] = None
-    bathrooms: Optional[int] = None
-    square_meters: Optional[float] = None
+    rooms: Optional[int] = Field(default=None, ge=0)
+    bathrooms: Optional[int] = Field(default=None, ge=0)
+    square_meters: Optional[float] = Field(default=None, ge=0)
     monthly_rent: float
     currency: str = "RWF"
     description: Optional[str] = None
@@ -20,9 +20,9 @@ class UnitUpdate(BaseModel):
     unit_number: Optional[str] = None
     floor: Optional[int] = None
     unit_type: Optional[str] = None
-    rooms: Optional[int] = None
-    bathrooms: Optional[int] = None
-    square_meters: Optional[float] = None
+    rooms: Optional[int] = Field(default=None, ge=0)
+    bathrooms: Optional[int] = Field(default=None, ge=0)
+    square_meters: Optional[float] = Field(default=None, ge=0)
     monthly_rent: Optional[float] = None
     currency: Optional[str] = None
     status: Optional[UnitStatus] = None

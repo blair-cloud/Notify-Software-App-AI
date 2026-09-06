@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models import (
     Message, User, TenantProfile, LandlordProfile, Property, Unit, Tenancy,
     MaintenanceRequest, MaintenanceAttachment, MaintenanceComment, Notification,
-    UserRole, MaintenanceStatus, MaintenanceCategory, MaintenancePriority
+    UserRole, MaintenanceStatus, MaintenanceCategory, MaintenancePriority,
+    NotificationChannel, NotificationStatus
 )
 from backend.schemas.message import MessageCreate, MessageResponse, ConversationSummary
 from backend.core.logging import logger
@@ -135,13 +136,13 @@ class MessageService:
                     type="MAINTENANCE_CREATED",
                     title=f"New Maintenance Request: {new_req.title}",
                     message=f"Tenant {sender.first_name} {sender.last_name} submitted maintenance ticket {req_num}: {data.content[:100]}",
-                    channel="IN_APP",
+                    channel=NotificationChannel.IN_APP,
                     priority="HIGH",
                     category="MAINTENANCE",
-                    status="SENT",
+                    status=NotificationStatus.SENT,
                     is_read=False,
                     entity_type="MAINTENANCE",
-                    entity_id=str(new_req.id),
+                    entity_id=new_req.id,
                 )
                 session.add(notif)
 
@@ -173,6 +174,9 @@ class MessageService:
             is_read=False,
         )
         session.add(msg)
+        # Flush before referencing msg.id - it is only assigned on flush, and
+        # entity_id is a UUID column, so a stringified id fails to bind.
+        await session.flush()
 
         # Send General Notification if not maintenance
         if data.message_type.upper() != "MAINTENANCE":
@@ -181,13 +185,13 @@ class MessageService:
                 type="NEW_MESSAGE",
                 title=f"Message from {sender.first_name} {sender.last_name}",
                 message=data.content[:120],
-                channel="IN_APP",
+                channel=NotificationChannel.IN_APP,
                 priority="MEDIUM",
                 category="SYSTEM",
-                status="SENT",
+                status=NotificationStatus.SENT,
                 is_read=False,
                 entity_type="MESSAGE",
-                entity_id=str(msg.id),
+                entity_id=msg.id,
             )
             session.add(notif)
 

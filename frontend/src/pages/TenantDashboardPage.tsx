@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Home,
   CreditCard,
@@ -6,8 +6,6 @@ import {
   FileText,
   User,
   LogOut,
-  Building,
-  Key,
   CheckCircle,
   Globe,
   Menu,
@@ -17,7 +15,6 @@ import {
   Clock,
   AlertCircle,
   FileCheck,
-  ShieldCheck,
   Download,
   Eye,
   Receipt as ReceiptIcon,
@@ -26,7 +23,6 @@ import {
   Plus,
   RotateCcw,
   CheckCircle2,
-  Calendar,
   Phone,
   Mail,
   MapPin,
@@ -56,7 +52,8 @@ import { NotificationModal } from '../components/NotificationModal';
 import { TenantComplaintChatView } from '../components/TenantComplaintChatView';
 import { TenantMaintenanceChatView } from '../components/TenantMaintenanceChatView';
 import { TenantMessagesTab } from '../components/TenantMessagesTab';
-import { LeaseDocumentDetailsModal } from '../components/LeaseDocumentDetailsModal';
+import { TENANT_DOC_STATUS_META } from '../components/LeaseDocumentDetailsModal';
+import { TenantLeaseDocumentModal } from '../components/TenantLeaseDocumentModal';
 import { TenantLeaseCountdownCard } from '../components/TenantLeaseCountdownCard';
 import { TenantProfileSettingsTab } from '../components/TenantProfileSettingsTab';
 
@@ -133,11 +130,11 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       const [tenanciesRes, leasesRes, invRes, payRes, rctRes, finRes, maintRes, compRes, notifRes, unreadRes] =
         await Promise.all([
           api.tenants.getMyTenancies().catch(() => []),
-          api.leases.list().catch(() => []),
-          api.invoices.getTenantInvoices(tenantId).catch(() => []),
-          api.payments.getTenantPayments(tenantId).catch(() => []),
-          api.receipts.getTenantReceipts(tenantId).catch(() => []),
-          api.financials.getTenantFinancials(tenantId).catch(() => null),
+          api.leases.listMine().catch(() => []),
+          api.invoices.getTenantInvoices().catch(() => []),
+          api.payments.getTenantPayments().catch(() => []),
+          api.receipts.getTenantReceipts().catch(() => []),
+          api.financials.getTenantFinancials().catch(() => null),
           api.maintenance.getTenantRequests().catch(() => []),
           api.complaints.getTenantComplaints().catch(() => []),
           api.notifications.getUserNotifications(tenantId).catch(() => []),
@@ -185,11 +182,56 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
   }, [tenantId]);
 
   const activeTenancy = tenancies.length > 0 ? tenancies[0] : null;
-  const activeLease = leases.find((l) =>
-    (user?.id && l.tenant_id === user.id) ||
-    (activeTenancy?.id && l.tenancy_id === activeTenancy.id) ||
-    (activeTenancy?.unit_id && l.unit_id === activeTenancy.unit_id)
-  ) || (leases.length > 0 ? leases[0] : null);
+  // `leases` is already scoped server-side to this tenant, so we only need to
+  // pick the most relevant one. Accepting an invitation auto-creates a default
+  // lease, so a tenancy can carry more than one: prefer the lease that actually
+  // has an agreement document on file, then the most recently created.
+  const pickMostRelevantLease = (candidates: Lease[]): Lease | null => {
+    if (candidates.length === 0) return null;
+    return [...candidates].sort((a, b) => {
+      const byDocument = (b.agreement_document ? 1 : 0) - (a.agreement_document ? 1 : 0);
+      if (byDocument !== 0) return byDocument;
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    })[0];
+  };
+
+  const activeLease =
+    pickMostRelevantLease(leases.filter((l) => !!activeTenancy?.id && l.tenancy_id === activeTenancy.id)) ||
+    pickMostRelevantLease(leases.filter((l) => l.status === 'ACTIVE' || l.status === 'EXPIRING_SOON')) ||
+    pickMostRelevantLease(leases);
+
+  // A tenant can hold several leases (several units, or a renewal). One entry
+  // per tenancy keeps each countdown tied to a distinct property/unit rather
+  // than repeating a unit whose tenancy also carries an auto-created lease.
+  const leasesForCountdown = useMemo(() => {
+    const byTenancy = new Map<string, Lease[]>();
+    leases.forEach((l) => {
+      const key = l.tenancy_id || l.id;
+      byTenancy.set(key, [...(byTenancy.get(key) || []), l]);
+    });
+    return Array.from(byTenancy.values())
+      .map((group) => pickMostRelevantLease(group))
+      .filter((l): l is Lease => l !== null);
+  }, [leases]);
+
+  // Lease Handlers
+  const handleUploadTenantLeaseDocument = async (leaseId: string, docData: any) => {
+    const updated = await api.leases.uploadDocumentMine(leaseId, docData);
+    setSelectedLeaseDocForTenant(updated);
+    setLeases((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+    setSuccessMsg('Signed lease copy uploaded successfully!');
+    setTimeout(() => setSuccessMsg(null), 4000);
+    loadTenantData();
+  };
+
+  const handleSignTenantLease = async (leaseId: string, signatureNameValue: string) => {
+    const updated = await api.leases.signMine(leaseId, signatureNameValue);
+    setSelectedLeaseDocForTenant(updated);
+    setLeases((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+    setSuccessMsg('Lease signed successfully!');
+    setTimeout(() => setSuccessMsg(null), 4000);
+    loadTenantData();
+  };
 
   // Maintenance Handlers
   const handleCreateMaintenance = async (data: {
@@ -708,24 +750,6 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                   {user?.first_name ? user.first_name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
                 </button>
 
-                <button
-                  onClick={() => {
-                    setMessagesMaintenanceMode(false);
-                    switchTab('messages');
-                  }}
-                  className="px-4 py-2.5 bg-[#008069] hover:bg-[#00705a] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <MessageSquare className="w-3.5 h-3.5" /> {t.messageLandlord || 'Message Landlord'}
-                </button>
-
-                {invoices.length > 0 && invoices[0].balance_due > 0 && (
-                  <button
-                    onClick={() => setPayingInvoice(invoices[0])}
-                    className="px-4 py-2.5 bg-[#331A6F] hover:bg-[#281458] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <CreditCard className="w-4 h-4" /> {t.payRent || 'Pay Rent'}
-                  </button>
-                )}
               </div>
             </div>
 
@@ -734,7 +758,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
               <div className="space-y-6">
                 {/* PROMINENT LEASE COUNTDOWN (HERO FOCUS) */}
                 <TenantLeaseCountdownCard
-                  lease={activeLease}
+                  leases={leasesForCountdown}
                   tenancy={activeTenancy}
                   onViewLeaseDetails={() => switchTab('lease')}
                   onViewDocument={setSelectedLeaseDocForTenant}
@@ -1029,121 +1053,63 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
             {/* LEASE TAB */}
             {activeTab === 'lease' && (
               <div className="space-y-6">
-                {/* Header & Status */}
-                <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5" /> {t.activeLeaseStatus || 'ACTIVE LEASE'}
-                      </span>
-                      <span className="text-xs text-slate-400">• Lease #LSE-2026-0001</span>
-                    </div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-slate-900">{t.residentialTenancyAgreement || 'Residential Tenancy Agreement'}</h2>
-                    <p className="text-xs sm:text-sm text-slate-500">
-                      {t.tenancyGovernedRwanda || 'Standard residential tenancy governed by the laws of the Republic of Rwanda.'}
-                    </p>
+                {!activeLease ? (
+                  <div className="p-12 rounded-2xl bg-white border border-slate-200 shadow-xs text-center">
+                    <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                    <h3 className="text-sm font-bold text-slate-900">{'No lease on file yet'}</h3>
                   </div>
+                ) : (
+                  <div className="p-6 sm:p-8 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-8">
+                    {/* Title, status & primary action */}
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-5">
+                      <div className="space-y-2">
+                        <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+                          {t.residentialTenancyAgreement || 'Lease Agreement'}
+                        </h2>
+                        <p className="text-sm text-slate-500">
+                          {activeLease.property_name || 'Property'} • {t.unitLabel || 'Unit'} {activeLease.unit_number || '—'}
+                        </p>
+                        <span
+                          className={`inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                            (TENANT_DOC_STATUS_META[activeLease.tenant_document_status || 'NO_DOCUMENT'] || TENANT_DOC_STATUS_META.NO_DOCUMENT).className
+                          }`}
+                        >
+                          {(TENANT_DOC_STATUS_META[activeLease.tenant_document_status || 'NO_DOCUMENT'] || TENANT_DOC_STATUS_META.NO_DOCUMENT).label}
+                        </span>
+                      </div>
 
-                  {leases.length > 0 && (
-                    <button
-                      onClick={() => setSelectedLeaseDocForTenant(leases[0])}
-                      className="min-h-[44px] px-4 py-2.5 bg-[#331A6F] hover:bg-[#281458] text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer self-start sm:self-auto"
-                    >
-                      <FileCheck className="w-4 h-4 text-emerald-400" />
-                      <span>{t.viewSignedAgreement || 'View Signed Agreement Document'}</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Property & Unit Specification Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-1">
-                    <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">
-                      <Building className="w-4 h-4 text-purple-600" /> {t.property || 'Property'}
-                    </div>
-                    <p className="font-bold text-slate-900 text-base">{activeTenancy?.property?.name || 'Notify Residences'}</p>
-                    <p className="text-xs text-slate-500">{activeTenancy?.property?.address || 'KG 123 St, Kimihurura, Kigali'}</p>
-                  </div>
-
-                  <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-1">
-                    <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">
-                      <Key className="w-4 h-4 text-amber-600" /> {t.unitAllocated || 'Unit Allocated'}
-                    </div>
-                    <p className="font-bold text-[#331A6F] text-base">Unit #{activeTenancy?.unit?.unit_number || 'A-102'}</p>
-                    <p className="text-xs text-slate-500">Floor: 1st Floor • Residential 2BHK</p>
-                  </div>
-
-                  <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-1">
-                    <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">
-                      <Calendar className="w-4 h-4 text-emerald-600" /> {t.leaseTerm || 'Lease Term'}
-                    </div>
-                    <p className="font-bold text-slate-900 text-base">12 Months (1 Year)</p>
-                    <p className="text-xs text-slate-500">2026-01-01 to 2026-12-31</p>
-                  </div>
-                </div>
-
-                {/* Financial Summary Card */}
-                <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">
-                  <h3 className="text-sm font-bold text-slate-900">{t.financialTermsSchedule || 'Financial Terms & Payment Schedule'}</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                      <p className="text-xs text-slate-400 font-medium">{t.monthlyRent || 'Monthly Rent'}</p>
-                      <p className="text-lg font-extrabold text-slate-900">RWF {activeTenancy?.unit?.monthly_rent?.toLocaleString() || '350,000'}</p>
-                      <p className="text-[11px] text-slate-500">{t.dueOnOrBefore5th || 'Due on or before 5th of each month'}</p>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                      <p className="text-xs text-slate-400 font-medium">{t.securityDeposit || 'Security Deposit'}</p>
-                      <p className="text-lg font-extrabold text-emerald-700">RWF 700,000</p>
-                      <p className="text-[11px] text-emerald-600 font-medium">✓ {t.paidHeldEscrow || 'Paid & Held in Escrow'}</p>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
-                      <p className="text-xs text-slate-400 font-medium">{t.paymentMethodsAccepted || 'Payment Methods Accepted'}</p>
-                      <p className="text-sm font-bold text-slate-800">MTN MoMo, Airtel, Bank</p>
-                      <p className="text-[11px] text-slate-500">{t.instantDigitalReceipts || 'Instant digital receipts issued'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tenancy Rules & Support Contacts */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
-                    <h3 className="text-sm font-bold text-slate-900">{t.buildingGuidelines || 'Essential Building Guidelines'}</h3>
-                    <ul className="text-xs text-slate-600 space-y-2">
-                      <li className="flex items-start gap-2">
-                        <span className="text-emerald-500 font-bold">✓</span>
-                        <span><strong>{t.quietHours || 'Quiet Hours'}:</strong> 10:00 PM – 7:00 AM daily.</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-emerald-500 font-bold">✓</span>
-                        <span><strong>{t.maintenanceDirectReporting || 'Maintenance: Direct chat reporting via the Messages tab.'}</strong></span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-emerald-500 font-bold">✓</span>
-                        <span><strong>{t.garbageCollectionSchedule || 'Garbage: Collected Mondays, Wednesdays & Fridays by 8:00 AM.'}</strong></span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
-                    <h3 className="text-sm font-bold text-slate-900">{t.propertyManagementAndLandlord || 'Property Management & Landlord'}</h3>
-                    <div className="text-xs text-slate-600 space-y-2">
-                      <p><strong>{t.landlord || 'Landlord'}:</strong> Notify Properties Ltd Kigali</p>
-                      <p><strong>{t.emergencyContact || 'Emergency Contact'}:</strong> +250 788 123 456</p>
-                      <p><strong>{t.emailSupport || 'Email Support'}:</strong> support@notify.rw</p>
                       <button
-                        onClick={() => {
-                          setMessagesMaintenanceMode(false);
-                          switchTab('messages');
-                        }}
-                        className="mt-2 w-full py-2 px-3 bg-[#008069] text-white text-xs font-bold rounded-lg hover:bg-[#00705a] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        onClick={() => setSelectedLeaseDocForTenant(activeLease)}
+                        className="min-h-[44px] px-5 py-2.5 bg-[#331A6F] hover:bg-[#281458] text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer self-start shrink-0"
                       >
-                        <MessageSquare className="w-3.5 h-3.5" /> {t.messagePropertyManager || 'Message Property Manager'}
+                        <FileCheck className="w-4 h-4" />
+                        {t.viewSignedAgreement || 'View Lease'}
                       </button>
                     </div>
+
+                    {/* Essential terms */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 border-t border-slate-100">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-slate-400">{t.leaseTerm || 'Lease Term'}</p>
+                        <p className="text-sm font-bold text-slate-900">
+                          {activeLease.start_date} — {activeLease.end_date}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-slate-400">{t.monthlyRent || 'Monthly Rent'}</p>
+                        <p className="text-sm font-bold text-slate-900">
+                          {activeLease.currency || 'RWF'} {activeLease.monthly_rent?.toLocaleString() ?? '—'}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-slate-400">{t.securityDeposit || 'Security Deposit'}</p>
+                        <p className="text-sm font-bold text-slate-900">
+                          {activeLease.currency || 'RWF'} {activeLease.security_deposit?.toLocaleString() ?? '—'}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -1211,6 +1177,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                             <th className="py-3 px-4 font-semibold">{t.invoiceNumber || 'Invoice Number'}</th>
                             <th className="py-3 px-4 font-semibold">{t.invoiceType || 'Type'}</th>
                             <th className="py-3 px-4 font-semibold">{t.billingPeriod || 'Billing Period'}</th>
+                            <th className="py-3 px-4 font-semibold">{t.dueDate || 'Due Date'}</th>
                             <th className="py-3 px-4 font-semibold">{t.totalAmount || 'Total Amount'}</th>
                             <th className="py-3 px-4 font-semibold">{t.balanceDue || 'Balance Due'}</th>
                             <th className="py-3 px-4 font-semibold">{t.status || 'Status'}</th>
@@ -1220,7 +1187,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                         <tbody className="divide-y divide-slate-100">
                           {(invoices || []).length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="py-8 text-center text-slate-400">
+                              <td colSpan={8} className="py-8 text-center text-slate-400">
                                 {t.noRentInvoicesFound || 'No rent invoices found.'}
                               </td>
                             </tr>
@@ -1230,6 +1197,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                                 <td className="py-3.5 px-4 font-mono font-bold text-slate-900">{inv.invoice_number}</td>
                                 <td className="py-3.5 px-4 text-slate-600">{inv.invoice_type}</td>
                                 <td className="py-3.5 px-4 text-slate-600">{inv.billing_period_start} to {inv.billing_period_end}</td>
+                                <td className="py-3.5 px-4 font-semibold text-slate-800">{inv.due_date || '—'}</td>
                                 <td className="py-3.5 px-4 font-semibold text-slate-900">{inv.total_amount?.toLocaleString()} RWF</td>
                                 <td className="py-3.5 px-4 font-bold text-rose-600">{inv.balance_due?.toLocaleString()} RWF</td>
                                 <td className="py-3.5 px-4">
@@ -1281,6 +1249,9 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                             </div>
                             <div className="text-xs text-slate-500">
                               {t.period || 'Period'}: <span className="text-slate-800 font-medium">{inv.billing_period_start} to {inv.billing_period_end}</span>
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {t.dueDate || 'Due Date'}: <span className="text-slate-800 font-medium">{inv.due_date || '—'}</span>
                             </div>
                             <div className="flex items-center justify-between text-xs pt-1">
                               <div>
@@ -1531,11 +1502,12 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
 
       {/* Official Signed Lease Document Viewer Modal */}
       {selectedLeaseDocForTenant && (
-        <LeaseDocumentDetailsModal
+        <TenantLeaseDocumentModal
           lease={selectedLeaseDocForTenant}
           isOpen={!!selectedLeaseDocForTenant}
           onClose={() => setSelectedLeaseDocForTenant(null)}
-          isTenantView={true}
+          onUploadSignedCopy={handleUploadTenantLeaseDocument}
+          onSignLease={handleSignTenantLease}
         />
       )}
     </div>

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from pydantic import BaseModel, ConfigDict
 from backend.models.role import UserRole, MaintenanceCategory, MaintenancePriority, MaintenanceStatus
 
@@ -51,6 +51,39 @@ class MessageResponse(BaseModel):
     is_read: bool = False
     read_at: Optional[datetime] = None
     created_at: datetime
+
+
+class LocalizedMessage(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+
+
+class BulkMessageRequest(BaseModel):
+    """A landlord-approved message going to one or more of their tenants."""
+    recipient_ids: List[str]
+    channels: List[str] = ["IN_APP"]
+    template_code: str = "CUSTOM"
+    # Landlord-reviewed wording per language: {"EN": {...}, "FR": {...}, "RW": {...}}
+    messages: Dict[str, LocalizedMessage] = {}
+    variables: Dict[str, Any] = {}
+    category: str = "SYSTEM"
+    priority: str = "MEDIUM"
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    # Set to send everyone the same language instead of each tenant's own.
+    force_language: Optional[str] = None
+
+
+class MessagePreviewRequest(BaseModel):
+    template_code: str = "CUSTOM"
+    variables: Dict[str, Any] = {}
+    overrides: Dict[str, LocalizedMessage] = {}
+
+
+class TranslateRequest(BaseModel):
+    text: str
+    source_language: str = "EN"
+    target_languages: Optional[List[str]] = None
 
 
 class ConversationSummary(BaseModel):

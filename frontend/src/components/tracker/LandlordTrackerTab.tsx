@@ -446,25 +446,40 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
     setIsSendingReminders(true);
 
     try {
-      await Promise.all(
-        unpaidTenantsList.map(async (row) => {
-          return api.notifications.create({
-            user_id: row.tenant_id,
-            type: 'RENT_DUE_SOON',
-            title: `Rent Payment Reminder: Unit ${row.unit_number}`,
-            message: `Dear ${row.tenant_name}, this is an official reminder from property management regarding your outstanding rent balance of RWF ${row.balance_due.toLocaleString()} for Unit ${row.unit_number} at ${row.property_name}. Please settle your balance via Bank Transfer or Mobile Money.`,
-            channel: 'IN_APP',
-            priority: 'HIGH',
-            category: 'RENT_DUE',
-            entity_type: 'INVOICE',
-            entity_id: row.invoice_id || 'inv-tracker-bulk',
-            action_url: '/tenant/payments',
-            action_label: 'Pay Rent Now',
-          });
-        })
-      );
+      // One call for the whole group: the backend delivers per tenant, per
+      // channel, in each tenant's own language, and reports every outcome.
+      const result = await api.messages.sendBulk({
+        recipient_ids: unpaidTenantsList.map((row) => row.tenant_id),
+        channels: ['SMS', 'IN_APP'],
+        template_code: 'RENT_OVERDUE_3D',
+        messages: {
+          EN: {
+            title: 'Outstanding rent balance',
+            body: 'Dear {{tenant_name}}, this is a reminder regarding your outstanding rent balance for Unit {{unit_number}} at {{property_name}}. Please settle it via Bank Transfer or Mobile Money.',
+          },
+          FR: {
+            title: 'Solde de loyer impayé',
+            body: "Cher/Chère {{tenant_name}}, ceci est un rappel concernant votre solde de loyer impayé pour l'unité {{unit_number}} à {{property_name}}. Merci de régler par virement bancaire ou Mobile Money.",
+          },
+          RW: {
+            title: 'Ubukode butarishyuwe',
+            body: "Muraho {{tenant_name}}, turabibutsa ku bukode butarishyuwe bw'inzu {{unit_number}} muri {{property_name}}. Mwishyure muri banki cyangwa kuri Mobile Money.",
+          },
+        },
+        category: 'RENT_DUE',
+        priority: 'HIGH',
+      });
 
-      showNotification(`Rent payment reminders successfully sent to ${unpaidTenantsList.length} unpaid tenants.`);
+      if (result.channel_failed > 0) {
+        showNotification(
+          `Reminders sent to ${result.recipients_delivered} of ${result.total_recipients} tenants. ${result.channel_failed} delivery attempt(s) failed.`,
+          true
+        );
+      } else {
+        showNotification(
+          `Rent payment reminders sent to ${result.recipients_delivered} unpaid tenant${result.recipients_delivered === 1 ? '' : 's'}.`
+        );
+      }
       setIsBulkRemindModalOpen(false);
       onRefreshAllData();
     } catch (err: any) {
@@ -486,21 +501,26 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
         individualReminderCustomMsg.trim() ||
         `Dear ${row.tenant_name}, this is an official reminder regarding your outstanding rent balance of RWF ${row.balance_due.toLocaleString()} for Unit ${row.unit_number} at ${row.property_name}. Please settle your payment promptly via Bank Transfer or Mobile Money.`;
 
-      await api.notifications.create({
-        user_id: row.tenant_id,
-        type: 'RENT_DUE_SOON',
-        title: `Rent Payment Reminder: Unit ${row.unit_number}`,
-        message: messageContent,
-        channel: 'IN_APP',
-        priority: 'HIGH',
+      const result = await api.messages.sendBulk({
+        recipient_ids: [row.tenant_id],
+        channels: ['SMS', 'IN_APP'],
+        template_code: 'CUSTOM',
+        messages: {
+          EN: { title: `Rent reminder: Unit ${row.unit_number}`, body: messageContent },
+        },
         category: 'RENT_DUE',
-        entity_type: 'INVOICE',
-        entity_id: row.invoice_id || 'inv-tracker-individual',
-        action_url: '/tenant/payments',
-        action_label: 'Pay Rent Now',
+        priority: 'HIGH',
       });
 
-      showNotification(`Rent reminder successfully sent to ${row.tenant_name}.`);
+      const failed = result.results[0]?.channels.filter((c) => c.status === 'FAILED') || [];
+      if (failed.length > 0) {
+        showNotification(
+          `Reminder to ${row.tenant_name} failed on ${failed.map((f) => f.channel).join(', ')}: ${failed[0].error}`,
+          true
+        );
+      } else {
+        showNotification(`Rent reminder successfully sent to ${row.tenant_name}.`);
+      }
       setSelectedTenantForIndividualRemind(null);
       onRefreshAllData();
     } catch (err: any) {
