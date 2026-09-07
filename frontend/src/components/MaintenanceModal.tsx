@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { MaintenanceRequest, MaintenanceWorker } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { specializationLabel } from '../constants/workerSpecializations';
 
 interface MaintenanceModalProps {
   isOpen: boolean;
@@ -638,7 +639,7 @@ export const MaintenanceModal: React.FC<MaintenanceModalProps> = ({
                           />
                           <datalist id="workers-list">
                             {workers.map((w) => (
-                              <option key={w.id} value={`${w.name} (${w.specialization})`} />
+                              <option key={w.id} value={`${w.name} (${specializationLabel(w.specialization)})`} />
                             ))}
                           </datalist>
                         </div>

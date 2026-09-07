@@ -30,6 +30,7 @@ import {
 } from '../utils/mockAuth';
 import type {
   BulkSendResult,
+  ExpenseSummary,
   LocalizedMessages,
   MessageTemplate,
   TranslateResult,
@@ -3047,15 +3048,16 @@ export const api = {
       request<any>(`/expenses/${id}`, {
         method: 'DELETE',
       }),
-    getLandlordExpenses: (landlordId: string, propertyId?: string, category?: string) => {
-      let query = `/expenses/landlord/${landlordId}`;
+    // Scoped to the signed-in landlord by the backend; no id is passed.
+    getLandlordExpenses: (propertyId?: string, category?: string) => {
+      let query = '/expenses';
       const params = new URLSearchParams();
       if (propertyId) params.append('property_id', propertyId);
       if (category) params.append('category', category);
       if (params.toString()) query += `?${params.toString()}`;
       return request<any[]>(query);
     },
-    getSummary: (landlordId: string) => request<any>(`/expenses/summary/${landlordId}`),
+    getSummary: () => request<ExpenseSummary>('/expenses/summary'),
   },
 
   financials: {

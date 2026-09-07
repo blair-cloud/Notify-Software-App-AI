@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import select, or_, and_, desc, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.encoders import jsonable_encoder
 
 from backend.models import (
     Message, User, TenantProfile, LandlordProfile, Property, Unit, Tenancy,
@@ -12,6 +13,7 @@ from backend.models import (
 )
 from backend.schemas.message import MessageCreate, MessageResponse, ConversationSummary
 from backend.core.logging import logger
+from backend.core.realtime import realtime
 
 
 class MessageService:
@@ -198,7 +200,26 @@ class MessageService:
         await session.commit()
         await session.refresh(msg)
 
-        return await MessageService._augment_message(session, msg)
+        response = await MessageService._augment_message(session, msg)
+
+        # Push to both parties so open chats update live, without polling.
+        await MessageService._publish_realtime(response)
+
+        return response
+
+    @staticmethod
+    async def _publish_realtime(response: MessageResponse) -> None:
+        try:
+            await realtime.publish_to_users(
+                [response.sender_id, response.recipient_id],
+                {
+                    "type": "message.created",
+                    "message": jsonable_encoder(response),
+                },
+            )
+        except Exception as exc:
+            # Live delivery is best-effort; the message is already persisted.
+            logger.warning(f"Realtime publish failed for message {response.id}: {exc}")
 
     @staticmethod
     async def get_messages(session: AsyncSession, user_id: uuid.UUID, partner_id: Optional[uuid.UUID] = None) -> List[MessageResponse]:

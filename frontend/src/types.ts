@@ -411,6 +411,27 @@ export interface Expense {
   property_name?: string;
   unit_number?: string;
   created_at?: string;
+  // Set when the expense was posted from a maintenance job.
+  maintenance_request_id?: string;
+  maintenance_request_number?: string;
+  maintenance_title?: string;
+  source?: 'MANUAL' | 'MAINTENANCE';
+}
+
+export interface ExpenseSummary {
+  total_expenses: number;
+  expense_count: number;
+  by_category: Record<string, number>;
+  by_property: Record<string, number>;
+  by_month: Record<string, number>;
+  /** Everything filed under the Maintenance category. */
+  maintenance_total: number;
+  /** The portion of that which came from maintenance tickets. */
+  maintenance_from_tickets: number;
+  maintenance_ticket_count: number;
+  /** Repair costs on tickets not yet posted as an expense. */
+  maintenance_unposted: number;
+  currency: string;
 }
 
 export interface LandlordFinancials {

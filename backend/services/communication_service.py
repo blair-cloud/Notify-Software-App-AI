@@ -22,6 +22,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.core.exceptions import ForbiddenException, NotFoundException
 from backend.core.logging import logger
+from backend.core.realtime import realtime
 from backend.integrations.delivery import DeliveryResult, skipped
 from backend.integrations.email import send_email_message
 from backend.integrations.sms import send_sms_message
@@ -456,6 +457,30 @@ class CommunicationService:
             )
 
         await session.commit()
+
+        # Anything delivered in-app is a real chat message: push it so the
+        # tenant's open conversation updates without a refresh.
+        for entry in results:
+            in_app = next((c for c in entry["channels"] if c["channel"] == "IN_APP" and c["status"] == "SENT"), None)
+            if not in_app:
+                continue
+            try:
+                await realtime.publish_to_users(
+                    [entry["user_id"], str(sender.id)],
+                    {
+                        "type": "message.created",
+                        "message": {
+                            "sender_id": str(sender.id),
+                            "recipient_id": entry["user_id"],
+                            "sender_role": sender.role.value if hasattr(sender.role, "value") else str(sender.role),
+                            "content": entry["body"],
+                            "message_type": "GENERAL",
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        },
+                    },
+                )
+            except Exception as exc:
+                logger.warning(f"Realtime publish failed for broadcast to {entry['user_id']}: {exc}")
 
         delivered_recipients = sum(1 for r in results if r["delivered"])
         return {

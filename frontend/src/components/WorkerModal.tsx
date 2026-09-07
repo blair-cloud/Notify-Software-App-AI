@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Users, Phone, UserCheck, Plus, ShieldCheck, Wrench, Briefcase, AlertCircle } from 'lucide-react';
 import { MaintenanceWorker } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { WORKER_SPECIALIZATIONS, specializationLabel } from '../constants/workerSpecializations';
 
 interface WorkerModalProps {
   isOpen: boolean;
@@ -20,7 +21,7 @@ export const WorkerModal: React.FC<WorkerModalProps> = ({
   const [showAddForm, setShowAddForm] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [specialization, setSpecialization] = useState('Plumbing');
+  const [specialization, setSpecialization] = useState('PLUMBER');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -131,14 +132,11 @@ export const WorkerModal: React.FC<WorkerModalProps> = ({
                     onChange={(e) => setSpecialization(e.target.value)}
                     className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
                   >
-                    <option value="Plumbing">Plumbing & Pipes</option>
-                    <option value="Electrical">Electrical & Wiring</option>
-                    <option value="HVAC">Air Conditioning & HVAC</option>
-                    <option value="Locksmith">Locksmith & Security</option>
-                    <option value="Carpentry">Carpentry & Structural</option>
-                    <option value="Painting">Painting & Masonry</option>
-                    <option value="Cleaning">Cleaning & Sanitation</option>
-                    <option value="General">General Maintenance</option>
+                    {WORKER_SPECIALIZATIONS.map((s) => (
+                      <option key={s.code} value={s.code}>
+                        {s.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -189,7 +187,7 @@ export const WorkerModal: React.FC<WorkerModalProps> = ({
                       <div className="font-extrabold text-sm text-slate-900">{w.name}</div>
                       <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                         <span className="font-semibold text-purple-800 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 text-[10px]">
-                          {w.specialization}
+                          {specializationLabel(w.specialization)}
                         </span>
                         <span className="flex items-center gap-1 font-mono text-[11px]">
                           <Phone className="w-3 h-3 text-slate-400" /> {w.phone}

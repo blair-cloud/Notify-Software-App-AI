@@ -105,6 +105,8 @@ import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { AddExpenseModal } from '../components/AddExpenseModal';
 import { LeaseDocumentUploadSection } from '../components/LeaseDocumentUploadSection';
 import { LeaseDocumentDetailsModal } from '../components/LeaseDocumentDetailsModal';
+import { specializationLabel } from '../constants/workerSpecializations';
+import { useTabRoute } from '../hooks/useTabRoute';
 
 interface LandlordDashboardPageProps {
   onLogout: () => void;
@@ -129,9 +131,17 @@ type LandlordTab =
   | 'account'
   | 'profile';
 
+const LANDLORD_TABS = [
+  'dashboard', 'tracker', 'messages', 'maintenance', 'complaints', 'workers',
+  'financials', 'invoices', 'payments', 'expenses', 'properties', 'units',
+  'tenants', 'leases', 'invitations', 'account', 'profile',
+] as const;
+
 export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ onLogout }) => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<LandlordTab>('dashboard');
+  // Tab state lives in the URL (/landlord/<section>), so refresh, deep links
+  // and Back/Forward all land on the right section.
+  const [activeTab, setActiveTab] = useTabRoute<LandlordTab>('/landlord', 'dashboard', LANDLORD_TABS);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Data states
@@ -2151,7 +2161,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                               <Wrench className="w-5 h-5" />
                             </div>
                             <span className="bg-purple-50 text-[#331A6F] text-[10px] font-black px-2.5 py-1 rounded-full uppercase border border-purple-100">
-                              {w.specialization}
+                              {specializationLabel(w.specialization)}
                             </span>
                           </div>
 

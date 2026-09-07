@@ -15,6 +15,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { api } from '../services/api';
+import { realtime } from '../services/realtime';
 import { useLanguage } from '../context/LanguageContext';
 import {
   ChatMessage,
@@ -65,19 +66,22 @@ export const TenantMessagesTab: React.FC<TenantMessagesTabProps> = ({
   const propertyName = primaryTenancy?.property?.name || '';
   const unitNumber = primaryTenancy?.unit?.unit_number || '';
 
-  // Load conversations
-  const loadConversations = async () => {
+  // Load conversations. `showSpinner` is off for background refreshes so the
+  // list does not flash while a live update comes in.
+  const loadConversations = async (showSpinner = false) => {
     try {
-      setLoading(true);
+      if (showSpinner) setLoading(true);
       const convList = await api.messages.getConversations();
       setConversations(convList);
-      if (convList.length > 0 && !activePartnerId) {
+      // Read the *current* selection from the ref: this function is also called
+      // from intervals and socket handlers that captured an older render.
+      if (convList.length > 0 && !activePartnerRef.current) {
         setActivePartnerId(convList[0].partner_id);
       }
     } catch (err) {
       console.error('Failed to load conversations', err);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
@@ -96,7 +100,7 @@ export const TenantMessagesTab: React.FC<TenantMessagesTabProps> = ({
   };
 
   useEffect(() => {
-    loadConversations();
+    loadConversations(true);
   }, []);
 
   useEffect(() => {
@@ -105,9 +109,41 @@ export const TenantMessagesTab: React.FC<TenantMessagesTabProps> = ({
     }
   }, [activePartnerId]);
 
-  // Light polling so the landlord's reply appears without a manual refresh.
+  // Live updates: the landlord's message arrives over the socket and is
+  // appended immediately - no refresh, no waiting for a poll.
+  useEffect(() => {
+    const unsubscribe = realtime.subscribe((event) => {
+      if (event.type !== 'message.created') return;
+      const incoming: any = event.message;
+      const partner =
+        incoming.sender_role === 'TENANT' ? incoming.recipient_id : incoming.sender_id;
+
+      loadConversations();
+
+      // No thread open yet (first message ever): open this one.
+      if (!activePartnerRef.current && partner) {
+        setActivePartnerId(partner);
+        return;
+      }
+
+      if (partner !== activePartnerRef.current) return;
+
+      setMessages((prev) => {
+        if (incoming.id && prev.some((m) => m.id === incoming.id)) return prev;
+        return [...prev, incoming];
+      });
+
+      if (incoming.sender_role !== 'TENANT' && activePartnerRef.current) {
+        api.messages.markAsRead(activePartnerRef.current).catch(() => undefined);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // Safety net for a dropped socket; skipped entirely while it is connected.
   useEffect(() => {
     const timer = setInterval(() => {
+      if (realtime.connected) return;
       loadConversations();
       if (activePartnerRef.current) {
         api.messages
@@ -115,7 +151,7 @@ export const TenantMessagesTab: React.FC<TenantMessagesTabProps> = ({
           .then(setMessages)
           .catch(() => undefined);
       }
-    }, 15000);
+    }, 20000);
     return () => clearInterval(timer);
   }, []);
 

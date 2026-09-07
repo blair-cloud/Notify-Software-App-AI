@@ -21,6 +21,8 @@ export default defineConfig(() => {
           target: 'http://127.0.0.1:8000',
           changeOrigin: true,
           secure: false,
+          // Needed for the realtime chat socket at /api/v1/ws
+          ws: true,
         },
       },
     },

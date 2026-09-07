@@ -1,4 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
 import { LanguageProvider } from './context/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
@@ -32,396 +40,304 @@ export type ActivePage =
   | 'pricing'
   | 'accept-invitation';
 
-function AppContent() {
-  const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
-  const [currentPage, setCurrentPage] = useState<ActivePage>('home');
-  const [authMode, setAuthMode] = useState<AuthMode>('SIGNUP');
-  const [authInitialRole, setAuthInitialRole] = useState<UserRoleType>('LANDLORD');
-  const [unauthorizedNotice, setUnauthorizedNotice] = useState<string | null>(null);
-  const [accessDeniedState, setAccessDeniedState] = useState<{
-    requiredRole: 'LANDLORD' | 'TENANT' | 'SYSTEM_ADMIN';
-    attemptedSection: string;
-  } | null>(null);
+/** Every page now has its own URL. */
+export const PAGE_PATHS: Record<ActivePage, string> = {
+  'home': '/',
+  'auth': '/login',
+  'landlord-dashboard': '/landlord',
+  'tenant-dashboard': '/tenant',
+  'admin-dashboard': '/admin',
+  'manage-units': '/manage-units',
+  'collect-rent': '/collect-rent',
+  'stay-notified': '/stay-notified',
+  'support': '/support',
+  'pricing': '/pricing',
+  'accept-invitation': '/accept-invitation',
+};
 
-  // Initialize and check path
+const PAGE_TITLES: Record<string, string> = {
+  '/': 'Notify App | Rental & Property Management Software Rwanda ',
+  '/pricing': 'Notify Pricing & Plans — Rental Management Software Kigali',
+  '/support': 'Notify Support & Help Center — Kigali, Rwanda',
+  '/manage-units': 'Notify — Units & Tenants Property Management',
+  '/collect-rent': 'Notify — MoMo & Bank Rent Collection Kigali',
+  '/stay-notified': 'Notify — Automated Rent Reminders & Alerts',
+  '/login': 'Sign In to Notify — Rental & Property Management Platform',
+  '/get-started': 'Sign In to Notify — Rental & Property Management Platform',
+  '/landlord': 'Notify Landlord Dashboard — Mall & Property OS',
+  '/tenant': 'Notify Tenant Portal — Pay Rent & Manage Leases',
+  '/admin': 'Notify System Admin Portal',
+  '/accept-invitation': 'Accept Tenant Invitation — Notify Rwanda',
+};
+
+/** Where a signed-in user's dashboard lives. */
+const dashboardPathForRole = (role?: string): string => {
+  if (role === 'LANDLORD') return '/landlord';
+  if (role === 'TENANT') return '/tenant';
+  if (role === 'SYSTEM_ADMIN') return '/admin';
+  return '/';
+};
+
+interface AuthRouteState {
+  mode?: AuthMode;
+  role?: UserRoleType;
+  notice?: string;
+}
+
+/** Keeps the document title in step with the URL. */
+function useDocumentTitle() {
+  const { pathname } = useLocation();
   useEffect(() => {
-    const path = window.location.pathname.toLowerCase();
+    const root = `/${pathname.split('/')[1] || ''}`;
+    document.title =
+      PAGE_TITLES[pathname] ||
+      PAGE_TITLES[root] ||
+      'Notify App | Rental & Property Management Software Rwanda ';
+  }, [pathname]);
+}
 
-    if (path === '/accept-invitation' || window.location.search.includes('token=')) {
-      setCurrentPage('accept-invitation');
-      return;
-    }
+/**
+ * Shared navigation helpers. These keep the exact behaviour the pages already
+ * relied on (scroll to top, role-aware redirects) while changing the URL.
+ */
+function useAppNavigation() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
-    if (path === '/landlord' || path === '/dashboard') {
-      if (!isAuthenticated && !authLoading) {
-        setUnauthorizedNotice('Please sign in to access the Landlord Dashboard.');
-        setAuthMode('LOGIN');
-        setCurrentPage('auth');
-      } else if (user) {
-        if (user.role === 'LANDLORD' || user.role === 'SYSTEM_ADMIN') {
-          setCurrentPage('landlord-dashboard');
-        } else {
-          setAccessDeniedState({
-            requiredRole: 'LANDLORD',
-            attemptedSection: 'Landlord Dashboard',
-          });
-        }
-      }
-      return;
-    }
-
-    if (path === '/tenant') {
-      if (!isAuthenticated && !authLoading) {
-        setUnauthorizedNotice('Please sign in to access the Tenant Portal.');
-        setAuthMode('LOGIN');
-        setCurrentPage('auth');
-      } else if (user) {
-        if (user.role === 'TENANT' || user.role === 'SYSTEM_ADMIN') {
-          setCurrentPage('tenant-dashboard');
-        } else {
-          setAccessDeniedState({
-            requiredRole: 'TENANT',
-            attemptedSection: 'Tenant Portal',
-          });
-        }
-      }
-      return;
-    }
-
-    if (path === '/login') {
-      setAuthMode('LOGIN');
-      setCurrentPage('auth');
-      return;
-    }
-
-    if (path === '/get-started' || path === '/signup' || path === '/auth') {
-      setAuthMode('SIGNUP');
-      setCurrentPage('auth');
-      return;
-    }
-  }, [isAuthenticated, user, authLoading]);
-
-  // Handle opening auth from buttons (Navbar CTA, Hero, etc.)
-  const handleOpenAuth = (source?: string, mode: AuthMode = 'SIGNUP', role: UserRoleType = 'LANDLORD') => {
-    setUnauthorizedNotice(null);
-    setAccessDeniedState(null);
-    setAuthMode(mode);
-    setAuthInitialRole(role);
-    setCurrentPage('auth');
+  const go = (path: string, state?: AuthRouteState, replace = false) => {
+    navigate(path, { state, replace });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Sync document.title for brand recognition SEO across all views
+  return {
+    goHome: () => go('/'),
+    goToPage: (path: string) => go(path),
+    openAuth: (_source?: string, mode: AuthMode = 'SIGNUP', role: UserRoleType = 'LANDLORD', notice?: string) =>
+      go(mode === 'LOGIN' ? '/login' : '/get-started', { mode, role, notice }),
+    goToDashboard: () => {
+      if (!user) {
+        go('/login', { mode: 'LOGIN', notice: 'Please sign in to access your dashboard.' });
+        return;
+      }
+      go(dashboardPathForRole(user.role));
+    },
+  };
+}
+
+/**
+ * Guards a dashboard route: unauthenticated users get the sign-in page, and a
+ * signed-in user with the wrong role gets the existing Access Denied screen.
+ * Identical rules to the previous state-based checks.
+ */
+function ProtectedRoute({
+  allow,
+  sectionName,
+  requiredRole,
+  children,
+}: {
+  allow: string[];
+  sectionName: string;
+  requiredRole: 'LANDLORD' | 'TENANT' | 'SYSTEM_ADMIN';
+  children: React.ReactNode;
+}) {
+  const { user, isLoading } = useAuth();
+  const nav = useAppNavigation();
+
+  // Wait for the session to restore before deciding - otherwise a refresh on a
+  // dashboard URL would bounce the user to sign-in every time.
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
+        <div className="w-8 h-8 border-2 border-[#331A6F] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <AuthPage
+        initialMode="LOGIN"
+        initialRole={requiredRole === 'TENANT' ? 'TENANT' : 'LANDLORD'}
+        unauthorizedNotice={`Authentication required: Please sign in to access the ${sectionName}.`}
+        onGoHome={nav.goHome}
+        onAuthSuccess={(role) => nav.goToPage(dashboardPathForRole(role))}
+      />
+    );
+  }
+
+  if (!allow.includes(user.role)) {
+    return (
+      <AccessDenied
+        requiredRole={requiredRole}
+        attemptedSection={sectionName}
+        onGoToPermittedDashboard={nav.goToDashboard}
+        onGoHome={nav.goHome}
+      />
+    );
+  }
+
+  return <>{children}</>;
+}
+
+/** The public marketing shell (landing page and the informational pages). */
+function PublicLayout({ children }: { children?: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-notify-grid text-black font-sans selection:bg-[#331A6F] selection:text-white flex flex-col justify-between">
+      <div className="flex-1">{children}</div>
+      <Footer />
+    </div>
+  );
+}
+
+function HomePage() {
+  const nav = useAppNavigation();
+  return (
+    <PublicLayout>
+      <Navbar
+        onOpenGetStarted={(source, mode) => nav.openAuth(source, mode || 'SIGNUP', 'LANDLORD')}
+        onOpenSupport={() => nav.goToPage('/support')}
+        onOpenPricing={() => nav.goToPage('/pricing')}
+        onGoHome={nav.goHome}
+        onGoToDashboard={nav.goToDashboard}
+      />
+      <main>
+        <Hero
+          onOpenGetStarted={() => nav.openAuth('Hero CTA', 'SIGNUP', 'LANDLORD')}
+          onExploreNotify={() => {
+            document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
+          }}
+        />
+        <ValueProposition
+          onSelectFeature={(featureKey) => {
+            const known = ['manage-units', 'collect-rent', 'stay-notified'];
+            nav.goToPage(`/${known.includes(featureKey) ? featureKey : 'manage-units'}`);
+          }}
+        />
+      </main>
+    </PublicLayout>
+  );
+}
+
+/** One of the informational marketing pages. */
+function InfoPage({ Page, ctaLabel }: { Page: any; ctaLabel: string }) {
+  const nav = useAppNavigation();
+  return (
+    <PublicLayout>
+      <Page onBack={nav.goHome} onOpenGetStarted={() => nav.openAuth(ctaLabel, 'SIGNUP', 'LANDLORD')} />
+    </PublicLayout>
+  );
+}
+
+/** Sign in / sign up. The mode comes from the path, with optional route state. */
+function AuthRoute({ mode }: { mode: AuthMode }) {
+  const nav = useAppNavigation();
+  const location = useLocation();
+  const state = (location.state || {}) as AuthRouteState;
+
+  return (
+    <AuthPage
+      initialMode={state.mode || mode}
+      initialRole={state.role || 'LANDLORD'}
+      unauthorizedNotice={state.notice || null}
+      onGoHome={nav.goHome}
+      onAuthSuccess={(role) => nav.goToPage(dashboardPathForRole(role))}
+    />
+  );
+}
+
+function AppRoutes() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  useDocumentTitle();
+
+  // Invitation links have historically arrived with ?token= on any path.
   useEffect(() => {
-    const titles: Record<ActivePage, string> = {
-      'home': 'Notify App | Rental & Property Management Software Rwanda ',
-      'pricing': 'Notify Pricing & Plans — Rental Management Software Kigali',
-      'support': 'Notify Support & Help Center — Kigali, Rwanda',
-      'manage-units': 'Notify — Units & Tenants Property Management',
-      'collect-rent': 'Notify — MoMo & Bank Rent Collection Kigali',
-      'stay-notified': 'Notify — Automated Rent Reminders & Alerts',
-      'auth': 'Sign In to Notify — Rental & Property Management Platform',
-      'landlord-dashboard': 'Notify Landlord Dashboard — Mall & Property OS',
-      'tenant-dashboard': 'Notify Tenant Portal — Pay Rent & Manage Leases',
-      'admin-dashboard': 'Notify System Admin Portal',
-      'accept-invitation': 'Accept Tenant Invitation — Notify Rwanda',
-    };
-    document.title = titles[currentPage] || 'Notify App | Rental & Property Management Software Rwanda ';
-  }, [currentPage]);
-
-  const handleNavigate = (page: ActivePage) => {
-    setAccessDeniedState(null);
-    setUnauthorizedNotice(null);
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleGoHome = () => {
-    setAccessDeniedState(null);
-    setUnauthorizedNotice(null);
-    setCurrentPage('home');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Direct dashboard navigation (handles role protection)
-  const handleGoToDashboard = () => {
-    setAccessDeniedState(null);
-    setUnauthorizedNotice(null);
-
-    if (!user) {
-      setUnauthorizedNotice('Please sign in to access your dashboard.');
-      setAuthMode('LOGIN');
-      setCurrentPage('auth');
-      return;
+    if (
+      location.pathname !== '/accept-invitation' &&
+      new URLSearchParams(location.search).has('token')
+    ) {
+      navigate(`/accept-invitation${location.search}`, { replace: true });
     }
-
-    if (user.role === 'LANDLORD') {
-      setCurrentPage('landlord-dashboard');
-    } else if (user.role === 'TENANT') {
-      setCurrentPage('tenant-dashboard');
-    } else if (user.role === 'SYSTEM_ADMIN') {
-      setCurrentPage('admin-dashboard');
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Protected route enforcement for Landlord section
-  const handleAccessLandlordSection = () => {
-    if (!user) {
-      setUnauthorizedNotice('Please sign in with a Landlord account to access the Landlord Dashboard.');
-      setAuthMode('LOGIN');
-      setCurrentPage('auth');
-      return;
-    }
-    if (user.role !== 'LANDLORD' && user.role !== 'SYSTEM_ADMIN') {
-      setAccessDeniedState({
-        requiredRole: 'LANDLORD',
-        attemptedSection: 'Landlord Dashboard',
-      });
-      return;
-    }
-    setCurrentPage('landlord-dashboard');
-  };
-
-  // Protected route enforcement for Tenant section
-  const handleAccessTenantSection = () => {
-    if (!user) {
-      setUnauthorizedNotice('Please sign in with a Tenant account to access the Tenant Portal.');
-      setAuthMode('LOGIN');
-      setCurrentPage('auth');
-      return;
-    }
-    if (user.role !== 'TENANT' && user.role !== 'SYSTEM_ADMIN') {
-      setAccessDeniedState({
-        requiredRole: 'TENANT',
-        attemptedSection: 'Tenant Portal',
-      });
-      return;
-    }
-    setCurrentPage('tenant-dashboard');
-  };
-
-  const handleAuthSuccess = (role: string) => {
-    setUnauthorizedNotice(null);
-    setAccessDeniedState(null);
-    if (role === 'LANDLORD') {
-      setCurrentPage('landlord-dashboard');
-    } else if (role === 'TENANT') {
-      setCurrentPage('tenant-dashboard');
-    } else if (role === 'SYSTEM_ADMIN') {
-      setCurrentPage('admin-dashboard');
-    } else {
-      setCurrentPage('home');
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, [location.pathname, location.search, navigate]);
 
   const handleLogout = async () => {
     await logout();
-    setAccessDeniedState(null);
-    setUnauthorizedNotice(null);
-    setCurrentPage('home');
+    navigate('/', { replace: true });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleExploreNotify = () => {
-    const featuresElement = document.getElementById('features');
-    if (featuresElement) {
-      featuresElement.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
 
-  // ---------------- Render Main Content ----------------
-  const renderMainContent = () => {
-    // 1. Access Denied (Role Mismatch)
-    if (accessDeniedState) {
-      return (
-        <AccessDenied
-          requiredRole={accessDeniedState.requiredRole}
-          attemptedSection={accessDeniedState.attemptedSection}
-          onGoToPermittedDashboard={handleGoToDashboard}
-          onGoHome={handleGoHome}
-        />
-      );
-    }
+      {/* Public informational pages */}
+      <Route path="/manage-units" element={<InfoPage Page={ManageUnitsPage} ctaLabel="Manage Units CTA" />} />
+      <Route path="/collect-rent" element={<InfoPage Page={CollectRentPage} ctaLabel="Collect Rent CTA" />} />
+      <Route path="/stay-notified" element={<InfoPage Page={StayNotifiedPage} ctaLabel="Stay Notified CTA" />} />
+      <Route path="/support" element={<InfoPage Page={SupportPage} ctaLabel="Support CTA" />} />
+      <Route path="/pricing" element={<InfoPage Page={PricingPage} ctaLabel="Pricing CTA" />} />
 
-    // 2. Invitation Acceptance Page
-    if (currentPage === 'accept-invitation') {
-      return (
-        <AcceptInvitationPage
-          onGoToTenantHome={handleGoToDashboard}
-          onGoToLanding={handleGoHome}
-        />
-      );
-    }
+      {/* Authentication */}
+      <Route path="/login" element={<AuthRoute mode="LOGIN" />} />
+      <Route path="/get-started" element={<AuthRoute mode="SIGNUP" />} />
+      <Route path="/signup" element={<Navigate to="/get-started" replace />} />
+      <Route path="/auth" element={<Navigate to="/get-started" replace />} />
 
-    // 3. Dedicated Authentication Page (Neo-Brutalism Login / Sign Up / Forgot Password)
-    if (currentPage === 'auth') {
-      return (
-        <AuthPage
-          initialMode={authMode}
-          initialRole={authInitialRole}
-          unauthorizedNotice={unauthorizedNotice}
-          onGoHome={handleGoHome}
-          onAuthSuccess={handleAuthSuccess}
-        />
-      );
-    }
+      <Route path="/accept-invitation" element={<AcceptInvitationRoute />} />
 
-    // 4. Protected Landlord Dashboard
-    if (currentPage === 'landlord-dashboard') {
-      if (!user) {
-        return (
-          <AuthPage
-            initialMode="LOGIN"
-            initialRole="LANDLORD"
-            unauthorizedNotice="Authentication required: Please sign in to access the Landlord Dashboard."
-            onGoHome={handleGoHome}
-            onAuthSuccess={handleAuthSuccess}
-          />
-        );
-      }
-      if (user.role !== 'LANDLORD' && user.role !== 'SYSTEM_ADMIN') {
-        return (
-          <AccessDenied
-            requiredRole="LANDLORD"
-            attemptedSection="Landlord Dashboard"
-            onGoToPermittedDashboard={handleGoToDashboard}
-            onGoHome={handleGoHome}
-          />
-        );
-      }
-      return <LandlordDashboardPage onLogout={handleLogout} />;
-    }
+      {/* Landlord: /landlord and /landlord/<section> */}
+      <Route
+        path="/landlord/:tab?"
+        element={
+          <ProtectedRoute allow={['LANDLORD', 'SYSTEM_ADMIN']} requiredRole="LANDLORD" sectionName="Landlord Dashboard">
+            <LandlordDashboardPage onLogout={handleLogout} />
+          </ProtectedRoute>
+        }
+      />
 
-    // 5. Protected Tenant Portal
-    if (currentPage === 'tenant-dashboard') {
-      if (!user) {
-        return (
-          <AuthPage
-            initialMode="LOGIN"
-            initialRole="TENANT"
-            unauthorizedNotice="Authentication required: Please sign in to access the Tenant Portal."
-            onGoHome={handleGoHome}
-            onAuthSuccess={handleAuthSuccess}
-          />
-        );
-      }
-      if (user.role !== 'TENANT' && user.role !== 'SYSTEM_ADMIN') {
-        return (
-          <AccessDenied
-            requiredRole="TENANT"
-            attemptedSection="Tenant Portal"
-            onGoToPermittedDashboard={handleGoToDashboard}
-            onGoHome={handleGoHome}
-          />
-        );
-      }
-      return <TenantDashboardPage onLogout={handleLogout} />;
-    }
+      {/* Tenant: /tenant and /tenant/<section> */}
+      <Route
+        path="/tenant/:tab?"
+        element={
+          <ProtectedRoute allow={['TENANT', 'SYSTEM_ADMIN']} requiredRole="TENANT" sectionName="Tenant Portal">
+            <TenantDashboardPage onLogout={handleLogout} />
+          </ProtectedRoute>
+        }
+      />
 
-    // 6. Protected Admin Dashboard
-    if (currentPage === 'admin-dashboard') {
-      if (!user || user.role !== 'SYSTEM_ADMIN') {
-        return (
-          <AccessDenied
-            requiredRole="SYSTEM_ADMIN"
-            attemptedSection="System Administration"
-            onGoToPermittedDashboard={handleGoToDashboard}
-            onGoHome={handleGoHome}
-          />
-        );
-      }
-      return <SystemAdminDashboardPage onLogout={handleLogout} />;
-    }
+      {/* System admin: /admin and /admin/<section> */}
+      <Route
+        path="/admin/:tab?"
+        element={
+          <ProtectedRoute allow={['SYSTEM_ADMIN']} requiredRole="SYSTEM_ADMIN" sectionName="System Administration">
+            <SystemAdminDashboardPage onLogout={handleLogout} />
+          </ProtectedRoute>
+        }
+      />
 
-    // 7. Public Informational Pages & Landing
-    return (
-      <div className="min-h-screen bg-notify-grid text-black font-sans selection:bg-[#331A6F] selection:text-white flex flex-col justify-between">
-        <div className="flex-1">
-          {currentPage === 'manage-units' && (
-            <ManageUnitsPage
-              onBack={handleGoHome}
-              onOpenGetStarted={() => handleOpenAuth('Manage Units CTA', 'SIGNUP', 'LANDLORD')}
-            />
-          )}
+      {/* Legacy entry point kept working */}
+      <Route path="/dashboard" element={<Navigate to={dashboardPathForRole(user?.role)} replace />} />
 
-          {currentPage === 'collect-rent' && (
-            <CollectRentPage
-              onBack={handleGoHome}
-              onOpenGetStarted={() => handleOpenAuth('Collect Rent CTA', 'SIGNUP', 'LANDLORD')}
-            />
-          )}
+      {/* Unknown URL: back to the landing page rather than a blank screen */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
 
-          {currentPage === 'stay-notified' && (
-            <StayNotifiedPage
-              onBack={handleGoHome}
-              onOpenGetStarted={() => handleOpenAuth('Stay Notified CTA', 'SIGNUP', 'LANDLORD')}
-            />
-          )}
-
-          {currentPage === 'support' && (
-            <SupportPage
-              onBack={handleGoHome}
-              onOpenGetStarted={() => handleOpenAuth('Support CTA', 'SIGNUP', 'LANDLORD')}
-            />
-          )}
-
-          {currentPage === 'pricing' && (
-            <PricingPage
-              onBack={handleGoHome}
-              onOpenGetStarted={() => handleOpenAuth('Pricing CTA', 'SIGNUP', 'LANDLORD')}
-            />
-          )}
-
-          {currentPage === 'home' && (
-            <>
-              <Navbar
-                onOpenGetStarted={(source, mode) => handleOpenAuth(source, mode || 'SIGNUP', 'LANDLORD')}
-                onOpenSupport={() => handleNavigate('support')}
-                onOpenPricing={() => handleNavigate('pricing')}
-                onGoHome={handleGoHome}
-                onGoToDashboard={handleGoToDashboard}
-              />
-
-              <main>
-                <Hero
-                  onOpenGetStarted={() => handleOpenAuth('Hero CTA', 'SIGNUP', 'LANDLORD')}
-                  onExploreNotify={handleExploreNotify}
-                />
-
-                <ValueProposition
-                  onSelectFeature={(featureKey) => {
-                    if (
-                      featureKey === 'manage-units' ||
-                      featureKey === 'collect-rent' ||
-                      featureKey === 'stay-notified'
-                    ) {
-                      handleNavigate(featureKey);
-                    } else {
-                      handleNavigate('manage-units');
-                    }
-                  }}
-                />
-              </main>
-            </>
-          )}
-        </div>
-
-        <Footer />
-      </div>
-    );
-  };
-
-  return <>{renderMainContent()}</>;
+function AcceptInvitationRoute() {
+  const nav = useAppNavigation();
+  return <AcceptInvitationPage onGoToTenantHome={nav.goToDashboard} onGoToLanding={nav.goHome} />;
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <LanguageProvider>
-        <AppContent />
-      </LanguageProvider>
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <LanguageProvider>
+          <AppRoutes />
+        </LanguageProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

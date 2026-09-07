@@ -217,6 +217,11 @@ class WorkerSpecialization(str, enum.Enum):
     CARPENTER = "CARPENTER"
     CLEANER = "CLEANER"
     SECURITY = "SECURITY"
+    # Trades the technician directory already offers; kept within the column's
+    # VARCHAR(11) so no migration is needed.
+    HVAC = "HVAC"
+    PAINTER = "PAINTER"
+    LOCKSMITH = "LOCKSMITH"
     GENERAL = "GENERAL"
     OTHER = "OTHER"
 

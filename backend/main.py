@@ -9,7 +9,8 @@ if str(root_dir) not in sys.path:
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 
 from backend.core.config import settings
@@ -19,7 +20,7 @@ from backend.core.logging import logger
 from backend.api.v1 import (
     auth, properties, units, invitations, admin, landlords, tenants,
     notifications, tenancies, leases, invoices, payments, receipts, expenses, financials,
-    maintenance, complaints, messages, tracker
+    maintenance, complaints, messages, tracker, realtime
 )
 
 
@@ -106,6 +107,7 @@ app.include_router(maintenance.router, prefix="/api/v1")
 app.include_router(complaints.router, prefix="/api/v1")
 app.include_router(messages.router, prefix="/api/v1")
 app.include_router(tracker.router, prefix="/api/v1")
+app.include_router(realtime.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health", tags=["Health"])
@@ -115,6 +117,39 @@ async def health_check():
         "app_name": settings.APP_NAME,
         "environment": settings.ENVIRONMENT
     }
+
+
+# ----------------------------------------------------------------------
+# Single-page app hosting.
+#
+# The frontend uses real URLs (/landlord/properties, /tenant/lease, ...), so a
+# refresh or a pasted link asks this server for a path it has no route for.
+# When a built frontend is present we serve its assets and fall back to
+# index.html for any non-API path, letting the client router take over.
+# In development the Vite dev server does this itself and this block is inert.
+# ----------------------------------------------------------------------
+FRONTEND_DIST = root_dir / "frontend" / "dist"
+
+if FRONTEND_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        # Never swallow API or docs traffic - those must keep 404ing honestly.
+        if full_path.startswith(("api/", "docs", "redoc", "openapi.json")):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+        # Serve a real file when the path points at one (favicon, robots.txt...).
+        candidate = (FRONTEND_DIST / full_path).resolve()
+        if full_path and candidate.is_file() and str(candidate).startswith(str(FRONTEND_DIST.resolve())):
+            return FileResponse(str(candidate))
+
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+else:
+    logger.info(
+        "No built frontend at %s - SPA fallback disabled (the Vite dev server handles it).",
+        FRONTEND_DIST,
+    )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Expense, Property, Unit, ExpenseCategory } from '../types';
+import React, { useEffect, useState } from 'react';
+import { Expense, Property, Unit, ExpenseCategory, ExpenseSummary } from '../types';
 import {
+  AlertTriangle,
   Receipt,
   Plus,
   Search,
@@ -55,6 +56,24 @@ export const LandlordExpensesTab: React.FC<LandlordExpensesTabProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
   const [actionErrorMsg, setActionErrorMsg] = useState<string | null>(null);
+  const [summary, setSummary] = useState<ExpenseSummary | null>(null);
+
+  // Server-side totals: they also know about repair costs recorded on
+  // maintenance tickets that have not been posted as an expense yet.
+  useEffect(() => {
+    let cancelled = false;
+    api.expenses
+      .getSummary()
+      .then((data) => {
+        if (!cancelled) setSummary(data);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expenses]);
 
   // Aggregations
   const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
@@ -67,6 +86,17 @@ export const LandlordExpensesTab: React.FC<LandlordExpensesTabProps> = ({
   const utilityExpenses = expenses
     .filter((e) => e.category === 'UTILITIES')
     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+  // How much of the repair bill came from maintenance tickets, and how much
+  // has been spent but not yet posted to the books.
+  const maintenanceFromTickets =
+    summary?.maintenance_from_tickets ??
+    expenses
+      .filter((e) => e.maintenance_request_id)
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const maintenanceTicketCount =
+    summary?.maintenance_ticket_count ?? expenses.filter((e) => e.maintenance_request_id).length;
+  const unpostedMaintenance = summary?.maintenance_unposted ?? 0;
 
   // Filtered expenses
   const filteredExpenses = expenses.filter((e) => {
@@ -102,7 +132,7 @@ export const LandlordExpensesTab: React.FC<LandlordExpensesTabProps> = ({
   };
 
   const handleExportCSV = () => {
-    const headers = ['Date', 'Category', 'Description', 'Property', 'Unit', 'Vendor', 'Reference', 'Amount (RWF)'];
+    const headers = ['Date', 'Category', 'Description', 'Property', 'Unit', 'Vendor', 'Reference', 'Source', 'Amount (RWF)'];
     const rows = filteredExpenses.map((e) => [
       e.expense_date,
       e.category,
@@ -111,6 +141,7 @@ export const LandlordExpensesTab: React.FC<LandlordExpensesTabProps> = ({
       e.unit_number || 'Common Area',
       `"${e.vendor || ''}"`,
       e.reference || '',
+      e.maintenance_request_number || 'Manual',
       e.amount,
     ]);
 
@@ -193,7 +224,17 @@ export const LandlordExpensesTab: React.FC<LandlordExpensesTabProps> = ({
           <div className="text-2xl font-black text-orange-700 mt-2">
             RWF {maintenanceExpenses.toLocaleString()}
           </div>
-          <p className="text-[11px] text-orange-800 mt-1 font-medium">Plumbing, electrical & fixtures</p>
+          <p className="text-[11px] text-orange-800 mt-1 font-medium">
+            {maintenanceFromTickets > 0
+              ? `RWF ${maintenanceFromTickets.toLocaleString()} from ${maintenanceTicketCount} maintenance ticket${maintenanceTicketCount === 1 ? '' : 's'}`
+              : 'Plumbing, electrical & fixtures'}
+          </p>
+          {unpostedMaintenance > 0 && (
+            <p className="text-[11px] text-amber-700 mt-1.5 font-bold flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              RWF {unpostedMaintenance.toLocaleString()} on resolved tickets not yet posted
+            </p>
+          )}
         </div>
 
         {/* Security */}
@@ -418,6 +459,15 @@ export const LandlordExpensesTab: React.FC<LandlordExpensesTabProps> = ({
                         <div className="font-bold text-slate-900">{exp.description}</div>
                         {exp.vendor && (
                           <div className="text-[11px] text-slate-500 font-medium">Vendor: {exp.vendor}</div>
+                        )}
+                        {exp.maintenance_request_id && (
+                          <span
+                            title={exp.maintenance_title || 'Posted from a maintenance job'}
+                            className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded"
+                          >
+                            <Wrench className="w-2.5 h-2.5" />
+                            {exp.maintenance_request_number || 'Maintenance ticket'}
+                          </span>
                         )}
                       </td>
 

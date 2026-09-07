@@ -26,6 +26,7 @@ from backend.models.role import (
     ExpenseStatus,
     NotificationType,
 )
+from backend.services.expense_service import ExpenseService
 from backend.schemas.maintenance import (
     MaintenanceRequestCreate,
     MaintenanceRequestUpdate,
@@ -258,10 +259,14 @@ class MaintenanceService:
                 description=f"Maintenance {req.request_number}: {req.title}",
                 expense_date=now.date(),
                 status=ExpenseStatus.RECORDED,
+                maintenance_request_id=req.id,
             )
             session.add(expense)
             await session.flush()
             req.expense_id = expense.id
+        elif req.expense_id and data.actual_cost is not None:
+            # Cost revised after it was already posted: keep the books correct.
+            await ExpenseService.sync_from_maintenance(session, req)
 
         # Notify Tenant
         await cls._notify_tenant(
@@ -297,6 +302,7 @@ class MaintenanceService:
             description=f"Maintenance {req.request_number}: {req.title}",
             expense_date=now.date(),
             status=ExpenseStatus.RECORDED,
+            maintenance_request_id=req.id,
         )
         session.add(expense)
         await session.flush()

@@ -56,6 +56,7 @@ import { TENANT_DOC_STATUS_META } from '../components/LeaseDocumentDetailsModal'
 import { TenantLeaseDocumentModal } from '../components/TenantLeaseDocumentModal';
 import { TenantLeaseCountdownCard } from '../components/TenantLeaseCountdownCard';
 import { TenantProfileSettingsTab } from '../components/TenantProfileSettingsTab';
+import { useTabRoute } from '../hooks/useTabRoute';
 
 interface TenantDashboardPageProps {
   onLogout: () => void;
@@ -63,12 +64,23 @@ interface TenantDashboardPageProps {
 
 type TenantTab = 'home' | 'lease' | 'payments' | 'messages' | 'profile' | 'invoices' | 'receipts';
 
+const TENANT_TABS = ['home', 'lease', 'payments', 'messages', 'profile', 'invoices', 'receipts'] as const;
+
 export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogout }) => {
   const { user } = useAuth();
   const { t, language, setLanguage } = useLanguage();
 
-  const [activeTab, setActiveTab] = useState<TenantTab>('home');
+  // Tab state lives in the URL (/tenant/<section>).
+  const [routeTab, setActiveTab] = useTabRoute<TenantTab>('/tenant', 'home', TENANT_TABS);
   const [paymentSubTab, setPaymentSubTab] = useState<'invoices' | 'history'>('invoices');
+
+  // /tenant/invoices and /tenant/receipts are deep links into the Payments tab
+  // rather than tabs of their own, matching what switchTab already did.
+  const activeTab: TenantTab = routeTab === 'invoices' || routeTab === 'receipts' ? 'payments' : routeTab;
+  useEffect(() => {
+    if (routeTab === 'invoices') setPaymentSubTab('invoices');
+    if (routeTab === 'receipts') setPaymentSubTab('history');
+  }, [routeTab]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [messagesMaintenanceMode, setMessagesMaintenanceMode] = useState<boolean>(false);
 

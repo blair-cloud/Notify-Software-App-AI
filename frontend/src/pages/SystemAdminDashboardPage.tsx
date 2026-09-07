@@ -22,14 +22,22 @@ import { AdminComplianceTab } from '../components/admin/AdminComplianceTab';
 import { AdminReportsTab } from '../components/admin/AdminReportsTab';
 import { AdminSettingsTab } from '../components/admin/AdminSettingsTab';
 import { AdminAuditLogsTab } from '../components/admin/AdminAuditLogsTab';
+import { useTabRoute } from '../hooks/useTabRoute';
 
 interface SystemAdminDashboardPageProps {
   onLogout: () => void;
 }
 
+const ADMIN_TABS = [
+  'overview', 'landlords', 'tenants', 'users_roles', 'properties', 'units',
+  'leases', 'invoices', 'payments', 'expenses', 'maintenance', 'notifications',
+  'documents', 'compliance', 'reports', 'settings', 'audit_logs',
+] as const;
+
 export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> = ({ onLogout }) => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<AdminTabKey>('overview');
+  // Tab state lives in the URL (/admin/<section>).
+  const [activeTab, setActiveTab] = useTabRoute<AdminTabKey>('/admin', 'overview', ADMIN_TABS);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
