@@ -11,19 +11,19 @@ interface PaymentModalProps {
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({ invoice, onClose, onPaymentSuccess }) => {
-  if (!invoice) return null;
-
   const { t } = useLanguage();
   const [paymentChannel, setPaymentChannel] = useState<PaymentChannel>('ONLINE');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('MOBILE_MONEY');
   const [phoneNumber, setPhoneNumber] = useState('+250 788 123 456');
   const [txReference, setTxReference] = useState('');
   const [notes, setNotes] = useState('');
-  const [customAmount, setCustomAmount] = useState<number>(invoice.balance_due);
+  const [customAmount, setCustomAmount] = useState<number>(invoice?.balance_due || 0);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [completedResult, setCompletedResult] = useState<any | null>(null);
+
+  if (!invoice) return null;
 
   const handleProcessPayment = async (e: React.FormEvent) => {
     e.preventDefault();

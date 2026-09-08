@@ -941,7 +941,18 @@ ALTER TABLE bank_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE receipts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payment_matches ENABLE ROW LEVEL SECURITY;
 
--- Grant Full Access to Service Role and Authenticated Users for App Functionality
+-- Only the service role reaches these tables.
+--
+-- The application does not use Supabase Auth or PostgREST: the FastAPI backend
+-- connects over DATABASE_URL and enforces per-user access itself, and no browser
+-- code holds a Supabase client. Nothing legitimate therefore arrives as the
+-- `anon` or `authenticated` PostgREST roles.
+--
+-- The previous policy set granted `anon` SELECT on every table with USING(true).
+-- The anon key is publishable by design, so that made every row - including
+-- users.password_hash and sessions.refresh_token_hash - readable by anyone
+-- holding it. `authenticated` likewise had FOR ALL USING(true) on everything.
+-- Both are dropped here; RLS now denies by default and only service_role passes.
 DO $$
 DECLARE
     tbl text;
@@ -951,15 +962,18 @@ BEGIN
     LOOP
         EXECUTE format('DROP POLICY IF EXISTS "service_role_full_access" ON %I', tbl);
         EXECUTE format('CREATE POLICY "service_role_full_access" ON %I FOR ALL TO service_role USING (true) WITH CHECK (true)', tbl);
-        
+
+        -- Removed: these exposed every table to any holder of the anon key.
         EXECUTE format('DROP POLICY IF EXISTS "allow_authenticated_all" ON %I', tbl);
-        EXECUTE format('CREATE POLICY "allow_authenticated_all" ON %I FOR ALL TO authenticated USING (true) WITH CHECK (true)', tbl);
-        
         EXECUTE format('DROP POLICY IF EXISTS "allow_anon_read" ON %I', tbl);
-        EXECUTE format('CREATE POLICY "allow_anon_read" ON %I FOR SELECT TO anon USING (true)', tbl);
     END LOOP;
 END;
 $$;
+
+-- Belt and braces: even without a policy, revoke the table grants PostgREST
+-- relies on, so a future ENABLE-less table is not silently exposed.
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
 
 -- =============================================================================
 -- STEP 6: STORAGE BUCKETS CONFIGURATION
@@ -967,21 +981,28 @@ $$;
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES 
-    ('notify-documents', 'notify-documents', true, 52428800, ARRAY['application/pdf', 'image/jpeg', 'image/png']),
+    -- notify-documents holds leases and other personal paperwork, so it is
+    -- private: the backend hands out short-lived signed URLs for it. Avatars and
+    -- property images stay public because they are displayed openly.
+    ('notify-documents', 'notify-documents', false, 52428800, ARRAY['application/pdf', 'image/jpeg', 'image/png']),
     ('notify-avatars', 'notify-avatars', true, 10485760, ARRAY['image/jpeg', 'image/png', 'image/webp']),
     ('notify-property-images', 'notify-property-images', true, 20971520, ARRAY['image/jpeg', 'image/png', 'image/webp'])
-ON CONFLICT (id) DO UPDATE SET public = true;
+ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;
 
 DO $$
 BEGIN
     DROP POLICY IF EXISTS "Public Read notify-documents" ON storage.objects;
+    DROP POLICY IF EXISTS "Service Read notify-documents" ON storage.objects;
     DROP POLICY IF EXISTS "Public Read notify-avatars" ON storage.objects;
     DROP POLICY IF EXISTS "Public Read notify-property-images" ON storage.objects;
     DROP POLICY IF EXISTS "Auth Upload notify-documents" ON storage.objects;
     DROP POLICY IF EXISTS "Auth Upload notify-avatars" ON storage.objects;
     DROP POLICY IF EXISTS "Auth Upload notify-property-images" ON storage.objects;
 
-    CREATE POLICY "Public Read notify-documents" ON storage.objects FOR SELECT USING (bucket_id = 'notify-documents');
+    -- No public read on notify-documents: a lease PDF was world-readable to
+    -- anyone who learned its URL, which defeated the signed URLs the backend
+    -- already generates. Reads there go through service_role.
+    CREATE POLICY "Service Read notify-documents" ON storage.objects FOR SELECT TO service_role USING (bucket_id = 'notify-documents');
     CREATE POLICY "Public Read notify-avatars" ON storage.objects FOR SELECT USING (bucket_id = 'notify-avatars');
     CREATE POLICY "Public Read notify-property-images" ON storage.objects FOR SELECT USING (bucket_id = 'notify-property-images');
 

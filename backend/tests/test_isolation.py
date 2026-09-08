@@ -1,3 +1,6 @@
+import os
+import uuid
+
 import asyncio
 import pytest
 import pytest_asyncio
@@ -16,7 +19,18 @@ from backend.schemas.property import PropertyCreate
 from backend.schemas.unit import UnitCreate
 from backend.schemas.invitation import InvitationCreate
 
-TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+# These tests exercise the service layer's ownership rules against a real
+# database. SQLite is gone, so they need a PostgreSQL URL - point TEST_DATABASE_URL
+# at a scratch database (a local Postgres, or a second Supabase project). They
+# skip rather than fail when one is not configured, because they create and drop
+# the whole schema and must never be aimed at production data.
+TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "")
+
+pytestmark = pytest.mark.skipif(
+    not TEST_DB_URL,
+    reason="Set TEST_DATABASE_URL to a scratch PostgreSQL database to run the isolation tests.",
+)
+
 
 @pytest_asyncio.fixture
 async def async_session():
@@ -40,19 +54,19 @@ async def test_security_isolation_scenarios(async_session: AsyncSession):
     inv_service = InvitationService(async_session)
 
     # Setup Landlord A
-    u_la = User(email="la@notify.rw", phone="+250788111111", password_hash="hash", first_name="Landlord", last_name="A", role=UserRole.LANDLORD)
+    u_la = User(id=uuid.uuid4(), email="la@notify.rw", phone="+250788111111", first_name="Landlord", last_name="A", role=UserRole.LANDLORD)
     await user_repo.create_user(u_la)
     lp_a = LandlordProfile(user_id=u_la.id, business_name="Landlord A Corp")
     await user_repo.create_landlord_profile(lp_a)
 
     # Setup Landlord B
-    u_lb = User(email="lb@notify.rw", phone="+250788222222", password_hash="hash", first_name="Landlord", last_name="B", role=UserRole.LANDLORD)
+    u_lb = User(id=uuid.uuid4(), email="lb@notify.rw", phone="+250788222222", first_name="Landlord", last_name="B", role=UserRole.LANDLORD)
     await user_repo.create_user(u_lb)
     lp_b = LandlordProfile(user_id=u_lb.id, business_name="Landlord B Corp")
     await user_repo.create_landlord_profile(lp_b)
 
     # Setup Tenant A
-    u_ta = User(email="ta@notify.rw", phone="+250788333333", password_hash="hash", first_name="Tenant", last_name="A", role=UserRole.TENANT)
+    u_ta = User(id=uuid.uuid4(), email="ta@notify.rw", phone="+250788333333", first_name="Tenant", last_name="A", role=UserRole.TENANT)
     await user_repo.create_user(u_ta)
     tp_a = TenantProfile(user_id=u_ta.id, national_id="1199000111")
     await user_repo.create_tenant_profile(tp_a)

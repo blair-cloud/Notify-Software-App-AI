@@ -3,7 +3,6 @@ import path from "path";
 import { spawn, spawnSync, execSync } from "child_process";
 import proxy from "express-http-proxy";
 import { createServer as createViteServer } from "vite";
-import { authRouter, invitationsRouter } from "./server/auth";
 
 async function startServer() {
   const app = express();
@@ -17,17 +16,36 @@ async function startServer() {
     res.json({ status: "ok", service: "notify-app" });
   });
 
-  // Dedicated real backend authentication & invitation endpoints
-  app.use("/api/v1/auth", authRouter);
-  app.use("/api/v1/invitations", invitationsRouter);
+  // NOTE: this server used to mount its own Express auth + invitation routers
+  // here, backed by backend/data/users.json. Because they were registered
+  // before the FastAPI proxy below, every /api/v1/auth request was answered by
+  // them and never reached FastAPI - so accounts were written to a JSON file
+  // and never appeared in the database. They are gone; authentication is the
+  // FastAPI backend's job, and it is the only user store.
 
-  // 1. Run database seed if python3 is available
+  // Windows ships `python`, most Linux/macOS setups ship `python3`. Picking
+  // the wrong one silently skipped starting the backend altogether.
+  const PYTHON = ["python3", "python", "py"].find((exe) => {
+    try {
+      return spawnSync(exe, ["--version"], { stdio: "ignore" }).status === 0;
+    } catch {
+      return false;
+    }
+  });
+
+  if (!PYTHON) {
+    console.warn(
+      "No Python interpreter found (tried python3, python, py). The API cannot start; " +
+        "install Python or run the backend yourself with: uvicorn backend.main:app --port 8000"
+    );
+  }
+
+  // 1. Run database seed if Python is available
   try {
-    const checkPython = spawnSync("python3", ["--version"], { stdio: "ignore" });
-    if (checkPython.status === 0) {
+    if (PYTHON) {
       console.log("Seeding development database...");
       try {
-        execSync("python3 -m backend.seed.development_seed", { stdio: "ignore" });
+        execSync(`${PYTHON} -m backend.seed.supabase_seed`, { stdio: "ignore" });
         console.log("Database seed completed successfully.");
       } catch (seedErr) {
         console.log("Database seed completed with warnings or skipped.");
@@ -40,11 +58,13 @@ async function startServer() {
   // 2. Spawn FastAPI backend if uvicorn is available
   let uvicornProcess: any = null;
   try {
-    const checkUvicorn = spawnSync("python3", ["-c", "import uvicorn"], { stdio: "ignore" });
+    const checkUvicorn = PYTHON
+      ? spawnSync(PYTHON, ["-c", "import uvicorn"], { stdio: "ignore" })
+      : { status: 1 };
     if (checkUvicorn.status === 0) {
       console.log("Starting FastAPI backend server on port 8000...");
       uvicornProcess = spawn(
-        "python3",
+        PYTHON as string,
         ["-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "8000"],
         { stdio: "inherit" }
       );
@@ -71,7 +91,10 @@ async function startServer() {
         process.exit();
       });
     } else {
-      console.log("FastAPI backend not running in container; full client-side demo and mock system active.");
+      console.warn(
+        "uvicorn is not installed, so the API is not running. Install it with: " +
+          "pip install -r backend/requirements.txt"
+      );
     }
   } catch (err) {
     console.log("FastAPI process initialization skipped.");

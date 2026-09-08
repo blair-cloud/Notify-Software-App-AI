@@ -1,9 +1,9 @@
 """
 WebSocket endpoint that pushes new messages to whoever is party to them.
 
-The browser's WebSocket API cannot set an Authorization header, so the access
-token is passed as a query parameter and validated with the same JWT decoder
-the REST dependencies use.
+The browser's WebSocket API cannot set an Authorization header, so the Supabase
+access token is passed as a query parameter and verified the same way the REST
+dependencies verify it.
 """
 import uuid
 
@@ -13,7 +13,7 @@ from sqlalchemy import select
 from backend.core import database
 from backend.core.logging import logger
 from backend.core.realtime import realtime
-from backend.core.security import decode_jwt_token
+from backend.core.supabase_auth import verify_supabase_token
 from backend.models import User, UserStatus
 
 router = APIRouter(tags=["Realtime"])
@@ -21,8 +21,8 @@ router = APIRouter(tags=["Realtime"])
 
 async def _resolve_user(token: str) -> User | None:
     try:
-        payload = decode_jwt_token(token)
-        user_id = uuid.UUID(payload.get("sub"))
+        claims = await verify_supabase_token(token)
+        user_id = uuid.UUID(str(claims.get("sub")))
     except Exception:
         return None
 

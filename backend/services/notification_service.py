@@ -357,8 +357,8 @@ class NotificationService:
         1. Checks all leases.
         2. Computes days remaining until expiration.
         3. Updates lease status dynamically:
-           - > 30 days: ACTIVE
-           - 0 <= days <= 30: EXPIRING_SOON
+           - > 5 days: ACTIVE
+           - 0 <= days <= 5: EXPIRING_SOON
            - < 0 days: EXPIRED
         4. Matches against key milestone schedules: 30d, 14d, 7d, 3d, 2d, 1d, 0d (today).
         5. Prevents duplicate notifications for the same lease milestone on target date.
@@ -404,7 +404,7 @@ class NotificationService:
                 lease.status = LeaseStatus.EXPIRED
                 if prev_status != LeaseStatus.EXPIRED:
                     expired_leases_updated += 1
-            elif days_remaining <= 30:
+            elif days_remaining <= 5:
                 lease.status = LeaseStatus.EXPIRING_SOON
             else:
                 lease.status = LeaseStatus.ACTIVE

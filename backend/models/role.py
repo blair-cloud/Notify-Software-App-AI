@@ -278,5 +278,3 @@ class NotificationType(str, enum.Enum):
     LEASE_EXPIRY_TODAY = "LEASE_EXPIRY_TODAY"
     LEASE_EXPIRED = "LEASE_EXPIRED"
     SYSTEM = "SYSTEM"
-
-

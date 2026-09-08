@@ -29,11 +29,23 @@ def _send_smtp_blocking(to_email: str, subject: str, body: str, html_content: Op
     if html_content:
         msg.add_alternative(html_content, subtype="html")
 
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=settings.DELIVERY_TIMEOUT_SECONDS) as server:
+    # Port 465 speaks TLS from the first byte; every other port starts in the
+    # clear and upgrades with STARTTLS. Getting this pairing wrong does not
+    # fail cleanly - the handshake just hangs until something upstream times
+    # out, which is what a 504 from a mail-sending API looks like.
+    timeout = settings.DELIVERY_TIMEOUT_SECONDS
+    if settings.SMTP_PORT == 465:
+        with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=timeout) as server:
+            if settings.smtp_username and settings.SMTP_PASSWORD:
+                server.login(settings.smtp_username, settings.SMTP_PASSWORD)
+            server.send_message(msg)
+        return
+
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=timeout) as server:
         if settings.SMTP_USE_TLS:
             server.starttls()
-        if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
-            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+        if settings.smtp_username and settings.SMTP_PASSWORD:
+            server.login(settings.smtp_username, settings.SMTP_PASSWORD)
         server.send_message(msg)
 
 
@@ -48,13 +60,18 @@ async def _send_smtp(to_email: str, subject: str, body: str, html_content: Optio
 
 
 async def _simulate(to_email: str, subject: str, body: str, metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    logger.info("=" * 60)
-    logger.info(f"📬 [NOTIFY EMAIL SIMULATED] To: {to_email}")
-    logger.info(f"📋 Subject: {subject}")
-    logger.info(f"📄 Body: {body}")
+    # Plain ASCII on purpose: the Windows console uses a legacy code page, and
+    # an emoji here raised UnicodeEncodeError inside logging - which swallowed
+    # the whole message, so the confirmation link this block exists to show
+    # never actually appeared.
+    logger.info("=" * 70)
+    logger.info("[EMAIL NOT SENT - SIMULATED] To: %s", to_email)
+    logger.info("Subject: %s", subject)
+    logger.info("Body: %s", body)
     if metadata:
-        logger.info(f"🏷️  Metadata: {metadata}")
-    logger.info("=" * 60)
+        logger.info("Metadata: %s", metadata)
+    logger.info("Configure SMTP_HOST / SMTP_USER / SMTP_PASSWORD in backend/.env to send this for real.")
+    logger.info("=" * 70)
     return {"simulated": True}
 
 
@@ -72,11 +89,18 @@ async def send_email_message(
         return skipped("EMAIL", to_email, "Message body is empty")
 
     address = to_email.strip()
-    if (settings.EMAIL_PROVIDER or "").lower() == "smtp":
+    # A filled-in SMTP block is enough - EMAIL_PROVIDER=smtp is no longer a
+    # separate switch that has to be remembered.
+    if settings.email_is_configured:
         return await send_with_retry(
             "EMAIL", address, "smtp", lambda: _send_smtp(address, subject, body, html_content)
         )
 
+    logger.warning(
+        "Email to %s was NOT delivered: no SMTP server is configured, so it was only "
+        "logged. Set SMTP_HOST / SMTP_USER / SMTP_PASSWORD in backend/.env to send real mail.",
+        address,
+    )
     return await send_with_retry(
         "EMAIL", address, "simulated", lambda: _simulate(address, subject, body, metadata), max_attempts=1
     )

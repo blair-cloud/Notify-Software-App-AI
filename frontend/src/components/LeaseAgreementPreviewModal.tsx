@@ -6,6 +6,9 @@ import { api } from '../services/api';
 interface LeaseAgreementPreviewModalProps {
   leaseId: string | null;
   onClose: () => void;
+  // Landlords fetch via /leases/{id}; tenants via /leases/me/{id}. Defaults to
+  // the landlord lookup so existing call sites are unaffected.
+  fetchLease?: (id: string) => Promise<Lease>;
 }
 
 const formatDate = (value?: string) => {
@@ -33,7 +36,7 @@ const ordinal = (n: number) => {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 };
 
-export const LeaseAgreementPreviewModal: React.FC<LeaseAgreementPreviewModalProps> = ({ leaseId, onClose }) => {
+export const LeaseAgreementPreviewModal: React.FC<LeaseAgreementPreviewModalProps> = ({ leaseId, onClose, fetchLease }) => {
   const [lease, setLease] = useState<Lease | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +47,7 @@ export const LeaseAgreementPreviewModal: React.FC<LeaseAgreementPreviewModalProp
     setLoading(true);
     setError(null);
     try {
-      const res = await api.leases.get(id);
+      const res = await (fetchLease ? fetchLease(id) : api.leases.get(id));
       setLease(res);
     } catch (err: any) {
       setError(err?.message || 'Failed to load the lease agreement. Please try again.');

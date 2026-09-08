@@ -249,6 +249,16 @@ class ExpenseService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    async def get_all_expenses(db: AsyncSession) -> List[Expense]:
+        """Every expense on the platform. System-admin views only."""
+        res = await db.execute(
+            select(Expense)
+            .where(Expense.status != ExpenseStatus.CANCELLED)
+            .order_by(Expense.expense_date.desc())
+        )
+        return list(res.scalars().all())
+
+    @staticmethod
     async def get_expenses_for_landlord(
         session: AsyncSession,
         landlord_id: uuid.UUID,

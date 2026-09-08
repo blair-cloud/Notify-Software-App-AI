@@ -155,15 +155,15 @@ export const LandlordOverviewTab: React.FC<LandlordOverviewTabProps> = ({
   const activeLeasesCount = activeLeases.length;
   const signedLeasesCount = activeLeases.filter((l) => l.has_signed_document || l.agreement_document).length;
 
-  // 4. EXPIRING LEASES (Real data <= 30 days)
+  // 4. EXPIRING LEASES (Real data <= 5 days - "Soon Ending")
   const now = new Date();
   const expiringSoonLeases = filteredLeases.filter((l) => {
     if (l.status === 'EXPIRING_SOON') return true;
-    if (l.days_remaining !== undefined && l.days_remaining <= 30 && l.days_remaining >= 0) return true;
+    if (l.days_remaining !== undefined && l.days_remaining <= 5 && l.days_remaining >= 0) return true;
     if (l.end_date) {
       const expiry = new Date(l.end_date).getTime();
       const diffDays = Math.ceil((expiry - now.getTime()) / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays <= 30;
+      return diffDays >= 0 && diffDays <= 5;
     }
     return false;
   });
@@ -420,8 +420,8 @@ export const LandlordOverviewTab: React.FC<LandlordOverviewTabProps> = ({
               </div>
               <p className="text-xs text-slate-600 font-medium mt-1.5">
                 {expiringCount > 0
-                  ? `${expiringCount} lease${expiringCount > 1 ? 's' : ''} ending in the next 30 days`
-                  : 'No leases expiring in the next 30 days'}
+                  ? `${expiringCount} lease${expiringCount > 1 ? 's' : ''} ending in the next 5 days`
+                  : 'No leases expiring in the next 5 days'}
               </p>
             </div>
           </div>

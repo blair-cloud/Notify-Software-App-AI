@@ -48,7 +48,7 @@ async def get_landlord_stats(
 
     # Active leases for expected monthly rent and expiring soon count
     today = date.today()
-    in_30_days = today + timedelta(days=30)
+    in_5_days = today + timedelta(days=5)
     leases_res = await db.execute(
         select(Lease).where(
             Lease.landlord_id == landlord.id,
@@ -58,7 +58,7 @@ async def get_landlord_stats(
     leases = leases_res.scalars().all()
     expected_monthly_rent = sum(float(l.monthly_rent) for l in leases)
     leases_expiring_soon = sum(
-        1 for l in leases if l.status == LeaseStatus.EXPIRING_SOON or (l.end_date and l.end_date <= in_30_days)
+        1 for l in leases if l.status == LeaseStatus.EXPIRING_SOON or (l.end_date and l.end_date <= in_5_days)
     )
 
     return LandlordDashboardStatsResponse(

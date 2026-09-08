@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api';
 import { adminService, AdminTabKey } from '../services/adminService';
 
 // Admin Subcomponents
@@ -58,27 +59,84 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
   const [settings, setSettings] = useState<any>(adminService.getSettings());
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
-  const refreshAllData = useCallback(() => {
-    setMetrics(adminService.getPlatformMetrics());
-    setLandlords(adminService.getLandlords());
-    setTenants(adminService.getTenants());
-    setUsersList(adminService.getUsers());
-    setProperties(adminService.getProperties());
-    setUnits(adminService.getUnits());
-    setLeases(adminService.getLeases());
-    setInvoices(adminService.getInvoices());
-    setPayments(adminService.getPayments());
-    setExpenses(adminService.getExpenses());
-    setMaintenance(adminService.getMaintenanceRequests());
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  /**
+   * Loads the platform view from the API.
+   *
+   * This screen used to read from in-memory demo fixtures, so every figure was
+   * invented and every create/update vanished on refresh. These now come from
+   * the database; a system admin is not scoped to one landlord, so the shared
+   * list endpoints return the whole platform.
+   *
+   * Anything that genuinely has no backing endpoint yet (platform settings,
+   * audit log, document register, notification templates) still comes from the
+   * local demo service and is labelled as such in its tab.
+   */
+  const refreshAllData = useCallback(async () => {
+    setLoadError(null);
+
+    const results = await Promise.allSettled([
+      api.admin.getStats(),
+      api.admin.getUsers(),
+      api.properties.list(),
+      api.units.list(),
+      api.leases.list(),
+      api.invoices.list(),
+      api.payments.list(),
+      api.expenses.list(),
+      api.maintenance.getAllRequests(),
+    ]);
+
+    const [statsR, usersR, propsR, unitsR, leasesR, invoicesR, paymentsR, expensesR, maintR] = results;
+    const value = <T,>(r: PromiseSettledResult<T>, fallback: T): T =>
+      r.status === 'fulfilled' ? r.value : fallback;
+
+    const allUsers = value(usersR, [] as any[]);
+    setUsersList(allUsers);
+    setLandlords(allUsers.filter((u: any) => u.role === 'LANDLORD'));
+    setTenants(allUsers.filter((u: any) => u.role === 'TENANT'));
+    setProperties(value(propsR, [] as any[]));
+    setUnits(value(unitsR, [] as any[]));
+    setLeases(value(leasesR, [] as any[]));
+    setInvoices(value(invoicesR, [] as any[]));
+    setPayments(value(paymentsR, [] as any[]));
+    setExpenses(value(expensesR, [] as any[]));
+    setMaintenance(value(maintR, [] as any[]));
+
+    const stats = value(statsR, null as any);
+    if (stats) setMetrics(stats);
+
+    // Still demo-only - no endpoint exists for these yet.
     setNotifications(adminService.getNotifications());
     setDocuments(adminService.getDocuments());
     setSettings(adminService.getSettings());
     setAuditLogs(adminService.getAuditLogs());
+
+    // Report failures instead of quietly showing an empty dashboard.
+    const failed = results.filter((r) => r.status === 'rejected');
+    if (failed.length) {
+      const first = (failed[0] as PromiseRejectedResult).reason;
+      setLoadError(
+        `${failed.length} of ${results.length} data sources failed to load. ` +
+          `${first?.message || 'Check that you are signed in as a system admin and the API is running.'}`
+      );
+    }
   }, []);
 
   useEffect(() => {
-    refreshAllData();
-    setLoading(false);
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        await refreshAllData();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [refreshAllData]);
 
   // Dynamic Badges for Navigation
@@ -93,9 +151,9 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
   const expiringLeasesCount = leases.filter((l) => {
     if (l.status !== 'ACTIVE') return false;
     const end = new Date(l.end_date).getTime();
-    const now = new Date('2026-08-17').getTime();
+    const now = new Date().getTime();
     const diffDays = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
-    return diffDays >= 0 && diffDays <= 30;
+    return diffDays >= 0 && diffDays <= 5;
   }).length;
 
   const complianceCount = leases.filter((l) => !l.agreement_document && l.status === 'ACTIVE').length;
@@ -149,6 +207,11 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
             </div>
           ) : (
             <div className="pb-12">
+              {loadError && (
+                <div className="mb-5 p-3.5 rounded-[14px] bg-red-50 border-2 border-red-300 text-sm font-semibold text-red-800">
+                  {loadError}
+                </div>
+              )}
               {activeTab === 'overview' && (
                 <AdminOverviewTab
                   metrics={metrics}

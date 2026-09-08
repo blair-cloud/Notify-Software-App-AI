@@ -46,17 +46,34 @@ class TenancyService:
         if not tenant_profile:
             raise NotFoundException("Tenant profile not found")
 
-        # 5. Create tenancy
-        tenancy = Tenancy(
-            tenant_id=tenant_profile.id,
-            landlord_id=landlord.id,
-            property_id=req.property_id,
-            unit_id=req.unit_id,
-            status=TenancyStatus.ACTIVE,
-            start_date=req.start_date,
-            end_date=req.end_date
+        # 5. Reuse a tenancy already sitting on this exact tenant+unit pairing
+        # rather than creating a second one. This is what lets a landlord use
+        # "Create Lease" for a tenant who was invited but has not signed up yet
+        # (an INVITED tenancy, created the moment the invitation was sent) -
+        # without it, this would silently create a duplicate tenancy for the
+        # same assignment the moment the tenant later accepts.
+        reuse_stmt = select(Tenancy).where(
+            Tenancy.tenant_id == tenant_profile.id,
+            Tenancy.unit_id == req.unit_id,
+            Tenancy.status.in_([TenancyStatus.INVITED, TenancyStatus.PENDING]),
         )
-        tenancy = await self.tenancy_repo.create(tenancy)
+        tenancy = (await self.db.execute(reuse_stmt)).scalars().first()
+
+        if tenancy:
+            tenancy.status = TenancyStatus.ACTIVE
+            tenancy.start_date = req.start_date
+            tenancy.end_date = req.end_date
+        else:
+            tenancy = Tenancy(
+                tenant_id=tenant_profile.id,
+                landlord_id=landlord.id,
+                property_id=req.property_id,
+                unit_id=req.unit_id,
+                status=TenancyStatus.ACTIVE,
+                start_date=req.start_date,
+                end_date=req.end_date
+            )
+            tenancy = await self.tenancy_repo.create(tenancy)
 
         # 6. Update unit status
         unit.status = UnitStatus.OCCUPIED

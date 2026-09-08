@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional, List
 from datetime import datetime, date
 import uuid
@@ -16,6 +16,12 @@ class LeaseCreate(BaseModel):
     notes: Optional[str] = None
     status: Optional[LeaseStatus] = None
 
+    @model_validator(mode="after")
+    def _validate_dates(self):
+        if self.end_date <= self.start_date:
+            raise ValueError("End date must be after the start date.")
+        return self
+
 class LeaseUpdate(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
@@ -25,6 +31,12 @@ class LeaseUpdate(BaseModel):
     late_fee: Optional[float] = None
     notes: Optional[str] = None
     status: Optional[LeaseStatus] = None
+
+    @model_validator(mode="after")
+    def _validate_dates(self):
+        if self.start_date and self.end_date and self.end_date <= self.start_date:
+            raise ValueError("End date must be after the start date.")
+        return self
 
 class LeaseDocumentUpload(BaseModel):
     document_name: Optional[str] = None

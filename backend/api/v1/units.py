@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, status
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.database import get_db
-from backend.core.dependencies import get_current_landlord
-from backend.models import LandlordProfile
+from backend.core.dependencies import get_current_landlord, get_current_user
+from backend.core.scoping import is_admin
+from backend.models import LandlordProfile, User
 from backend.schemas.unit import UnitCreate, UnitUpdate, UnitResponse
 from backend.services.unit_service import UnitService
 
@@ -21,9 +22,12 @@ async def create_unit(
 @router.get("", response_model=List[UnitResponse])
 async def list_units(
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = UnitService(db)
+    if landlord is None and is_admin(current_user):
+        return await service.list_all_units()
     return await service.list_landlord_units(landlord)
 
 @router.get("/{unit_id}", response_model=UnitResponse)

@@ -7,6 +7,9 @@ from backend.models.role import InvitationStatus
 class InvitationCreate(BaseModel):
     tenant_email: Optional[str] = None
     tenant_phone: str
+    # Optional - not required to send the invitation, but it means the tenant
+    # shows up in the Tenants list under a real name instead of a placeholder.
+    tenant_name: Optional[str] = None
     property_id: uuid.UUID
     unit_id: uuid.UUID
 
@@ -18,8 +21,10 @@ class InvitationResponse(BaseModel):
     landlord_id: uuid.UUID
     tenant_email: Optional[str] = None
     tenant_phone: str
+    tenant_name: Optional[str] = None
     property_id: uuid.UUID
     unit_id: uuid.UUID
+    tenant_profile_id: Optional[uuid.UUID] = None
     status: InvitationStatus
     expires_at: datetime
     accepted_at: Optional[datetime] = None
@@ -27,3 +32,21 @@ class InvitationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class DeliveryChannelResult(BaseModel):
+    """How one delivery channel went, independent of the other."""
+    attempted: bool
+    ok: bool
+    detail: Optional[str] = None
+
+
+class InvitationCreateResponse(BaseModel):
+    invitation: InvitationResponse
+    raw_token: str
+    invite_link: str
+    # The shell tenant record created immediately, so the frontend can add it
+    # to the Tenants list without waiting for a full refetch.
+    tenant_id: uuid.UUID
+    email: DeliveryChannelResult
+    sms: DeliveryChannelResult

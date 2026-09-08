@@ -51,6 +51,7 @@ export interface Unit {
 
 export interface Tenant {
   id: string;
+  tenant_id?: string;
   user_id?: string;
   tenancy_id?: string;
   first_name: string;
@@ -67,6 +68,9 @@ export interface Tenant {
   monthly_rent?: number;
   currency?: string;
   status?: string;
+  // True while this tenant has been invited but has not signed up yet - there
+  // is no account, lease or invoice history to act on until they accept.
+  is_pending?: boolean;
   lease_status?: LeaseStatus;
   lease_end_date?: string;
   tenancy_start_date?: string;

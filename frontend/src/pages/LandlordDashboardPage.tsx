@@ -137,6 +137,16 @@ const LANDLORD_TABS = [
   'tenants', 'leases', 'invitations', 'account', 'profile',
 ] as const;
 
+// One calendar month after the given YYYY-MM-DD date, clamped to the last
+// day of the target month (e.g. Jan 31 -> Feb 28/29, not an overflowed Mar 3).
+const addOneMonthToDateString = (dateStr: string): string => {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + 1);
+  if (d.getDate() !== day) d.setDate(0);
+  return d.toISOString().split('T')[0];
+};
+
 export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ onLogout }) => {
   const { user } = useAuth();
   // Tab state lives in the URL (/landlord/<section>), so refresh, deep links
@@ -303,6 +313,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [isCreatingLease, setIsCreatingLease] = useState(false);
 
   // Form states - Invite Tenant
+  const [inviteName, setInviteName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [invitePhone, setInvitePhone] = useState('+250 788 123 456');
   const [invitePropId, setInvitePropId] = useState('');
@@ -316,7 +327,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [leaseUnitId, setLeaseUnitId] = useState('');
   const [leaseStartDate, setLeaseStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [leaseEndDate, setLeaseEndDate] = useState(
-    new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0]
+    addOneMonthToDateString(new Date().toISOString().split('T')[0])
   );
   const [leaseRent, setLeaseRent] = useState(350000);
   const [leaseDeposit, setLeaseDeposit] = useState(350000);
@@ -327,9 +338,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [selectedLeaseForDocModal, setSelectedLeaseForDocModal] = useState<Lease | null>(null);
   const [previewLeaseId, setPreviewLeaseId] = useState<string | null>(null);
 
-  // Load portfolio data
-  const fetchData = async () => {
-    setLoading(true);
+  // Load portfolio data.
+  //
+  // `silent` is what every post-action refresh uses: it re-fetches exactly the
+  // same data (nothing is skipped, so accuracy is unaffected) but never touches
+  // `loading`, so the full-page spinner below never displaces the dashboard the
+  // user is already looking at. Only the very first load on mount shows it.
+  const fetchData = async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true);
     setError(null);
     try {
       const [
@@ -404,9 +420,11 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       }
     } catch (err: any) {
       console.error('Failed to load landlord data:', err);
-      setError(err.message || 'Failed to sync portfolio data');
+      // A silent background refresh failing must not blank out data that is
+      // already on screen and still perfectly valid.
+      if (!opts.silent) setError(err.message || 'Failed to sync portfolio data');
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   };
 
@@ -476,7 +494,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setPropDesc('');
       setShowAddPropertyModal(false);
       showSuccess('Property created successfully.');
-      fetchData();
+      fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to create property.');
     } finally {
@@ -510,7 +528,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
       setEditingProperty(null);
       showSuccess('Property updated successfully.');
-      fetchData();
+      fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to update property.');
     } finally {
@@ -541,7 +559,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setUnitDesc('');
       setShowAddUnitModal(false);
       showSuccess('Unit created successfully.');
-      fetchData();
+      fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to create unit.');
     } finally {
@@ -577,7 +595,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
       setEditingUnit(null);
       showSuccess('Unit updated successfully!');
-      fetchData();
+      fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to update unit');
     } finally {
@@ -595,7 +613,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setUnits((prev) => prev.filter((u) => u.id !== deletedUnitId));
       setUnitPendingDelete(null);
       showSuccess('Unit deleted successfully!');
-      fetchData();
+      fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to delete unit');
     } finally {
@@ -614,14 +632,64 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       const res = await api.invitations.create({
         tenant_email: inviteEmail.trim() ? inviteEmail.trim() : null,
         tenant_phone: invitePhone,
+        tenant_name: inviteName.trim() ? inviteName.trim() : null,
         property_id: invitePropId,
         unit_id: inviteUnitId,
       });
 
       setCreatedInviteResult(res);
+
+      // The tenant is real the moment the invitation is created - add them to
+      // the list right away instead of waiting on a full reload. Everything
+      // else the API needs on the next real fetch is already right; this is
+      // just what the landlord sees between now and then.
+      const prop = properties.find((p: any) => p.id === invitePropId);
+      const unit = units.find((u: any) => u.id === inviteUnitId);
+      const [first, ...rest] = (inviteName.trim() || 'Pending Tenant').split(/\s+/);
+      setTenants((prev) => [
+        {
+          id: res.tenant_id,
+          tenant_id: res.tenant_id,
+          user_id: undefined,
+          first_name: first,
+          last_name: rest.join(' '),
+          email: inviteEmail.trim(),
+          phone: invitePhone,
+          property_id: invitePropId,
+          property_name: prop?.name || '',
+          unit_id: inviteUnitId,
+          unit_number: unit?.unit_number || '',
+          monthly_rent: unit?.monthly_rent || 0,
+          currency: 'RWF',
+          status: 'INVITED',
+          is_pending: true,
+          lease_status: undefined,
+          tenancy_start_date: new Date().toISOString().slice(0, 10),
+          history: [],
+        },
+        ...prev,
+      ]);
+
+      // Email and SMS are independent - say plainly which worked, rather than
+      // one pass/fail lumped into "invitation sent".
+      const parts: string[] = [];
+      if (res.email?.attempted) parts.push(res.email.ok ? 'Email sent.' : `Email failed (${res.email.detail || 'unknown reason'}).`);
+      if (res.sms?.attempted) parts.push(res.sms.ok ? 'SMS sent.' : `SMS failed (${res.sms.detail || 'unknown reason'}).`);
+      const bothFailed = res.email?.attempted && !res.email?.ok && res.sms?.attempted && !res.sms?.ok;
+      const feedback = `Invitation created. ${parts.join(' ')}`.trim();
+      if (bothFailed) {
+        showError(`${feedback} Share the invitation link below manually.`, 8000);
+      } else {
+        showSuccess(feedback, 6000);
+      }
+
+      setInviteName('');
       setInviteEmail('');
-      showSuccess('Vacancy assigned successfully. Invitation link generated.');
-      fetchData();
+
+      // The optimistic row above is what the landlord sees immediately; this
+      // reconciles it with the server's own view in the background (real
+      // tenancy id, canonical name split, etc.) without ever blocking on it.
+      fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to assign vacancy to tenant.');
     } finally {
@@ -643,12 +711,6 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     const targetUnit = units.find((u) => u.id === leaseUnitId);
     if (targetUnit && targetUnit.status === 'OCCUPIED') {
       setLeaseError('Double occupancy prevented: Unit is already occupied by an active tenancy.');
-      return;
-    }
-
-    // Check document validation: Required for Activation, optional for Draft
-    if (!leaseIsDraft && !leaseUploadedDoc?.file && !leaseUploadedDoc?.fileName) {
-      setLeaseError('Lease agreement document is required before this lease can be activated.');
       return;
     }
 
@@ -688,7 +750,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           ? 'Lease created successfully. Saved as a draft — upload the signed document to activate it.'
           : 'Lease created successfully.'
       );
-      fetchData();
+      fetchData({ silent: true });
 
       // Document upload is a secondary step - its failure must not hide the
       // fact that the lease and tenancy were already created successfully.
@@ -704,7 +766,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             uploaded_by: `${user?.first_name || 'Landlord'} ${user?.last_name || ''}`.trim() || 'Landlord',
             uploaded_by_role: 'LANDLORD',
           });
-          fetchData();
+          fetchData({ silent: true });
         } catch (docErr: any) {
           showError(
             docErr.message ||
@@ -727,7 +789,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         uploaded_by_id: user?.id || 'mock-lp-001',
       });
       showSuccess('Lease agreement document uploaded & version history updated!');
-      await fetchData();
+      await fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to upload document version');
     }
@@ -744,7 +806,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.leases.activate(lease.id);
       showSuccess('Lease activated successfully.');
-      fetchData();
+      fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to activate lease.');
     } finally {
@@ -764,7 +826,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setUnits((prev) => prev.filter((u) => u.property_id !== deletedPropertyId));
       setPropertyPendingDelete(null);
       showSuccess('Property deleted successfully', 3000);
-      fetchData();
+      fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to delete property');
     } finally {
@@ -780,7 +842,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.tenancies.end(tenancyId);
       showSuccess('Tenancy ended successfully. The unit is now vacant.', 3000);
-      fetchData();
+      fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to end tenancy.');
     } finally {
@@ -811,7 +873,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     setRecordPaymentTenantId(undefined);
     setRecordPaymentInvoiceId(undefined);
     showSuccess('Payment logged successfully and verified receipt issued!');
-    fetchData();
+    fetchData({ silent: true });
     if (receipt) {
       setSelectedReceipt(receipt);
     }
@@ -822,7 +884,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     setReminderTenant(null);
     setReminderInvoice(null);
     showSuccess(msg || 'Payment reminder sent successfully!');
-    fetchData();
+    fetchData({ silent: true });
   };
 
   // Phase 4: Maintenance Handlers
@@ -830,7 +892,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.maintenance.acknowledgeRequest(id);
       showSuccess('Maintenance request acknowledged.');
-      fetchData();
+      fetchData({ silent: true });
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) => (prev ? { ...prev, status: 'ACKNOWLEDGED' } : null));
       }
@@ -852,7 +914,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.maintenance.scheduleRequest(id, data);
       showSuccess('Maintenance visit scheduled and assigned.');
-      fetchData();
+      fetchData({ silent: true });
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) =>
           prev
@@ -876,7 +938,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.maintenance.markInProgress(id);
       showSuccess('Maintenance marked as in progress.');
-      fetchData();
+      fetchData({ silent: true });
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) => (prev ? { ...prev, status: 'IN_PROGRESS' } : null));
       }
@@ -892,7 +954,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.maintenance.resolveRequest(id, data);
       showSuccess('Maintenance marked as resolved. Awaiting tenant confirmation.');
-      fetchData();
+      fetchData({ silent: true });
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) =>
           prev
@@ -914,7 +976,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.maintenance.addToExpenses(id);
       showSuccess('Maintenance cost added to property expenses successfully!');
-      fetchData();
+      fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to add to expenses');
     }
@@ -923,7 +985,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const handleAddMaintenanceComment = async (id: string, message: string) => {
     try {
       await api.maintenance.addComment(id, message);
-      fetchData();
+      fetchData({ silent: true });
       if (selectedMaintenance && selectedMaintenance.id === id) {
         const newComment = {
           id: `cmt-${Date.now()}`,
@@ -953,7 +1015,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.complaints.acknowledgeComplaint(id);
       showSuccess('Complaint acknowledged.');
-      fetchData();
+      fetchData({ silent: true });
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) => (prev ? { ...prev, status: 'ACKNOWLEDGED' } : null));
       }
@@ -966,7 +1028,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.complaints.markUnderReview(id, data);
       showSuccess('Complaint moved to under review with official response.');
-      fetchData();
+      fetchData({ silent: true });
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) =>
           prev
@@ -987,7 +1049,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.complaints.resolveComplaint(id, data);
       showSuccess('Complaint marked as resolved.');
-      fetchData();
+      fetchData({ silent: true });
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) =>
           prev
@@ -1008,7 +1070,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.complaints.closeComplaint(id);
       showSuccess('Complaint closed.');
-      fetchData();
+      fetchData({ silent: true });
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) => (prev ? { ...prev, status: 'CLOSED' } : null));
       }
@@ -1020,7 +1082,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const handleAddComplaintComment = async (id: string, message: string) => {
     try {
       await api.complaints.addComment(id, message);
-      fetchData();
+      fetchData({ silent: true });
       if (selectedComplaint && selectedComplaint.id === id) {
         const newComment = {
           id: `cmt-${Date.now()}`,
@@ -1057,7 +1119,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     // shown inline in the modal rather than being swallowed here.
     await api.maintenance.createWorker(data);
     showSuccess('Technician added to directory successfully.');
-    fetchData();
+    fetchData({ silent: true });
   };
 
   // Phase 4 & Phase 5: Notification Handlers
@@ -1103,7 +1165,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       const res = await api.notifications.processReminders();
       showSuccess(`Automated reminder engine executed! ${res.reminders_created} lease reminders created.`, 5000);
-      await fetchData();
+      await fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to process reminders');
     } finally {
@@ -1751,7 +1813,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 onOpenRecordPayment={(tenantId, invoiceId) => handleOpenRecordPayment(tenantId, invoiceId)}
                 onSendReminder={(tenant, invoice) => handleOpenSendReminder(tenant, invoice)}
                 onViewReceipt={(receipt) => setSelectedReceipt(receipt)}
-                onRefreshAllData={fetchData}
+                onRefreshAllData={() => fetchData({ silent: true })}
               />
             )}
 
@@ -1785,7 +1847,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 onViewInvoice={(invoice) => setSelectedInvoice(invoice)}
                 onRecordPayment={(tenantId, invoiceId) => handleOpenRecordPayment(tenantId, invoiceId)}
                 onSendReminder={(tenant, invoice) => handleOpenSendReminder(tenant, invoice)}
-                onRefreshData={fetchData}
+                onRefreshData={() => fetchData({ silent: true })}
               />
             )}
 
@@ -1799,7 +1861,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 invoices={invoices}
                 onOpenRecordPayment={() => handleOpenRecordPayment()}
                 onViewReceipt={(receipt) => setSelectedReceipt(receipt)}
-                onRefreshData={fetchData}
+                onRefreshData={() => fetchData({ silent: true })}
               />
             )}
 
@@ -1813,7 +1875,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   setSelectedExpenseForEdit(expenseToEdit);
                   setShowRecordExpenseModal(true);
                 }}
-                onRefreshData={fetchData}
+                onRefreshData={() => fetchData({ silent: true })}
               />
             )}
 
@@ -2082,7 +2144,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                       setActiveTab('maintenance');
                     }
                   }}
-                  onRefreshData={fetchData}
+                  onRefreshData={() => fetchData({ silent: true })}
                 />
               </div>
             )}
@@ -2097,7 +2159,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 onResolve={handleResolveComplaint}
                 onCloseComplaint={handleCloseComplaint}
                 onAddComment={handleAddComplaintComment}
-                onRefresh={fetchData}
+                onRefresh={() => fetchData({ silent: true })}
               />
             )}
 
@@ -2560,14 +2622,26 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                           <tr key={t.tenancy_id || t.id} className="hover:bg-slate-50/60 transition-colors">
                             <td className="py-4 px-4 font-bold text-slate-900">
                               <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-full bg-purple-100 text-[#331A6F] flex items-center justify-center font-bold text-xs">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${t.is_pending ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-[#331A6F]'}`}>
                                   {t.first_name?.[0] || 'T'}{t.last_name?.[0] || ''}
                                 </div>
-                                <span>{t.first_name} {t.last_name}</span>
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span>{t.first_name} {t.last_name}</span>
+                                    {t.is_pending && (
+                                      <span
+                                        className="px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wide bg-amber-100 text-amber-800 border border-amber-200"
+                                        title="Invited - has not signed up yet"
+                                      >
+                                        Invitation Pending
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </td>
                             <td className="py-4 px-4">
-                              <div className="text-slate-800">{t.email}</div>
+                              <div className="text-slate-800">{t.email || '—'}</div>
                               <div className="text-[11px] text-slate-400">{t.phone}</div>
                             </td>
                             <td className="py-4 px-4 font-medium text-slate-800">
@@ -2579,50 +2653,66 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             <td className="py-4 px-4">
                               <span
                                 className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                                  t.lease_status === 'ACTIVE'
+                                  t.is_pending
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : t.lease_status === 'ACTIVE'
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : t.lease_status === 'EXPIRING_SOON'
                                     ? 'bg-amber-100 text-amber-800'
                                     : 'bg-rose-100 text-rose-800'
                                 }`}
                               >
-                                {t.lease_status || 'ACTIVE'}
+                                {t.is_pending ? 'Awaiting sign-up' : (t.lease_status || 'ACTIVE')}
                               </span>
                             </td>
                             <td className="py-4 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                                <button
-                                  onClick={() => handleOpenLedger(t)}
-                                  className="px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-[#331A6F] border border-purple-200 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
-                                  title="View Tenant Financial Ledger & Statements"
-                                >
-                                  <ReceiptIcon className="w-3.5 h-3.5 text-[#331A6F]" />
-                                  <span>Ledger</span>
-                                </button>
-                                <button
-                                  onClick={() => handleOpenRecordPayment(t.id)}
-                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
-                                  title="Record Payment for Tenant"
-                                >
-                                  <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
-                                  <span>Pay</span>
-                                </button>
-                                <button
-                                  onClick={() => handleOpenSendReminder(t)}
-                                  className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
-                                  title="Send Rent Reminder"
-                                >
-                                  <Bell className="w-3.5 h-3.5 text-amber-600" />
-                                  <span>Remind</span>
-                                </button>
-                                <button
-                                  onClick={() => setSelectedTenantForProfile(t)}
-                                  className="px-2.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer"
-                                  title="View KYC and Profile Details"
-                                >
-                                  Profile
-                                </button>
-                              </div>
+                              {t.is_pending ? (
+                                // No account, no lease/invoices to act on yet - the only
+                                // meaningful action right now is seeing what was sent.
+                                <div className="flex items-center justify-end">
+                                  <button
+                                    onClick={() => setSelectedTenantForProfile(t)}
+                                    className="px-2.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer"
+                                    title="View invitation details"
+                                  >
+                                    View Invite
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                  <button
+                                    onClick={() => handleOpenLedger(t)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-[#331A6F] border border-purple-200 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                                    title="View Tenant Financial Ledger & Statements"
+                                  >
+                                    <ReceiptIcon className="w-3.5 h-3.5 text-[#331A6F]" />
+                                    <span>Ledger</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenRecordPayment(t.id)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                                    title="Record Payment for Tenant"
+                                  >
+                                    <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>Pay</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenSendReminder(t)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                                    title="Send Rent Reminder"
+                                  >
+                                    <Bell className="w-3.5 h-3.5 text-amber-600" />
+                                    <span>Remind</span>
+                                  </button>
+                                  <button
+                                    onClick={() => setSelectedTenantForProfile(t)}
+                                    className="px-2.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer"
+                                    title="View KYC and Profile Details"
+                                  >
+                                    Profile
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -2686,8 +2776,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                       <div className="text-base font-bold text-white">{leases.filter(l => l.status === 'ACTIVE').length}</div>
                     </div>
                     <div className="bg-white/10 px-3 py-2 rounded-lg text-center backdrop-blur-xs">
-                      <div className="text-[10px] uppercase font-bold text-amber-300">Expiring &le;30D</div>
-                      <div className="text-base font-bold text-amber-300">{leases.filter(l => (l.days_remaining !== undefined && l.days_remaining <= 30 && l.days_remaining >= 0) || l.status === 'EXPIRING_SOON').length}</div>
+                      <div className="text-[10px] uppercase font-bold text-amber-300">Expiring &le;5D</div>
+                      <div className="text-base font-bold text-amber-300">{leases.filter(l => (l.days_remaining !== undefined && l.days_remaining <= 5 && l.days_remaining >= 0) || l.status === 'EXPIRING_SOON').length}</div>
                     </div>
                   </div>
                 </div>
@@ -2713,7 +2803,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     >
                       <option value="ALL">All Lease Statuses</option>
                       <option value="ACTIVE">Active</option>
-                      <option value="EXPIRING_SOON">Expiring Soon (30 Days)</option>
+                      <option value="EXPIRING_SOON">Expiring Soon (5 Days)</option>
                       <option value="EXPIRED">Expired</option>
                     </select>
                   </div>
@@ -3477,9 +3567,52 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <div>
                     <h4 className="font-bold">Invitation Generated!</h4>
                     <p className="mt-1">
-                      Share the invitation link below with the tenant. Upon clicking, they will be registered and linked to this unit.
+                      They already appear in your Tenant Directory as "Invitation Pending" - you can create a
+                      lease for them right away, before they even sign up.
                     </p>
                   </div>
+                </div>
+
+                {/* Email and SMS are sent independently - show each result on
+                    its own rather than one combined pass/fail. */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  {[
+                    { key: 'email', label: 'Email', result: createdInviteResult.email },
+                    { key: 'sms', label: 'SMS', result: createdInviteResult.sms },
+                  ].map(({ key, label, result }) => {
+                    const attempted = result?.attempted;
+                    const ok = result?.ok;
+                    return (
+                      <div
+                        key={key}
+                        className={`p-3 rounded-lg border flex items-start gap-2 ${
+                          !attempted
+                            ? 'bg-slate-50 border-slate-200 text-slate-500'
+                            : ok
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                            : 'bg-rose-50 border-rose-200 text-rose-800'
+                        }`}
+                      >
+                        {!attempted ? (
+                          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                        ) : ok ? (
+                          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                        )}
+                        <div>
+                          <div className="font-bold">{label}</div>
+                          <div className="mt-0.5">
+                            {!attempted
+                              ? 'Not sent (no address on file)'
+                              : ok
+                              ? 'Delivered successfully'
+                              : result?.detail || 'Delivery failed'}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div>
@@ -3556,6 +3689,20 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                       No vacant units available in this property. Add a unit first.
                     </p>
                   )}
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Tenant Name (optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Aline Uwase"
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                  <p className="text-[10.5px] text-slate-400 mt-1">
+                    Shown in your Tenant Directory right away, before they sign up.
+                  </p>
                 </div>
 
                 <div>
@@ -3652,8 +3799,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <div className="font-bold text-slate-900 text-xs">Lease Agreement Mode</div>
                   <div className="text-[11px] text-slate-500">
                     {leaseIsDraft
-                      ? 'Draft mode allows saving terms first; document is optional until activation.'
-                      : 'Active mode requires attaching the official signed lease document.'}
+                      ? 'Draft mode allows saving terms first; the signed document can be attached later.'
+                      : 'Active mode activates the lease immediately. Uploading the signed document is optional.'}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -3738,7 +3885,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <option value="">-- Choose Tenant --</option>
                   {uniqueTenantsForLease.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.first_name} {t.last_name} ({t.email})
+                      {t.first_name} {t.last_name} ({t.email || t.phone})
+                      {t.is_pending ? ' - Invitation Pending' : ''}
                     </option>
                   ))}
                 </select>
@@ -3757,7 +3905,11 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     type="date"
                     required
                     value={leaseStartDate}
-                    onChange={(e) => setLeaseStartDate(e.target.value)}
+                    onChange={(e) => {
+                      const newStart = e.target.value;
+                      setLeaseStartDate(newStart);
+                      setLeaseEndDate(addOneMonthToDateString(newStart));
+                    }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#331A6F]/20"
                   />
                 </div>
@@ -3813,7 +3965,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 <LeaseDocumentUploadSection
                   onDocumentChange={(doc) => setLeaseUploadedDoc(doc)}
                   isDraftMode={leaseIsDraft}
-                  requiredForActivation={!leaseIsDraft}
+                  requiredForActivation={false}
                   leaseId="new-lease"
                 />
               </div>
@@ -4115,14 +4267,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       <NotificationPreferencesModal
         isOpen={isNotificationPrefModalOpen}
         onClose={() => setIsNotificationPrefModalOpen(false)}
-        onRemindersProcessed={fetchData}
+        onRemindersProcessed={() => fetchData({ silent: true })}
       />
 
       {/* Custom Invoice Generator Modal */}
       <CreateInvoiceModal
         isOpen={showCreateInvoiceModal}
         onClose={() => setShowCreateInvoiceModal(false)}
-        onInvoiceCreated={fetchData}
+        onInvoiceCreated={() => fetchData({ silent: true })}
         properties={properties}
         units={units}
         leases={leases}
@@ -4136,7 +4288,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           setShowRecordExpenseModal(false);
           setSelectedExpenseForEdit(undefined);
         }}
-        onExpenseSaved={fetchData}
+        onExpenseSaved={() => fetchData({ silent: true })}
         properties={properties}
         units={units}
         initialExpense={selectedExpenseForEdit}

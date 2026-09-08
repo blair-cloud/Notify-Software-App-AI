@@ -126,7 +126,7 @@ export const AdminComplianceTab: React.FC<AdminComplianceTabProps> = ({
             {expiringSoonLeases.length}
           </div>
           <div className="text-xs text-slate-500 mt-1 font-medium">
-            Leases terminating within the next 30 days
+            Leases terminating within the next 5 days
           </div>
         </div>
 

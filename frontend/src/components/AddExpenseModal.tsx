@@ -31,8 +31,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
   units,
   initialExpense,
 }) => {
-  if (!isOpen) return null;
-
   const [propertyId, setPropertyId] = useState<string>(
     initialExpense?.property_id || properties[0]?.id || ''
   );
@@ -64,6 +62,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({
       setDescription(initialExpense.description || '');
     }
   }, [initialExpense]);
+
+  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

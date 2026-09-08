@@ -11,6 +11,7 @@ from backend.models import (
     UserRole, MaintenanceStatus, MaintenanceCategory, MaintenancePriority,
     NotificationChannel, NotificationStatus
 )
+from backend.core.exceptions import NotFoundException
 from backend.schemas.message import MessageCreate, MessageResponse, ConversationSummary
 from backend.core.logging import logger
 from backend.core.realtime import realtime
@@ -60,6 +61,16 @@ class MessageService:
             admin_res = await session.execute(admin_stmt)
             admin_user = admin_res.scalars().first()
             recipient_id = admin_user.id if admin_user else sender.id
+
+        # The recipient must be a real user. A caller passing, say, a landlord
+        # *profile* id instead of the landlord's *user* id used to be accepted
+        # silently: the row was written, addressed to nobody, and the message
+        # simply never appeared in any inbox.
+        recipient_exists = (
+            await session.execute(select(User.id).where(User.id == recipient_id))
+        ).scalar_one_or_none()
+        if not recipient_exists:
+            raise NotFoundException("The person you are messaging could not be found.")
 
         # Handle Maintenance creation if message_type is MAINTENANCE
         if data.message_type.upper() == "MAINTENANCE" and not maintenance_req_id:

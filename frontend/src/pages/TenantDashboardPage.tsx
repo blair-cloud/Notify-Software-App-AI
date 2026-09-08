@@ -55,6 +55,7 @@ import { TenantMessagesTab } from '../components/TenantMessagesTab';
 import { TENANT_DOC_STATUS_META } from '../components/LeaseDocumentDetailsModal';
 import { TenantLeaseDocumentModal } from '../components/TenantLeaseDocumentModal';
 import { TenantLeaseCountdownCard } from '../components/TenantLeaseCountdownCard';
+import { LeaseAgreementPreviewModal } from '../components/LeaseAgreementPreviewModal';
 import { TenantProfileSettingsTab } from '../components/TenantProfileSettingsTab';
 import { useTabRoute } from '../hooks/useTabRoute';
 
@@ -100,6 +101,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [selectedLeaseDocForTenant, setSelectedLeaseDocForTenant] = useState<Lease | null>(null);
+  const [previewLeaseId, setPreviewLeaseId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -1090,13 +1092,22 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                         </span>
                       </div>
 
-                      <button
-                        onClick={() => setSelectedLeaseDocForTenant(activeLease)}
-                        className="min-h-[44px] px-5 py-2.5 bg-[#331A6F] hover:bg-[#281458] text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer self-start shrink-0"
-                      >
-                        <FileCheck className="w-4 h-4" />
-                        {t.viewSignedAgreement || 'View Lease'}
-                      </button>
+                      <div className="flex items-center gap-2 self-start shrink-0">
+                        <button
+                          onClick={() => setPreviewLeaseId(activeLease.id)}
+                          className="min-h-[44px] px-5 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <FileText className="w-4 h-4" />
+                          {t.viewLeaseAgreement || 'View Agreement'}
+                        </button>
+                        <button
+                          onClick={() => setSelectedLeaseDocForTenant(activeLease)}
+                          className="min-h-[44px] px-5 py-2.5 bg-[#331A6F] hover:bg-[#281458] text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <FileCheck className="w-4 h-4" />
+                          {t.viewSignedAgreement || 'View Lease'}
+                        </button>
+                      </div>
                     </div>
 
                     {/* Essential terms */}
@@ -1522,6 +1533,15 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
           onSignLease={handleSignTenantLease}
         />
       )}
+
+      {/* Notify's auto-generated lease agreement, built purely from lease
+          details - available regardless of whether a signed document has
+          been uploaded. */}
+      <LeaseAgreementPreviewModal
+        leaseId={previewLeaseId}
+        onClose={() => setPreviewLeaseId(null)}
+        fetchLease={api.leases.getMine}
+      />
     </div>
   );
 };

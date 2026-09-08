@@ -26,6 +26,8 @@ import { LandlordDashboardPage } from './pages/LandlordDashboardPage';
 import { TenantDashboardPage } from './pages/TenantDashboardPage';
 import { SystemAdminDashboardPage } from './pages/SystemAdminDashboardPage';
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
+import { EmailVerificationBanner } from './components/EmailVerificationBanner';
 
 export type ActivePage =
   | 'home'
@@ -38,7 +40,9 @@ export type ActivePage =
   | 'stay-notified'
   | 'support'
   | 'pricing'
-  | 'accept-invitation';
+  | 'accept-invitation'
+  | 'verify-email'
+  | 'reset-password';
 
 /** Every page now has its own URL. */
 export const PAGE_PATHS: Record<ActivePage, string> = {
@@ -53,6 +57,8 @@ export const PAGE_PATHS: Record<ActivePage, string> = {
   'support': '/support',
   'pricing': '/pricing',
   'accept-invitation': '/accept-invitation',
+  'verify-email': '/verify-email',
+  'reset-password': '/reset-password',
 };
 
 const PAGE_TITLES: Record<string, string> = {
@@ -68,6 +74,9 @@ const PAGE_TITLES: Record<string, string> = {
   '/tenant': 'Notify Tenant Portal — Pay Rent & Manage Leases',
   '/admin': 'Notify System Admin Portal',
   '/accept-invitation': 'Accept Tenant Invitation — Notify Rwanda',
+  '/verify-email': 'Confirm Your Email — Notify',
+  '/forgot-password': 'Reset Your Password — Notify',
+  '/reset-password': 'Choose A New Password — Notify',
 };
 
 /** Where a signed-in user's dashboard lives. */
@@ -176,7 +185,12 @@ function ProtectedRoute({
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <EmailVerificationBanner />
+      {children}
+    </>
+  );
 }
 
 /** The public marketing shell (landing page and the informational pages). */
@@ -251,12 +265,17 @@ function AppRoutes() {
   const location = useLocation();
   useDocumentTitle();
 
-  // Invitation links have historically arrived with ?token= on any path.
+  // Invitation links have historically arrived with ?token= on any path. The
+  // confirmation and password-reset emails also carry ?token=, so those paths
+  // are excluded - otherwise following a reset link lands on the invitation
+  // page instead.
   useEffect(() => {
-    if (
-      location.pathname !== '/accept-invitation' &&
-      new URLSearchParams(location.search).has('token')
-    ) {
+    const ownsItsToken =
+      location.pathname === '/accept-invitation' ||
+      location.pathname === '/verify-email' ||
+      location.pathname === '/reset-password';
+
+    if (!ownsItsToken && new URLSearchParams(location.search).has('token')) {
       navigate(`/accept-invitation${location.search}`, { replace: true });
     }
   }, [location.pathname, location.search, navigate]);
@@ -285,6 +304,11 @@ function AppRoutes() {
       <Route path="/auth" element={<Navigate to="/get-started" replace />} />
 
       <Route path="/accept-invitation" element={<AcceptInvitationRoute />} />
+
+      {/* Links from the confirmation and password-reset emails */}
+      <Route path="/verify-email" element={<VerifyEmailRoute />} />
+      <Route path="/forgot-password" element={<AuthRoute mode="FORGOT_PASSWORD" />} />
+      <Route path="/reset-password" element={<ResetPasswordRoute />} />
 
       {/* Landlord: /landlord and /landlord/<section> */}
       <Route
@@ -322,6 +346,41 @@ function AppRoutes() {
       {/* Unknown URL: back to the landing page rather than a blank screen */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+  );
+}
+
+/** /verify-email - Supabase confirms the link itself; this page just reports the outcome. */
+function VerifyEmailRoute() {
+  const nav = useAppNavigation();
+  return (
+    <VerifyEmailPage
+      onGoToSignIn={() => nav.goToPage('/login')}
+      onGoHome={nav.goHome}
+    />
+  );
+}
+
+/**
+ * /reset-password - where the password-reset email's link lands.
+ *
+ * Supabase does not put a `?token=` query param on this link: it carries the
+ * recovery session in the URL *hash* (`#access_token=...&type=recovery`),
+ * which the Supabase client parses automatically on load. There is nothing
+ * for this route to read from the query string, so it always opens in
+ * RESET_PASSWORD mode - AuthPage itself shows "open the link from your
+ * email" if no recovery session has appeared by the time it renders.
+ */
+function ResetPasswordRoute() {
+  const nav = useAppNavigation();
+
+  return (
+    <AuthPage
+      initialMode="RESET_PASSWORD"
+      initialRole="LANDLORD"
+      unauthorizedNotice={null}
+      onGoHome={nav.goHome}
+      onAuthSuccess={(role) => nav.goToPage(dashboardPathForRole(role))}
+    />
   );
 }
 

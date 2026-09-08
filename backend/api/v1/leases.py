@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, status
 from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.database import get_db
-from backend.core.dependencies import get_current_landlord, get_current_tenant
-from backend.models import LandlordProfile, TenantProfile
+from backend.core.dependencies import get_current_landlord, get_current_tenant, get_current_user
+from backend.core.scoping import is_admin
+from backend.models import LandlordProfile, TenantProfile, User
 from backend.schemas.lease import LeaseCreate, LeaseUpdate, LeaseResponse, LeaseDocumentUpload, LeaseSignRequest
 from backend.services.lease_service import LeaseService
 import uuid
@@ -22,9 +23,12 @@ async def create_lease(
 @router.get("", response_model=List[LeaseResponse])
 async def list_leases(
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     service = LeaseService(db)
+    if landlord is None and is_admin(current_user):
+        return await service.list_all_leases()
     return await service.list_landlord_leases(landlord)
 
 # ----------------------------------------------------------------------

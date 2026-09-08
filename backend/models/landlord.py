@@ -10,7 +10,7 @@ class LandlordProfile(Base):
     __tablename__ = "landlord_profiles"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), unique=True, nullable=False)
     
     business_type: Mapped[BusinessType] = mapped_column(SQLEnum(BusinessType), default=BusinessType.INDIVIDUAL)
     business_name: Mapped[str | None] = mapped_column(String(255), nullable=True)

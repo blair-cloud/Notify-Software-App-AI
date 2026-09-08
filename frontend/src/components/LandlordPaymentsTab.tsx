@@ -69,7 +69,7 @@ export const LandlordPaymentsTab: React.FC<LandlordPaymentsTabProps> = ({
     setVerifyingId(paymentId);
     setActionErrorMsg(null);
     try {
-      await api.payments.verifyPayment(paymentId, 'mock-lp-001', true, 'Payment verified by Landlord');
+      await api.payments.verifyPayment(paymentId, true, 'Payment verified by Landlord');
       setActionSuccessMsg('Payment verified successfully! Invoice balance updated and official receipt generated.');
       onRefreshData();
       setTimeout(() => setActionSuccessMsg(null), 5000);
@@ -91,7 +91,6 @@ export const LandlordPaymentsTab: React.FC<LandlordPaymentsTabProps> = ({
     try {
       await api.payments.verifyPayment(
         rejectModalPayment.id,
-        'mock-lp-001',
         false,
         rejectionReason || 'Payment proof could not be verified'
       );

@@ -3,10 +3,8 @@
  *
  * One shared socket per browser tab: components subscribe and get pushed
  * events (new chat messages) as they happen, instead of polling. Reconnects
- * on its own with backoff, and stays inert in demo/mock mode where there is
- * no real backend to connect to.
+ * on its own with backoff, and stays inert while nobody is signed in.
  */
-import { isMockToken } from '../utils/mockAuth';
 
 export type RealtimeEvent =
   | { type: 'connected'; user_id: string }
@@ -14,6 +12,8 @@ export type RealtimeEvent =
   | { type: 'message.created'; message: any };
 
 type Listener = (event: RealtimeEvent) => void;
+
+import { getAccessToken } from './supabase';
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
@@ -43,7 +43,7 @@ class RealtimeClient {
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
-    this.connect();
+    void this.connect();
     return () => {
       this.listeners.delete(listener);
       if (this.listeners.size === 0) this.disconnect();
@@ -60,13 +60,32 @@ class RealtimeClient {
     });
   }
 
-  connect() {
-    if (this.socket && (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)) {
+  /**
+   * The socket authenticates with the current Supabase access token.
+   *
+   * A browser cannot set headers on a WebSocket, so the token travels as a
+   * query parameter and the server verifies it exactly as it verifies the
+   * Authorization header on a REST call. Fetching it is asynchronous, hence
+   * the void-returning async body.
+   */
+  async connect(): Promise<void> {
+    if (
+      this.socket &&
+      (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
-    const token = localStorage.getItem('notify_access_token');
-    // Demo sessions have no backend socket to talk to.
-    if (!token || isMockToken(token)) return;
+
+    const token = await getAccessToken();
+    if (!token) return; // signed out - nothing to connect
+
+    // getAccessToken awaited, so re-check that nothing connected meanwhile.
+    if (
+      this.socket &&
+      (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
 
     this.closedByUs = false;
     try {
@@ -112,7 +131,7 @@ class RealtimeClient {
     this.reconnectAttempts += 1;
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      void this.connect();
     }, delay);
   }
 

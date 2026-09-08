@@ -6,10 +6,12 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db
-from backend.core.dependencies import get_current_tenant
+from backend.core.dependencies import get_current_tenant, get_current_user
 from backend.core.exceptions import ForbiddenException
+from backend.core.scoping import assert_landlord_id, assert_owns_record, caller_profile_ids, is_admin
 from backend.services.payment_service import PaymentService
-from backend.models import PaymentMethod, PaymentChannel, PaymentStatus, TenantProfile
+from backend.services.invoice_service import InvoiceService
+from backend.models import PaymentMethod, PaymentChannel, PaymentStatus, TenantProfile, User
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -25,7 +27,11 @@ class PaymentRequest(BaseModel):
 
 
 class PaymentVerifyRequest(BaseModel):
-    verifier_id: uuid.UUID
+    # verifier_id is accepted for backwards compatibility but ignored: the
+    # verifier is always the signed-in landlord, never a value the caller
+    # picks. Typed as a plain string (not uuid.UUID) since it's never parsed
+    # as one - a stray non-UUID value here must never fail this endpoint.
+    verifier_id: Optional[str] = None
     confirm: bool
     notes: Optional[str] = None
 
@@ -75,7 +81,16 @@ class ProcessPaymentResponse(BaseModel):
 
 
 @router.post("/pay", response_model=ProcessPaymentResponse)
-async def process_payment(req: PaymentRequest, db: AsyncSession = Depends(get_db)):
+async def process_payment(
+    req: PaymentRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Anyone could previously post a payment against any invoice in the system.
+    invoice = await InvoiceService.get_invoice_by_id(db, req.invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    await assert_owns_record(db, current_user, invoice)
     try:
         payment, receipt = await PaymentService.process_payment(
             session=db,
@@ -93,12 +108,26 @@ async def process_payment(req: PaymentRequest, db: AsyncSession = Depends(get_db
 
 
 @router.post("/{payment_id}/verify", response_model=ProcessPaymentResponse)
-async def verify_payment(payment_id: uuid.UUID, req: PaymentVerifyRequest, db: AsyncSession = Depends(get_db)):
+async def verify_payment(
+    payment_id: uuid.UUID,
+    req: PaymentVerifyRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    payment = await PaymentService.get_payment_by_id(db, payment_id)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    landlord_id, _ = await caller_profile_ids(db, current_user)
+    if not is_admin(current_user):
+        if not landlord_id or payment.landlord_id != landlord_id:
+            raise ForbiddenException("Only the landlord who issued this invoice can verify its payment.")
+
     try:
         payment, receipt = await PaymentService.verify_offline_payment(
             session=db,
             payment_id=payment_id,
-            verifier_id=req.verifier_id,
+            verifier_id=landlord_id or payment.landlord_id,
             confirm=req.confirm,
             notes=req.notes
         )
@@ -109,12 +138,29 @@ async def verify_payment(payment_id: uuid.UUID, req: PaymentVerifyRequest, db: A
 
 @router.get("", response_model=List[PaymentSchema])
 @router.get("/", response_model=List[PaymentSchema])
-async def get_all_payments(db: AsyncSession = Depends(get_db)):
-    return await PaymentService.get_all_payments(db)
+async def get_all_payments(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """The caller's payments - this used to return every payment on record."""
+    if is_admin(current_user):
+        return await PaymentService.get_all_payments(db)
+
+    landlord_id, tenant_id = await caller_profile_ids(db, current_user)
+    if landlord_id:
+        return await PaymentService.get_payments_for_landlord(db, landlord_id)
+    if tenant_id:
+        return await PaymentService.get_payments_for_tenant(db, tenant_id)
+    return []
 
 
 @router.get("/landlord/{landlord_id}", response_model=List[PaymentSchema])
-async def get_landlord_payments(landlord_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_landlord_payments(
+    landlord_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await assert_landlord_id(db, current_user, landlord_id)
     return await PaymentService.get_payments_for_landlord(db, landlord_id)
 
 

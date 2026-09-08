@@ -92,7 +92,7 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
     setLoading(true);
 
     try {
-      const user = await registerLandlord({
+      const result = await registerLandlord({
         first_name: firstName,
         last_name: lastName,
         email,
@@ -107,8 +107,16 @@ export const GetStartedModal: React.FC<GetStartedModalProps> = ({
       });
 
       setLoading(false);
+      // With email confirmation on there is no session yet - say so rather than
+      // pretending the account is ready to use.
+      if (result.status === 'CONFIRM_EMAIL') {
+        setFormError(
+          `Account created. Please confirm ${result.email} using the link we just sent, then sign in.`
+        );
+        return;
+      }
       handleClose();
-      if (onSuccessRole) onSuccessRole(user.role);
+      if (onSuccessRole) onSuccessRole(result.profile.role);
     } catch (err: any) {
       setLoading(false);
       setFormError(err.message || 'Registration failed');

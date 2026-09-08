@@ -2,9 +2,10 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.database import get_db
-from backend.core.dependencies import get_current_landlord, get_current_tenant
+from backend.core.dependencies import get_current_landlord, get_current_tenant, get_current_user
 from backend.core.exceptions import ForbiddenException
-from backend.models import LandlordProfile, TenantProfile
+from backend.core.scoping import assert_landlord_id
+from backend.models import LandlordProfile, TenantProfile, User
 from backend.services.financial_service import FinancialService
 
 router = APIRouter(prefix="/financials", tags=["Financials"])
@@ -19,7 +20,14 @@ async def get_my_landlord_financials(
 
 
 @router.get("/landlord/{landlord_id}")
-async def get_landlord_financials(landlord_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_landlord_financials(
+    landlord_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Kept for the existing client, but the id in the URL must be the caller's
+    # own - it used to expose any landlord's revenue to an anonymous request.
+    await assert_landlord_id(db, current_user, landlord_id)
     return await FinancialService.get_landlord_financial_overview(db, landlord_id)
 
 

@@ -7,9 +7,10 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db
-from backend.core.dependencies import get_current_landlord
+from backend.core.dependencies import get_current_landlord, get_current_user
+from backend.core.scoping import is_admin
 from backend.core.permissions import verify_landlord_ownership
-from backend.models import ExpenseCategory, ExpenseStatus, LandlordProfile
+from backend.models import ExpenseCategory, ExpenseStatus, LandlordProfile, User
 from backend.services.expense_service import ExpenseService
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
@@ -72,12 +73,16 @@ async def get_my_expenses(
     start_date: Optional[date] = Query(None, description="Only expenses on or after this date"),
     end_date: Optional[date] = Query(None, description="Only expenses on or before this date"),
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Expenses belonging to the signed-in landlord, newest first."""
-    expenses = await ExpenseService.get_expenses_for_landlord(
-        db, landlord.id, property_id, category, start_date, end_date
-    )
+    if landlord is None and is_admin(current_user):
+        expenses = await ExpenseService.get_all_expenses(db)
+    else:
+        expenses = await ExpenseService.get_expenses_for_landlord(
+            db, landlord.id, property_id, category, start_date, end_date
+        )
     return await ExpenseService.serialize(db, expenses)
 
 

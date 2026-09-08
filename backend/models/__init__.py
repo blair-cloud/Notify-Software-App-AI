@@ -42,7 +42,6 @@ from backend.models.tenancy import Tenancy
 from backend.models.lease import Lease
 from backend.models.lease_document import LeaseDocument
 from backend.models.invitation import Invitation
-from backend.models.session import Session
 from backend.models.notification import (
     Notification,
     NotificationPreference,
@@ -117,7 +116,6 @@ __all__ = [
     "Lease",
     "LeaseDocument",
     "Invitation",
-    "Session",
     "Notification",
     "NotificationPreference",
     "NotificationDeliveryLog",

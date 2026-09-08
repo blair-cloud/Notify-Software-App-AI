@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   Building2,
   User,
@@ -17,14 +17,22 @@ import {
   Sparkles,
   Building,
   ShieldAlert,
-} from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { api } from '../services/api';
-import notifyLogo from '../assets/images/logo.png';
-import cartoonImage from '../assets/images/cartoon.png';
+  ShieldCheck,
+  MailCheck,
+} from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { api } from "../services/api";
+import { supabase } from "../services/supabase";
+import notifyLogo from "../assets/images/logo.png";
+import cartoonImage from "../assets/images/cartoon.png";
 
-export type AuthMode = 'LOGIN' | 'SIGNUP' | 'FORGOT_PASSWORD' | 'RESET_PASSWORD';
-export type UserRoleType = 'LANDLORD' | 'TENANT';
+export type AuthMode =
+  | "LOGIN"
+  | "SIGNUP"
+  | "FORGOT_PASSWORD"
+  | "RESET_PASSWORD"
+  | "CHECK_EMAIL";
+export type UserRoleType = "LANDLORD" | "TENANT";
 
 interface AuthPageProps {
   initialMode?: AuthMode;
@@ -35,13 +43,22 @@ interface AuthPageProps {
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({
-  initialMode = 'SIGNUP',
-  initialRole = 'LANDLORD',
+  initialMode = "SIGNUP",
+  initialRole = "LANDLORD",
   unauthorizedNotice = null,
   onGoHome,
   onAuthSuccess,
 }) => {
-  const { login, registerLandlord, registerTenant, forgotPassword, resetPassword, clearError } = useAuth();
+  const {
+    login,
+    registerLandlord,
+    registerTenant,
+    forgotPassword,
+    setNewPassword: submitNewPassword,
+    resendVerification,
+    refreshUser,
+    clearError,
+  } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [selectedRole, setSelectedRole] = useState<UserRoleType>(initialRole);
@@ -59,17 +76,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   }, [initialRole]);
 
   // Form Fields
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Tenant Specific
-  const [username, setUsername] = useState('');
-  const [invitationToken, setInvitationToken] = useState('');
+  const [username, setUsername] = useState("");
+  const [invitationToken, setInvitationToken] = useState("");
   const [tokenValidationState, setTokenValidationState] = useState<{
     valid?: boolean;
     property_name?: string;
@@ -80,15 +97,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     error?: string;
   }>({});
 
-  // Forgot / Reset Password Flow
-  const [resetTokenInput, setResetTokenInput] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [resetSentInfo, setResetSentInfo] = useState<{ message?: string; token?: string } | null>(null);
+  // Forgot / Reset Password Flow. The recovery session comes from the emailed
+  // link (Supabase parses it out of the URL hash before this page ever
+  // renders) - there is no token to show or type in here.
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [resetSentInfo, setResetSentInfo] = useState<{
+    message?: string;
+    token?: string;
+  } | null>(null);
 
   // Status & Notifications
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(unauthorizedNotice);
+  const [errorMessage, setErrorMessage] = useState<string | null>(
+    unauthorizedNotice,
+  );
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -96,6 +119,32 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       setErrorMessage(unauthorizedNotice);
     }
   }, [unauthorizedNotice]);
+
+  // A password-reset link signs the user in just long enough to set a new
+  // password. That session is what authorises the change, so its presence is
+  // what the reset form checks.
+  // Set when sign-up succeeds but Supabase is waiting on the emailed link.
+  const [pendingEmail, setPendingEmail] = useState<string>("");
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">(
+    "idle",
+  );
+
+  const [hasRecoverySession, setHasRecoverySession] = useState(false);
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (active) setHasRecoverySession(Boolean(data.session));
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+      if (event === "PASSWORD_RECOVERY" || session)
+        setHasRecoverySession(Boolean(session));
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
 
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);
@@ -106,11 +155,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
   // Live invitation token verification for Tenant
   useEffect(() => {
-    if (mode === 'SIGNUP' && selectedRole === 'TENANT' && invitationToken.trim().length >= 4) {
+    if (
+      mode === "SIGNUP" &&
+      selectedRole === "TENANT" &&
+      invitationToken.trim().length >= 4
+    ) {
       const timer = setTimeout(async () => {
         try {
           setTokenValidationState({ checking: true });
-          const res = await api.invitations.validateToken(invitationToken.trim());
+          const res = await api.invitations.validateToken(
+            invitationToken.trim(),
+          );
           if (res && res.valid) {
             setTokenValidationState({
               valid: true,
@@ -124,14 +179,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             setTokenValidationState({
               valid: false,
               checking: false,
-              error: 'Invalid invitation token.',
+              error: "Invalid invitation token.",
             });
           }
         } catch (err: any) {
           setTokenValidationState({
             valid: false,
             checking: false,
-            error: err.data?.detail || 'Invitation token not verified.',
+            error: err.data?.detail || "Invitation token not verified.",
           });
         }
       }, 400);
@@ -142,14 +197,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   }, [invitationToken, mode, selectedRole]);
 
-  const handleAutofillDemo = (role: 'LANDLORD' | 'TENANT') => {
-    if (role === 'LANDLORD') {
-      setEmail('landlord@notify.test');
-      setPassword('Password123!');
+  const handleAutofillDemo = (role: "LANDLORD" | "TENANT") => {
+    if (role === "LANDLORD") {
+      setEmail("landlord@notify.test");
+      setPassword("Password123!");
       setErrorMessage(null);
     } else {
-      setEmail('tenant@notify.test');
-      setPassword('Password123!');
+      setEmail("tenant@notify.test");
+      setPassword("Password123!");
       setErrorMessage(null);
     }
   };
@@ -162,25 +217,34 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
     const cleanEmail = email.trim();
     if (!cleanEmail) {
-      setErrorMessage('Please enter your email or username.');
+      setErrorMessage("Please enter your email or username.");
       return;
     }
     if (!password) {
-      setErrorMessage('Please enter your password.');
+      setErrorMessage("Please enter your password.");
       return;
     }
+
+    if (loading) return; // a second click while the first is in flight
 
     try {
       setLoading(true);
       const user = await login(cleanEmail, password);
-      setSuccessMessage(`Welcome back, ${user.first_name}! Redirecting to dashboard...`);
+      setSuccessMessage(
+        `Welcome back, ${user.first_name}! Redirecting to dashboard...`,
+      );
       setTimeout(() => {
         if (onAuthSuccess) {
           onAuthSuccess(user.role);
         }
       }, 600);
     } catch (err: any) {
-      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Invalid email or password.');
+      const msg =
+        typeof err.message === "string"
+          ? err.message
+          : typeof err.data?.detail === "string"
+            ? err.data.detail
+            : "Invalid email or password.";
       setErrorMessage(msg);
     } finally {
       setLoading(false);
@@ -194,75 +258,109 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setSuccessMessage(null);
 
     if (!fullName.trim()) {
-      setErrorMessage('Full name is required.');
+      setErrorMessage("Full name is required.");
       return;
     }
-    if (!email.trim() || !email.includes('@')) {
-      setErrorMessage('A valid email address is required.');
+    if (!email.trim() || !email.includes("@")) {
+      setErrorMessage("A valid email address is required.");
       return;
     }
     if (!phoneNumber.trim()) {
-      setErrorMessage('Phone number is required.');
+      setErrorMessage("Phone number is required.");
       return;
     }
     if (password.length < 8) {
-      setErrorMessage('Password must be at least 8 characters.');
+      setErrorMessage("Password must be at least 8 characters.");
       return;
     }
     if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match.');
+      setErrorMessage("Passwords do not match.");
       return;
     }
 
+    if (loading) return; // a second click while the first is in flight
+
+    const [firstName, ...restName] = fullName.trim().split(/\s+/);
+    const lastName = restName.join(" ");
+
     try {
       setLoading(true);
-      if (selectedRole === 'LANDLORD') {
-        const user = await registerLandlord({
+      if (selectedRole === "LANDLORD") {
+        const result = await registerLandlord({
+          first_name: firstName,
+          last_name: lastName,
           full_name: fullName.trim(),
           email: email.trim(),
           phone: phoneNumber.trim(),
           password,
-          confirm_password: confirmPassword,
         });
-        setSuccessMessage(`Landlord account created! Redirecting to dashboard...`);
-        setTimeout(() => {
-          if (onAuthSuccess) {
-            onAuthSuccess(user.role);
-          }
-        }, 800);
+        if (result.status === "CONFIRM_EMAIL") {
+          setPendingEmail(result.email);
+          setMode("CHECK_EMAIL");
+        } else {
+          setSuccessMessage(
+            "Landlord account created. Opening your dashboard...",
+          );
+          setTimeout(() => onAuthSuccess?.(result.profile.role), 800);
+        }
       } else {
         if (!invitationToken.trim()) {
-          setErrorMessage('Invitation token required from your landlord.');
+          setErrorMessage("Invitation token required from your landlord.");
           setLoading(false);
           return;
         }
         if (!username.trim()) {
-          setErrorMessage('Username is required.');
+          setErrorMessage("Username is required.");
           setLoading(false);
           return;
         }
 
-        const user = await registerTenant({
+        const result = await registerTenant({
+          first_name: firstName,
+          last_name: lastName,
           full_name: fullName.trim(),
           invitation_token: invitationToken.trim(),
           email: email.trim(),
           username: username.trim().toLowerCase(),
           phone: phoneNumber.trim(),
           password,
-          confirm_password: confirmPassword,
         });
-        setSuccessMessage(`Tenant account created! Redirecting to tenant portal...`);
-        setTimeout(() => {
-          if (onAuthSuccess) {
-            onAuthSuccess(user.role);
-          }
-        }, 800);
+        if (result.status === "CONFIRM_EMAIL") {
+          setPendingEmail(result.email);
+          setMode("CHECK_EMAIL");
+        } else {
+          setSuccessMessage("Tenant account created. Opening your portal...");
+          setTimeout(() => onAuthSuccess?.(result.profile.role), 800);
+        }
       }
     } catch (err: any) {
-      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Registration could not be completed.');
+      const msg =
+        typeof err.message === "string"
+          ? err.message
+          : typeof err.data?.detail === "string"
+            ? err.data.detail
+            : "Registration could not be completed.";
       setErrorMessage(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Resend the confirmation email from the "check your email" screen.
+  const handleResendConfirmation = async () => {
+    if (resendState !== "idle" || !pendingEmail) return;
+    setResendState("sending");
+    setErrorMessage(null);
+    try {
+      await resendVerification(pendingEmail);
+      setResendState("sent");
+      // Let them try again after a while rather than locking the button forever.
+      setTimeout(() => setResendState("idle"), 20000);
+    } catch (err: any) {
+      setResendState("idle");
+      setErrorMessage(
+        err?.message || "Could not resend the email. Please try again shortly.",
+      );
     }
   };
 
@@ -273,25 +371,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setSuccessMessage(null);
 
     const cleanEmail = email.trim();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setErrorMessage('Please enter a valid registered email.');
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      setErrorMessage("Please enter a valid registered email.");
       return;
     }
+
+    if (loading) return;
 
     try {
       setLoading(true);
       const res = await forgotPassword(cleanEmail);
-      setResetSentInfo({
-        message: res.message,
-        token: res.reset_token,
-      });
-      if (res.reset_token) {
-        setResetTokenInput(res.reset_token);
-      }
-      setSuccessMessage('Password reset security code generated. Set your new password below.');
-      setMode('RESET_PASSWORD');
+      // The reset link is emailed. It is deliberately never returned here, so
+      // the form cannot be used to take over an account from someone else's
+      // address - it stays on this screen and tells the user to check email.
+      setResetSentInfo({ message: res.message });
+      setSuccessMessage(res.message);
     } catch (err: any) {
-      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Unable to process reset request.');
+      const msg =
+        typeof err.message === "string"
+          ? err.message
+          : typeof err.data?.detail === "string"
+            ? err.data.detail
+            : "Unable to process reset request.";
       setErrorMessage(msg);
     } finally {
       setLoading(false);
@@ -304,43 +405,71 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (!resetTokenInput.trim()) {
-      setErrorMessage('Reset security code is required.');
+    // Supabase puts a short-lived recovery session in place when the emailed
+    // link is opened, so there is no token to submit - only the new password.
+    if (!hasRecoverySession) {
+      setErrorMessage(
+        "This password reset link has expired or was already used. Please request a new one.",
+      );
       return;
     }
     if (newPassword.length < 8) {
-      setErrorMessage('New password must be at least 8 characters.');
+      setErrorMessage("New password must be at least 8 characters.");
       return;
     }
     if (newPassword !== confirmNewPassword) {
-      setErrorMessage('New passwords do not match.');
+      setErrorMessage("New passwords do not match.");
       return;
     }
 
+    if (loading) return;
+
     try {
       setLoading(true);
-      const res = await resetPassword({
-        email: email.trim(),
-        reset_token: resetTokenInput.trim(),
-        new_password: newPassword,
-        confirm_password: confirmNewPassword,
-      });
-      setSuccessMessage(res.message || 'Password updated! Please sign in.');
-      setPassword(newPassword);
-      setTimeout(() => {
-        setMode('LOGIN');
-      }, 1500);
+      await submitNewPassword(newPassword);
+      setPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+
+      // Setting a new password does not end the recovery session Supabase
+      // put in place when the emailed link was opened - it simply becomes
+      // this user's normal session. So there is no need to send them back to
+      // the sign-in form: load their profile on that same session and go
+      // straight to their dashboard, exactly like a normal sign-in would.
+      const profile = await refreshUser();
+      if (profile) {
+        setSuccessMessage(`Password updated. Opening your dashboard...`);
+        setTimeout(() => onAuthSuccess?.(profile.role), 800);
+      } else {
+        // No usable session came back (link had already expired, say) -
+        // the password did change, so send them to sign in with it normally.
+        setSuccessMessage(
+          "Password updated. Please sign in with your new password.",
+        );
+        setTimeout(() => setMode("LOGIN"), 1500);
+      }
     } catch (err: any) {
-      const msg = typeof err.message === "string" ? err.message : (typeof err.data?.detail === "string" ? err.data.detail : 'Failed to reset password.');
+      const msg =
+        typeof err.message === "string"
+          ? err.message
+          : typeof err.data?.detail === "string"
+            ? err.data.detail
+            : "Failed to reset password.";
       setErrorMessage(msg);
     } finally {
       setLoading(false);
     }
   };
 
+  // The "check your email" screen is a single, centered message rather than
+  // the two-column form layout - it has nothing to put beside a mascot, and
+  // stretching it across the same width as the forms would leave it looking
+  // lost in empty space.
+  const isCheckEmail = mode === "CHECK_EMAIL";
+
   return (
     <div className="min-h-screen bg-notify-grid text-black font-sans py-6 sm:py-10 px-4 sm:px-6 lg:px-8 relative flex flex-col justify-center items-center">
-      <div className="w-full max-w-6xl z-10">
+      <div className={`w-full z-10 ${isCheckEmail ? "max-w-md" : "max-w-6xl"}`}>
         {/* Navigation Bar / Return to Site */}
         <div className="mb-6 flex items-center justify-between">
           <button
@@ -360,8 +489,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </div>
         </div>
 
-        {/* Two-Side Page Layout: Left side has the form, Right side has the cartoon mascot */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+        {/* Two-Side Page Layout: Left side has the form, Right side has the cartoon mascot.
+            The check-email screen skips this entirely and centers on its own. */}
+        <div
+          className={
+            isCheckEmail
+              ? ""
+              : "grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center"
+          }
+        >
           {/* ===================== LEFT SIDE: AUTHENTICATION FORM ===================== */}
           <div className="flex flex-col order-1 justify-center">
             <div className="py-2 sm:py-4 px-1 sm:px-3 flex-1 flex flex-col justify-center">
@@ -370,10 +506,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <div className="mb-6">
                   <div className="flex items-center gap-2.5 mb-2">
                     <span className="inline-block px-3 py-1 rounded-[10px] bg-[#F5DC00] text-black text-xs font-black uppercase tracking-wider border-2 border-black shadow-[0.5px_0.5px_0_#000000]">
-                      {mode === 'LOGIN' && 'Sign In'}
-                      {mode === 'SIGNUP' && `Register as ${selectedRole}`}
-                      {mode === 'FORGOT_PASSWORD' && 'Account Recovery'}
-                      {mode === 'RESET_PASSWORD' && 'New Password'}
+                      {mode === "LOGIN" && "Sign In"}
+                      {mode === "SIGNUP" && `Register as ${selectedRole}`}
+                      {mode === "FORGOT_PASSWORD" && "Account Recovery"}
+                      {mode === "RESET_PASSWORD" && "New Password"}
+                      {mode === "CHECK_EMAIL" && "Almost There"}
                     </span>
                     <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">
                       Kigali Commercial Property Suite
@@ -381,19 +518,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
 
                   <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-black uppercase tracking-tight">
-                    {mode === 'LOGIN' && 'Access Your Portal'}
-                    {mode === 'SIGNUP' && 'Create Your Account'}
-                    {mode === 'FORGOT_PASSWORD' && 'Reset Your Password'}
-                    {mode === 'RESET_PASSWORD' && 'Set New Password'}
+                    {mode === "LOGIN" && "Access Your Portal"}
+                    {mode === "SIGNUP" && "Create Your Account"}
+                    {mode === "FORGOT_PASSWORD" && "Reset Your Password"}
+                    {mode === "RESET_PASSWORD" && "Set New Password"}
+                    {mode === "CHECK_EMAIL" && "Check Your Email"}
                   </h1>
 
                   <p className="text-sm sm:text-base text-slate-700 font-medium mt-1.5">
-                    {mode === 'LOGIN'}
-                    {mode === 'SIGNUP' &&
-                      (selectedRole === 'LANDLORD'
-                      )}
-                    {mode === 'FORGOT_PASSWORD' && 'Enter your registered email address to receive your password recovery code.'}
-                    {mode === 'RESET_PASSWORD' && 'Enter your security reset code and choose a new secure password.'}
+                    {mode === "LOGIN"}
+                    {mode === "SIGNUP" && selectedRole === "LANDLORD"}
+                    {mode === "FORGOT_PASSWORD" &&
+                      "Enter your registered email address and we will send you a password reset link."}
+                    {mode === "RESET_PASSWORD" &&
+                      "Choose a new password for your account."}
+                    {mode === "CHECK_EMAIL"}
                   </p>
                 </div>
 
@@ -416,8 +555,77 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
                 )}
 
+                {/* ---------------- CONFIRM YOUR EMAIL ---------------- */}
+                {mode === "CHECK_EMAIL" && (
+                  <div className="space-y-5">
+                    {/* The envelope, with the role the account was created as.
+                        Showing it here is deliberate: it is the moment someone
+                        would notice if they had picked the wrong one. */}
+                    <div className="relative p-6 sm:p-7 rounded-[20px] bg-white border-2 border-black shadow-[3px_3px_0_#331A6F] text-center overflow-hidden">
+                      <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-[#F5DC00]/40" />
+                      <div className="absolute -bottom-12 -left-8 w-24 h-24 rounded-full bg-[#331A6F]/10" />
+
+                      <div className="relative">
+                        <div className="mx-auto w-16 h-16 rounded-[18px] bg-[#331A6F] border-2 border-black shadow-[2px_2px_0_#000000] flex items-center justify-center mb-4">
+                          <MailCheck className="w-8 h-8 text-white stroke-[2.2]" />
+                        </div>
+
+                        <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight text-black">
+                          Confirmation link sent
+                        </h2>
+
+                        <p className="mt-2 text-sm font-semibold text-slate-600 leading-relaxed">
+                          We sent it to
+                        </p>
+                        <p className="mt-1 text-sm sm:text-base font-black text-[#331A6F] break-all">
+                          {pendingEmail}
+                        </p>
+
+                        <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-[12px] bg-emerald-50 border-2 border-black shadow-[0.5px_0.5px_0_#000000]">
+                          {selectedRole === "LANDLORD" ? (
+                            <Building2 className="w-4 h-4 text-[#331A6F]" />
+                          ) : (
+                            <User className="w-4 h-4 text-[#331A6F]" />
+                          )}
+                          <span className="text-xs font-black uppercase tracking-wider text-black">
+                            {selectedRole} account
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleResendConfirmation}
+                      disabled={resendState !== "idle"}
+                      className="w-full py-3 px-6 rounded-[16px] bg-white text-black font-black text-sm uppercase tracking-wider border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:bg-amber-50 disabled:opacity-60 disabled:pointer-events-none transition-all cursor-pointer inline-flex items-center justify-center gap-2"
+                    >
+                      {resendState === "sending" && (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      )}
+                      {resendState === "sent" && (
+                        <Check className="w-4 h-4 text-emerald-600" />
+                      )}
+                      <span>
+                        {resendState === "idle" && "Resend the email"}
+                        {resendState === "sending" && "Sending..."}
+                        {resendState === "sent" && "Sent - check your inbox"}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => switchMode("LOGIN")}
+                      className="w-full py-3.5 px-6 rounded-[16px] bg-[#331A6F] text-white font-black text-sm uppercase tracking-wider border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] transition-all cursor-pointer inline-flex items-center justify-center gap-2"
+                    >
+                      <span>I have confirmed - sign me in</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
                 {/* -------------------- SIGN IN FORM -------------------- */}
-                {mode === 'LOGIN' && (
+                {mode === "LOGIN" && (
                   <form onSubmit={handleLoginSubmit} className="space-y-4">
                     <div>
                       <label className="block text-xs sm:text-sm font-black uppercase tracking-wider text-black mb-1.5">
@@ -444,7 +652,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         </label>
                         <button
                           type="button"
-                          onClick={() => switchMode('FORGOT_PASSWORD')}
+                          onClick={() => switchMode("FORGOT_PASSWORD")}
                           className="text-xs font-black text-[#331A6F] hover:underline uppercase tracking-wide cursor-pointer"
                         >
                           Forgot Password?
@@ -452,7 +660,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       </div>
                       <div className="relative">
                         <input
-                          type={showPassword ? 'text' : 'password'}
+                          type={showPassword ? "text" : "password"}
                           required
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
@@ -466,7 +674,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                           className="absolute right-4 top-3.5 text-slate-600 hover:text-black focus:outline-none"
                           tabIndex={-1}
                         >
-                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                          {showPassword ? (
+                            <EyeOff className="w-5 h-5" />
+                          ) : (
+                            <Eye className="w-5 h-5" />
+                          )}
                         </button>
                       </div>
                     </div>
@@ -479,7 +691,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => handleAutofillDemo('LANDLORD')}
+                          onClick={() => handleAutofillDemo("LANDLORD")}
                           className="px-3 py-1.5 rounded-[10px] bg-white hover:bg-purple-50 text-xs font-extrabold text-[#331A6F] border-2 border-black shadow-[0.5px_0.5px_0_#000000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-1.5 cursor-pointer"
                         >
                           <Building2 className="w-3.5 h-3.5" />
@@ -487,7 +699,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleAutofillDemo('TENANT')}
+                          onClick={() => handleAutofillDemo("TENANT")}
                           className="px-3 py-1.5 rounded-[10px] bg-white hover:bg-yellow-50 text-xs font-extrabold text-black border-2 border-black shadow-[0.5px_0.5px_0_#000000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-1.5 cursor-pointer"
                         >
                           <User className="w-3.5 h-3.5" />
@@ -517,10 +729,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     {/* Simple caption at the end of the form (no buttons) */}
                     <div className="pt-4 text-center border-t-2 border-slate-100 mt-5">
                       <p className="text-sm font-semibold text-slate-700">
-                        Don't have an account yet?{' '}
+                        Don't have an account yet?{" "}
                         <button
                           type="button"
-                          onClick={() => switchMode('SIGNUP')}
+                          onClick={() => switchMode("SIGNUP")}
                           className="font-black text-[#331A6F] underline hover:text-black transition-colors cursor-pointer ml-1 inline-flex items-center gap-1"
                         >
                           <span>Create Account</span>
@@ -532,53 +744,63 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 )}
 
                 {/* -------------------- SIGN UP FORM -------------------- */}
-                {mode === 'SIGNUP' && (
+                {mode === "SIGNUP" && (
                   <form onSubmit={handleSignUpSubmit} className="space-y-4">
                     {/* Role Selection */}
                     <div className="grid grid-cols-2 gap-3">
                       <button
                         type="button"
-                        onClick={() => setSelectedRole('LANDLORD')}
-                        className={`p-3 rounded-[16px] text-left border-2 border-black transition-all cursor-pointer flex items-center justify-between ${selectedRole === 'LANDLORD'
-                          ? 'bg-[#331A6F] text-white shadow-[0.5px_0.5px_0_#000000] translate-x-[0.5px] translate-y-[0.5px]'
-                          : 'bg-white text-black hover:bg-slate-50 shadow-[0.5px_0.5px_0_#000000]'
-                          }`}
+                        onClick={() => setSelectedRole("LANDLORD")}
+                        className={`p-3 rounded-[16px] text-left border-2 border-black transition-all cursor-pointer flex items-center justify-between ${
+                          selectedRole === "LANDLORD"
+                            ? "bg-[#331A6F] text-white shadow-[0.5px_0.5px_0_#000000] translate-x-[0.5px] translate-y-[0.5px]"
+                            : "bg-white text-black hover:bg-slate-50 shadow-[0.5px_0.5px_0_#000000]"
+                        }`}
                       >
                         <div className="flex items-center gap-2.5">
                           <Building2 className="w-5 h-5 flex-shrink-0" />
                           <div>
-                            <div className="font-black text-sm uppercase tracking-tight">Landlord</div>
-                            <div className="text-xs opacity-80">Property & Mall Owner</div>
+                            <div className="font-black text-sm uppercase tracking-tight">
+                              Landlord
+                            </div>
+                            <div className="text-xs opacity-80">
+                              Property & Mall Owner
+                            </div>
                           </div>
                         </div>
-                        {selectedRole === 'LANDLORD' && (
+                        {selectedRole === "LANDLORD" && (
                           <Check className="w-4 h-4 stroke-[3] text-[#FFE600]" />
                         )}
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => setSelectedRole('TENANT')}
-                        className={`p-3 rounded-[16px] text-left border-2 border-black transition-all cursor-pointer flex items-center justify-between ${selectedRole === 'TENANT'
-                          ? 'bg-[#FFE600] text-black shadow-[0.5px_0.5px_0_#000000] translate-x-[0.5px] translate-y-[0.5px]'
-                          : 'bg-white text-black hover:bg-slate-50 shadow-[0.5px_0.5px_0_#000000]'
-                          }`}
+                        onClick={() => setSelectedRole("TENANT")}
+                        className={`p-3 rounded-[16px] text-left border-2 border-black transition-all cursor-pointer flex items-center justify-between ${
+                          selectedRole === "TENANT"
+                            ? "bg-[#FFE600] text-black shadow-[0.5px_0.5px_0_#000000] translate-x-[0.5px] translate-y-[0.5px]"
+                            : "bg-white text-black hover:bg-slate-50 shadow-[0.5px_0.5px_0_#000000]"
+                        }`}
                       >
                         <div className="flex items-center gap-2.5">
                           <User className="w-5 h-5 flex-shrink-0" />
                           <div>
-                            <div className="font-black text-sm uppercase tracking-tight">Tenant</div>
-                            <div className="text-xs opacity-80">Commercial Unit Tenant</div>
+                            <div className="font-black text-sm uppercase tracking-tight">
+                              Tenant
+                            </div>
+                            <div className="text-xs opacity-80">
+                              Commercial Unit Tenant
+                            </div>
                           </div>
                         </div>
-                        {selectedRole === 'TENANT' && (
+                        {selectedRole === "TENANT" && (
                           <Check className="w-4 h-4 stroke-[3] text-black" />
                         )}
                       </button>
                     </div>
 
                     {/* Tenant specific: Invitation Token */}
-                    {selectedRole === 'TENANT' && (
+                    {selectedRole === "TENANT" && (
                       <div className="p-3 rounded-[16px] bg-amber-50 border-2 border-black shadow-[0.5px_0.5px_0_#000000] space-y-1.5">
                         <div className="flex items-center justify-between">
                           <label className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5">
@@ -587,7 +809,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                           </label>
                           <button
                             type="button"
-                            onClick={() => setInvitationToken('INV-KGL-2026')}
+                            onClick={() => setInvitationToken("INV-KGL-2026")}
                             className="text-xs font-black underline text-[#331A6F] cursor-pointer"
                           >
                             Sample: INV-KGL-2026
@@ -597,7 +819,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                           type="text"
                           required
                           value={invitationToken}
-                          onChange={(e) => setInvitationToken(e.target.value.toUpperCase())}
+                          onChange={(e) =>
+                            setInvitationToken(e.target.value.toUpperCase())
+                          }
                           placeholder="e.g. INV-KGL-2026"
                           disabled={loading}
                           className="w-full px-3 py-2 rounded-[12px] bg-white text-black font-black text-sm tracking-wider uppercase border-2 border-black focus:outline-none shadow-[0.5px_0.5px_0_#000000]"
@@ -606,7 +830,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                           <div className="text-xs font-bold text-green-900 flex items-center gap-1.5 pt-0.5">
                             <CheckCircle2 className="w-4 h-4 text-green-700 flex-shrink-0" />
                             <span>
-                              Verified: {tokenValidationState.property_name} ({tokenValidationState.unit_number})
+                              Verified: {tokenValidationState.property_name} (
+                              {tokenValidationState.unit_number})
                             </span>
                           </div>
                         )}
@@ -630,7 +855,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                           required
                           value={fullName}
                           onChange={(e) => setFullName(e.target.value)}
-                          placeholder={selectedRole === 'LANDLORD' ? 'Jean-Paul Mugabo' : 'Aline Uwase'}
+                          placeholder={
+                            selectedRole === "LANDLORD"
+                              ? "Jean-Paul Mugabo"
+                              : "Aline Uwase"
+                          }
                           disabled={loading}
                           className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
                         />
@@ -647,7 +876,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder={selectedRole === 'LANDLORD' ? 'landlord@kigali.rw' : 'tenant@shop.rw'}
+                            placeholder={
+                              selectedRole === "LANDLORD"
+                                ? "landlord@kigali.rw"
+                                : "tenant@shop.rw"
+                            }
                             disabled={loading}
                             className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
                           />
@@ -675,7 +908,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       </div>
 
                       {/* Username (Tenant) or Region (Landlord) */}
-                      {selectedRole === 'TENANT' ? (
+                      {selectedRole === "TENANT" ? (
                         <div>
                           <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
                             Username *
@@ -684,7 +917,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                             type="text"
                             required
                             value={username}
-                            onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                            onChange={(e) =>
+                              setUsername(e.target.value.toLowerCase())
+                            }
                             placeholder="e.g. aline_boutique"
                             disabled={loading}
                             className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
@@ -709,7 +944,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         </label>
                         <div className="relative">
                           <input
-                            type={showPassword ? 'text' : 'password'}
+                            type={showPassword ? "text" : "password"}
                             required
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
@@ -723,7 +958,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                             className="absolute right-3.5 top-3 text-slate-600 hover:text-black"
                             tabIndex={-1}
                           >
-                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            {showPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </div>
@@ -735,7 +974,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         </label>
                         <div className="relative">
                           <input
-                            type={showConfirmPassword ? 'text' : 'password'}
+                            type={showConfirmPassword ? "text" : "password"}
                             required
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
@@ -745,11 +984,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                           />
                           <button
                             type="button"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            onClick={() =>
+                              setShowConfirmPassword(!showConfirmPassword)
+                            }
                             className="absolute right-3.5 top-3 text-slate-600 hover:text-black"
                             tabIndex={-1}
                           >
-                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            {showConfirmPassword ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
                           </button>
                         </div>
                       </div>
@@ -758,8 +1003,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     {/* Password Match Feedback */}
                     {password && confirmPassword && (
                       <p
-                        className={`text-xs font-extrabold flex items-center gap-1.5 ${password === confirmPassword ? 'text-green-700' : 'text-red-600'
-                          }`}
+                        className={`text-xs font-extrabold flex items-center gap-1.5 ${
+                          password === confirmPassword
+                            ? "text-green-700"
+                            : "text-red-600"
+                        }`}
                       >
                         {password === confirmPassword ? (
                           <>
@@ -778,10 +1026,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     <button
                       type="submit"
                       disabled={loading}
-                      className={`w-full mt-2 py-3.5 px-6 rounded-[16px] font-black text-sm sm:text-base uppercase tracking-wider border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[0.5px_0.5px_0_#000000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:opacity-50 disabled:pointer-events-none transition-all cursor-pointer flex items-center justify-center gap-2 ${selectedRole === 'LANDLORD'
-                        ? 'bg-[#331A6F] text-white'
-                        : 'bg-[#FFE600] text-black'
-                        }`}
+                      className={`w-full mt-2 py-3.5 px-6 rounded-[16px] font-black text-sm sm:text-base uppercase tracking-wider border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[0.5px_0.5px_0_#000000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:opacity-50 disabled:pointer-events-none transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                        selectedRole === "LANDLORD"
+                          ? "bg-[#331A6F] text-white"
+                          : "bg-[#FFE600] text-black"
+                      }`}
                     >
                       {loading ? (
                         <>
@@ -799,10 +1048,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     {/* Simple caption at the end of the form (no buttons) */}
                     <div className="pt-4 text-center border-t-2 border-slate-100 mt-5">
                       <p className="text-sm font-semibold text-slate-700">
-                        Already have an account?{' '}
+                        Already have an account?{" "}
                         <button
                           type="button"
-                          onClick={() => switchMode('LOGIN')}
+                          onClick={() => switchMode("LOGIN")}
                           className="font-black text-[#331A6F] underline hover:text-black transition-colors cursor-pointer ml-1 inline-flex items-center gap-1"
                         >
                           <span>Sign In</span>
@@ -814,8 +1063,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 )}
 
                 {/* -------------------- FORGOT PASSWORD FORM -------------------- */}
-                {mode === 'FORGOT_PASSWORD' && (
-                  <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+                {mode === "FORGOT_PASSWORD" && (
+                  <form
+                    onSubmit={handleForgotPasswordSubmit}
+                    className="space-y-4"
+                  >
                     <div>
                       <label className="block text-xs sm:text-sm font-black uppercase tracking-wider text-black mb-1.5">
                         Your Registered Email Address
@@ -835,7 +1087,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </div>
 
                     <p className="text-xs sm:text-sm font-semibold text-slate-600 leading-relaxed">
-                      We will issue a secure verification code valid for 1 hour so you can reset your password immediately.
+                      We will email you a secure reset link, valid for 1 hour
+                      and usable once.
                     </p>
 
                     <button
@@ -846,11 +1099,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       {loading ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Generating Reset Code...</span>
+                          <span>Sending Reset Link...</span>
                         </>
                       ) : (
                         <>
-                          <span>Send Password Reset Code</span>
+                          <span>Email Me A Reset Link</span>
                           <KeyRound className="w-5 h-5" />
                         </>
                       )}
@@ -859,10 +1112,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     {/* Simple caption at the end of the form */}
                     <div className="pt-4 text-center border-t-2 border-slate-100 mt-5">
                       <p className="text-sm font-semibold text-slate-700">
-                        Remember your password?{' '}
+                        Remember your password?{" "}
                         <button
                           type="button"
-                          onClick={() => switchMode('LOGIN')}
+                          onClick={() => switchMode("LOGIN")}
                           className="font-black text-[#331A6F] underline hover:text-black transition-colors cursor-pointer ml-1 inline-flex items-center gap-1"
                         >
                           <span>Return to Sign In</span>
@@ -873,33 +1126,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 )}
 
                 {/* -------------------- RESET PASSWORD FORM -------------------- */}
-                {mode === 'RESET_PASSWORD' && (
-                  <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
-                    {resetSentInfo?.token && (
-                      <div className="p-3.5 rounded-[16px] bg-yellow-100 border-2 border-black shadow-[0.5px_0.5px_0_#000000]">
-                        <span className="text-xs font-black uppercase block text-black mb-1">
-                          Generated Reset Security Code:
+                {mode === "RESET_PASSWORD" && (
+                  <form
+                    onSubmit={handleResetPasswordSubmit}
+                    className="space-y-4"
+                  >
+                    {/* The token travels in the emailed link, so there is
+                        nothing to type here - just confirm we received it. */}
+                    {hasRecoverySession ? (
+                      <div className="p-3.5 rounded-[16px] bg-emerald-50 border-2 border-black shadow-[0.5px_0.5px_0_#000000] flex items-start gap-2.5">
+                        <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
+                        <span className="text-xs sm:text-sm font-bold text-black leading-relaxed">
+                          Reset link verified. Choose your new password below.
                         </span>
-                        <span className="text-base font-black tracking-widest text-[#331A6F] font-mono">
-                          {resetSentInfo.token}
+                      </div>
+                    ) : (
+                      <div className="p-3.5 rounded-[16px] bg-amber-50 border-2 border-black shadow-[0.5px_0.5px_0_#000000]">
+                        <span className="text-xs sm:text-sm font-bold text-black leading-relaxed block">
+                          This page needs the reset link from your email. Open
+                          the link in your inbox, or{" "}
+                          <button
+                            type="button"
+                            onClick={() => switchMode("FORGOT_PASSWORD")}
+                            className="font-black text-[#331A6F] underline hover:text-black transition-colors cursor-pointer"
+                          >
+                            request a new one
+                          </button>
+                          .
                         </span>
                       </div>
                     )}
-
-                    <div>
-                      <label className="block text-xs sm:text-sm font-black uppercase tracking-wider text-black mb-1.5">
-                        Security Reset Code *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={resetTokenInput}
-                        onChange={(e) => setResetTokenInput(e.target.value.toUpperCase())}
-                        placeholder="e.g. RESET-123456"
-                        disabled={loading}
-                        className="w-full px-4 py-3 rounded-[14px] bg-white text-black font-mono font-bold text-sm sm:text-base tracking-wider uppercase border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
-                      />
-                    </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       <div>
@@ -925,7 +1181,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                           type="password"
                           required
                           value={confirmNewPassword}
-                          onChange={(e) => setConfirmNewPassword(e.target.value)}
+                          onChange={(e) =>
+                            setConfirmNewPassword(e.target.value)
+                          }
                           placeholder="Re-type new password"
                           disabled={loading}
                           className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
@@ -953,10 +1211,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                     <div className="pt-4 text-center border-t-2 border-slate-100 mt-5">
                       <p className="text-sm font-semibold text-slate-700">
-                        Remember your password?{' '}
+                        Remember your password?{" "}
                         <button
                           type="button"
-                          onClick={() => switchMode('LOGIN')}
+                          onClick={() => switchMode("LOGIN")}
                           className="font-black text-[#331A6F] underline hover:text-black transition-colors cursor-pointer ml-1 inline-flex items-center gap-1"
                         >
                           <span>Back to Sign In</span>
@@ -970,13 +1228,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </div>
 
           {/* ===================== RIGHT SIDE: CARTOON MASCOT ===================== */}
-          <div className="hidden lg:flex flex-col order-2 items-center justify-center py-4 sm:py-8">
-            <img
-              src={cartoonImage}
-              alt="Notify Mascot"
-              className="w-full max-w-sm sm:max-w-md lg:max-w-[480px] h-auto object-contain filter drop-shadow-[0_20px_40px_rgba(51,26,111,0.18)] transition-transform duration-300 hover:scale-105"
-            />
-          </div>
+          {!isCheckEmail && (
+            <div className="hidden lg:flex flex-col order-2 items-center justify-center py-4 sm:py-8">
+              <img
+                src={cartoonImage}
+                alt="Notify Mascot"
+                className="w-full max-w-sm sm:max-w-md lg:max-w-[480px] h-auto object-contain filter drop-shadow-[0_20px_40px_rgba(51,26,111,0.18)] transition-transform duration-300 hover:scale-105"
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

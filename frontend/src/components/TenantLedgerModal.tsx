@@ -52,9 +52,9 @@ export const TenantLedgerModal: React.FC<TenantLedgerModalProps> = ({
   onViewReceipt,
 }) => {
   const { t } = useLanguage();
-  if (!isOpen || !tenant) return null;
-
   const [activeSubTab, setActiveSubTab] = useState<'LEDGER' | 'INVOICES' | 'PAYMENTS' | 'RECEIPTS'>('LEDGER');
+
+  if (!isOpen || !tenant) return null;
 
   // Filter records for this tenant
   const tenantInvoices = (invoices || []).filter(

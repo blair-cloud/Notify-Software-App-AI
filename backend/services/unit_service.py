@@ -1,6 +1,7 @@
 import uuid
 from typing import Sequence
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.exceptions import NotFoundException, ForbiddenException, ConflictException
 from backend.core.permissions import verify_landlord_ownership
@@ -37,6 +38,11 @@ class UnitService:
 
     async def list_landlord_units(self, landlord: LandlordProfile) -> Sequence[Unit]:
         return await self.unit_repo.list_by_landlord(landlord.id)
+
+    async def list_all_units(self) -> Sequence[Unit]:
+        """Every unit on the platform. System-admin views only."""
+        res = await self.db.execute(select(Unit).order_by(Unit.created_at.desc()))
+        return list(res.scalars().all())
 
     async def get_unit_by_id(self, landlord: LandlordProfile, unit_id: uuid.UUID) -> Unit:
         unit = await self.unit_repo.get_by_id(unit_id)

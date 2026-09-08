@@ -4,13 +4,25 @@ from typing import List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from backend.models import (
-    Invoice, Payment, Receipt, Notification,
+    Invoice, Payment, Receipt, Notification, TenantProfile,
     PaymentMethod, PaymentChannel, PaymentStatus, InvoiceStatus, NotificationChannel, NotificationStatus
 )
 from backend.core.logging import logger
 
 
 class PaymentService:
+    @staticmethod
+    async def _get_tenant_user_id(session: AsyncSession, tenant_profile_id: uuid.UUID) -> Optional[uuid.UUID]:
+        """
+        Notification.user_id is a foreign key to profiles.id (the auth user),
+        not tenant_profiles.id - the two are different UUIDs. Returns None for
+        a tenant invited but not yet signed up (no linked user to notify).
+        """
+        result = await session.execute(
+            select(TenantProfile.user_id).where(TenantProfile.id == tenant_profile_id)
+        )
+        return result.scalar_one_or_none()
+
     @staticmethod
     async def generate_payment_reference(session: AsyncSession) -> str:
         current_year = datetime.now().year
@@ -137,19 +149,22 @@ class PaymentService:
         )
         session.add(receipt)
 
-        # Notify Tenant
-        notification = Notification(
-            user_id=invoice.tenant_id,
-            type="PAYMENT_RECEIVED",
-            title="Payment Confirmed & Receipt Generated",
-            message=f"Your payment of {payment.currency} {payment.amount:,.0f} for invoice {invoice.invoice_number} was successfully processed. Receipt #{receipt_num} is ready.",
-            channel=NotificationChannel.IN_APP,
-            status=NotificationStatus.SENT,
-            reference_type="RECEIPT",
-            reference_id=receipt.id,
-            sent_at=datetime.now(timezone.utc)
-        )
-        session.add(notification)
+        # Notify Tenant (skipped if this tenant hasn't signed up yet - there is
+        # no user account to notify).
+        tenant_user_id = await PaymentService._get_tenant_user_id(session, invoice.tenant_id)
+        if tenant_user_id:
+            notification = Notification(
+                user_id=tenant_user_id,
+                type="PAYMENT_RECEIVED",
+                title="Payment Confirmed & Receipt Generated",
+                message=f"Your payment of {payment.currency} {payment.amount:,.0f} for invoice {invoice.invoice_number} was successfully processed. Receipt #{receipt_num} is ready.",
+                channel=NotificationChannel.IN_APP,
+                status=NotificationStatus.SENT,
+                reference_type="RECEIPT",
+                reference_id=receipt.id,
+                sent_at=datetime.now(timezone.utc)
+            )
+            session.add(notification)
 
         return receipt
 
@@ -196,18 +211,20 @@ class PaymentService:
                 payment.notes = f"{payment.notes or ''} | Rejected: {notes}"
 
             # Notify Tenant of Rejection
-            notification = Notification(
-                user_id=invoice.tenant_id,
-                type="PAYMENT_REJECTED",
-                title="Offline Payment Unverified",
-                message=f"Your offline payment submission of {payment.currency} {payment.amount:,.0f} for invoice {invoice.invoice_number} could not be verified by landlord.",
-                channel=NotificationChannel.IN_APP,
-                status=NotificationStatus.SENT,
-                reference_type="INVOICE",
-                reference_id=invoice.id,
-                sent_at=datetime.now(timezone.utc)
-            )
-            session.add(notification)
+            tenant_user_id = await PaymentService._get_tenant_user_id(session, invoice.tenant_id)
+            if tenant_user_id:
+                notification = Notification(
+                    user_id=tenant_user_id,
+                    type="PAYMENT_REJECTED",
+                    title="Offline Payment Unverified",
+                    message=f"Your offline payment submission of {payment.currency} {payment.amount:,.0f} for invoice {invoice.invoice_number} could not be verified by landlord.",
+                    channel=NotificationChannel.IN_APP,
+                    status=NotificationStatus.SENT,
+                    reference_type="INVOICE",
+                    reference_id=invoice.id,
+                    sent_at=datetime.now(timezone.utc)
+                )
+                session.add(notification)
 
         await session.commit()
         await session.refresh(payment)
@@ -215,6 +232,11 @@ class PaymentService:
             await session.refresh(receipt)
 
         return payment, receipt
+
+    @staticmethod
+    async def get_payment_by_id(session: AsyncSession, payment_id: uuid.UUID) -> Optional[Payment]:
+        res = await session.execute(select(Payment).where(Payment.id == payment_id))
+        return res.scalar_one_or_none()
 
     @staticmethod
     async def get_all_payments(session: AsyncSession) -> List[Payment]:

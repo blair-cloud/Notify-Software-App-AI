@@ -41,8 +41,6 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   initialInvoiceId,
   initialTenantId,
 }) => {
-  if (!isOpen) return null;
-
   const invoiceList = invoices || [];
 
   // Selected Invoice or Tenant
@@ -84,6 +82,8 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
       }
     }
   }, [initialInvoiceId, initialTenantId, invoices]);
+
+  if (!isOpen) return null;
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();

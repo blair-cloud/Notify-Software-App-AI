@@ -1,6 +1,7 @@
 import uuid
 from typing import Sequence, Optional
 from datetime import date, datetime, timezone, timedelta
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.exceptions import NotFoundException, ForbiddenException, ConflictException
 from backend.core.permissions import verify_landlord_ownership, verify_tenant_ownership
@@ -26,7 +27,7 @@ class LeaseService:
         today = date.today()
         if end_date < today:
             return LeaseStatus.EXPIRED
-        elif (end_date - today).days <= 30:
+        elif (end_date - today).days <= 5:
             return LeaseStatus.EXPIRING_SOON
         else:
             return LeaseStatus.ACTIVE
@@ -66,6 +67,16 @@ class LeaseService:
         # (LeaseResponse.agreement_document/document_history) never triggers a
         # lazy load outside of an async context.
         return await self.lease_repo.get_by_id(lease.id)
+
+    async def list_all_leases(self) -> Sequence[Lease]:
+        """Every lease on the platform. System-admin views only."""
+        res = await self.db.execute(select(Lease).order_by(Lease.created_at.desc()))
+        leases = list(res.scalars().all())
+        for lease in leases:
+            new_status = self.calculate_lease_status(lease.start_date, lease.end_date, lease.status)
+            if new_status != lease.status:
+                lease.status = new_status
+        return leases
 
     async def list_landlord_leases(self, landlord: LandlordProfile) -> Sequence[Lease]:
         leases = await self.lease_repo.list_by_landlord(landlord.id)

@@ -8,7 +8,7 @@ logging.basicConfig(
 )
 
 # Suppress verbose third-party loggers
-for logger_name in ["aiosqlite", "passlib", "passlib.utils.compat", "passlib.registry", "sqlalchemy", "sqlalchemy.engine", "asyncio"]:
+for logger_name in ["asyncpg", "sqlalchemy", "sqlalchemy.engine", "asyncio", "httpx", "hpack"]:
     logging.getLogger(logger_name).setLevel(logging.WARNING)
 
 logger = logging.getLogger("notify")

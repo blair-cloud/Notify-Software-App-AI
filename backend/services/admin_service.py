@@ -1,3 +1,4 @@
+import secrets
 import uuid
 from typing import Sequence, List, Optional
 from sqlalchemy import select, func
@@ -9,7 +10,7 @@ from backend.models import (
 from backend.schemas.admin import AdminDashboardStats, UserStatusUpdate, UserRoleUpdate, UserCreateAdmin
 from backend.repositories.user_repository import UserRepository
 from backend.core.exceptions import NotFoundException
-from backend.core.security import get_password_hash
+from backend.integrations.supabase_admin import create_auth_user, SupabaseAdminError
 
 class AdminService:
     def __init__(self, db: AsyncSession):
@@ -65,21 +66,58 @@ class AdminService:
         return result.scalars().all()
 
     async def create_user(self, req: UserCreateAdmin) -> User:
+        """
+        Create an account as an administrator.
+
+        The identity is created in Supabase Auth, which hashes the password and
+        owns the credential. The row written here is only the application
+        profile - it deliberately has nowhere to put a password.
+        """
         existing = await self.user_repo.get_by_email(req.email)
         if existing:
             raise ValueError(f"User with email {req.email} already exists")
 
-        new_user = User(
-            id=uuid.uuid4(),
-            first_name=req.first_name,
-            last_name=req.last_name,
-            email=req.email,
-            phone_number=req.phone,
-            password_hash=get_password_hash(req.password or "NotifyAdmin2026!"),
-            role=req.role,
-            status=UserStatus.ACTIVE
-        )
-        self.db.add(new_user)
+        try:
+            auth_user = await create_auth_user(
+                email=req.email,
+                password=req.password or secrets.token_urlsafe(16),
+                role=req.role.value,
+                phone=req.phone,
+                first_name=req.first_name,
+                last_name=req.last_name,
+            )
+        except SupabaseAdminError as exc:
+            raise ValueError(f"Could not create the account in Supabase Auth: {exc}") from exc
+
+        auth_id = uuid.UUID(auth_user["id"])
+
+        # The on_auth_user_created trigger normally inserts the profile; take
+        # whichever row exists so this works either way.
+        existing_profile = (
+            await self.db.execute(select(User).where(User.id == auth_id))
+        ).scalar_one_or_none()
+
+        if existing_profile:
+            new_user = existing_profile
+            new_user.first_name = req.first_name
+            new_user.last_name = req.last_name
+            new_user.email = req.email
+            if req.phone:
+                new_user.phone = req.phone
+            new_user.role = req.role
+            new_user.status = UserStatus.ACTIVE
+        else:
+            new_user = User(
+                id=auth_id,
+                first_name=req.first_name,
+                last_name=req.last_name,
+                email=req.email,
+                phone=req.phone or f"pending-{str(auth_id)[:8]}",
+                role=req.role,
+                status=UserStatus.ACTIVE,
+            )
+            self.db.add(new_user)
+
         await self.db.flush()
 
         if req.role == UserRole.LANDLORD:

@@ -17,6 +17,7 @@ from backend.schemas.message import (
 )
 from backend.services.communication_service import CommunicationService
 from backend.services.message_service import MessageService
+from backend.core.logging import logger
 
 router = APIRouter(prefix="/messages", tags=["Messages"])
 
@@ -29,8 +30,16 @@ async def send_message(
 ):
     try:
         return await MessageService.send_message(db, current_user, data)
-    except Exception as e:
+    except HTTPException:
+        # Already a considered answer (404 for an unknown recipient, 403, ...).
+        # Re-wrapping it turned every one of those into a 400 whose message read
+        # "404: ...", and turned genuine server errors into misleading 400s.
+        raise
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("Unexpected failure while sending a message")
+        raise HTTPException(status_code=500, detail="The message could not be sent. Please try again.")
 
 
 # ----------------------------------------------------------------------

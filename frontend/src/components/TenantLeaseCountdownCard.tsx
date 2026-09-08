@@ -133,14 +133,10 @@ export const TenantLeaseCountdownCard: React.FC<TenantLeaseCountdownCardProps> =
     statusBadgeColor = 'bg-slate-100 text-slate-700 border-slate-200';
     statusText = lease.status === 'TERMINATED' ? ('Terminated') : (t.leaseExpiredStatus || 'Lease Expired');
     strokeColor = '#64748B';
-  } else if (remainingDays <= 30) {
+  } else if (remainingDays <= 5) {
     statusBadgeColor = 'bg-rose-50 text-rose-700 border-rose-200';
     statusText = t.expiringSoonStatus || 'Expiring Soon';
     strokeColor = '#E11D48';
-  } else if (remainingDays <= 60) {
-    statusBadgeColor = 'bg-amber-50 text-amber-800 border-amber-200';
-    statusText = t.expiringTwoMonths || 'Expiring in ~2 Months';
-    strokeColor = '#D97706';
   }
 
   // SVG circular geometry

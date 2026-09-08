@@ -9,9 +9,8 @@ interface ReceiptModalProps {
 }
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) => {
-  if (!receipt) return null;
-
   const { t } = useLanguage();
+  if (!receipt) return null;
 
   const handlePrint = () => {
     window.print();

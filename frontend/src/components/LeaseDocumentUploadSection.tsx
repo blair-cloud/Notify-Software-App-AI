@@ -223,7 +223,9 @@ export const LeaseDocumentUploadSection: React.FC<LeaseDocumentUploadSectionProp
             )}
           </label>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Upload the official signed lease agreement. Required to activate the lease.
+            {requiredForActivation
+              ? 'Upload the official signed lease agreement. Required to activate the lease.'
+              : 'Upload the official signed lease agreement, or skip this and attach it later.'}
           </p>
         </div>
 
@@ -236,13 +238,13 @@ export const LeaseDocumentUploadSection: React.FC<LeaseDocumentUploadSectionProp
         ) : (
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-              isDraftMode
+              !requiredForActivation || isDraftMode
                 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                 : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-800'
             }`}
           >
             <AlertCircle className="w-3.5 h-3.5" />
-            {isDraftMode ? 'Optional for Draft' : 'Required for Activation'}
+            {isDraftMode ? 'Optional for Draft' : requiredForActivation ? 'Required for Activation' : 'Optional'}
           </span>
         )}
       </div>

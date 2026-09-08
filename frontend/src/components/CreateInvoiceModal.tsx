@@ -22,8 +22,6 @@ export const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
   leases,
   tenants,
 }) => {
-  if (!isOpen) return null;
-
   const propertyList = properties || [];
   const leaseList = leases || [];
   const unitList = units || [];
@@ -61,6 +59,8 @@ export const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
       setSubtotal(first.monthly_rent || 350000);
     }
   }, [propertyId]);
+
+  if (!isOpen) return null;
 
   const handleLeaseChange = (selectedLeaseId: string) => {
     setLeaseId(selectedLeaseId);

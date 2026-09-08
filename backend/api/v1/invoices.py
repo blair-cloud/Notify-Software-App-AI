@@ -6,9 +6,10 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db
-from backend.core.dependencies import get_current_tenant
+from backend.core.dependencies import get_current_tenant, get_current_user
 from backend.core.exceptions import ForbiddenException
-from backend.models import InvoiceStatus, InvoiceType, TenantProfile
+from backend.core.scoping import assert_landlord_id, assert_owns_record, caller_profile_ids, is_admin
+from backend.models import InvoiceStatus, InvoiceType, TenantProfile, User
 from backend.services.invoice_service import InvoiceService
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
@@ -42,13 +43,33 @@ class InvoiceSchema(BaseModel):
 
 @router.get("", response_model=List[InvoiceSchema])
 @router.get("/", response_model=List[InvoiceSchema])
-async def get_all_invoices(db: AsyncSession = Depends(get_db)):
+async def get_all_invoices(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    The caller's invoices. This used to return every invoice in the system to
+    anyone who asked, which is what the landlord dashboard was loading.
+    """
     await InvoiceService.update_overdue_statuses(db)
-    return await InvoiceService.get_all_invoices(db)
+    if is_admin(current_user):
+        return await InvoiceService.get_all_invoices(db)
+
+    landlord_id, tenant_id = await caller_profile_ids(db, current_user)
+    if landlord_id:
+        return await InvoiceService.get_invoices_for_landlord(db, landlord_id)
+    if tenant_id:
+        return await InvoiceService.get_invoices_for_tenant(db, tenant_id)
+    return []
 
 
 @router.get("/landlord/{landlord_id}", response_model=List[InvoiceSchema])
-async def get_landlord_invoices(landlord_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_landlord_invoices(
+    landlord_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await assert_landlord_id(db, current_user, landlord_id)
     # Automatically update overdue statuses before returning
     await InvoiceService.update_overdue_statuses(db)
     return await InvoiceService.get_invoices_for_landlord(db, landlord_id)
@@ -76,13 +97,29 @@ async def get_tenant_invoices(
 
 
 @router.get("/{invoice_id}", response_model=InvoiceSchema)
-async def get_invoice_details(invoice_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_invoice_details(
+    invoice_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     inv = await InvoiceService.get_invoice_by_id(db, invoice_id)
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    await assert_owns_record(db, current_user, inv)
     return inv
 
 
 @router.post("/generate", response_model=List[InvoiceSchema])
-async def trigger_invoice_generation(db: AsyncSession = Depends(get_db)):
-    return await InvoiceService.auto_generate_monthly_invoices(db)
+async def trigger_invoice_generation(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Run the monthly invoice generation, returning only the caller's own."""
+    generated = await InvoiceService.auto_generate_monthly_invoices(db)
+    if is_admin(current_user):
+        return generated
+
+    landlord_id, tenant_id = await caller_profile_ids(db, current_user)
+    if not landlord_id:
+        raise ForbiddenException("Only landlord accounts can generate invoices.")
+    return [inv for inv in generated if inv.landlord_id == landlord_id]

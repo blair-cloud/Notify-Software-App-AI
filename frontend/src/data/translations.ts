@@ -485,6 +485,7 @@ export interface Translations {
   residentialTenancyAgreement: string;
   tenancyGovernedRwanda: string;
   viewSignedAgreement: string;
+  viewLeaseAgreement: string;
   unitAllocated: string;
   leaseTerm: string;
   financialTermsSchedule: string;
@@ -1096,6 +1097,7 @@ export const translations: Record<Language, Translations> = {
     residentialTenancyAgreement: 'Residential Tenancy Agreement',
     tenancyGovernedRwanda: 'Standard residential tenancy governed by the laws of the Republic of Rwanda.',
     viewSignedAgreement: 'View Signed Agreement Document',
+    viewLeaseAgreement: 'View Agreement',
     unitAllocated: 'Unit Allocated',
     leaseTerm: 'Lease Term',
     financialTermsSchedule: 'Financial Terms & Payment Schedule',
@@ -1706,6 +1708,7 @@ export const translations: Record<Language, Translations> = {
     residentialTenancyAgreement: 'Amasezerano y\'Ubukode bw\'Inzu',
     tenancyGovernedRwanda: 'Amasezerano y\'ubukode agengwa n\'amategeko ya Repubulika y\'u Rwanda.',
     viewSignedAgreement: 'Reba Amasezerano Yashyizweho Umukono',
+    viewLeaseAgreement: 'Reba Amasezerano',
     unitAllocated: 'Inzu / Umuryango Uhabwa',
     leaseTerm: 'Igihe cy\'Amasezerano',
     financialTermsSchedule: 'Ibijyanye n\'Amafaranga & Gahunda yo Kwishyura',
@@ -2316,6 +2319,7 @@ export const translations: Record<Language, Translations> = {
     residentialTenancyAgreement: 'Contrat de Bail Résidentiel',
     tenancyGovernedRwanda: 'Contrat de bail régi par les lois de la République du Rwanda.',
     viewSignedAgreement: 'Voir le Contrat de Bail Signé',
+    viewLeaseAgreement: 'Voir le Contrat',
     unitAllocated: 'Unité Attribuée',
     leaseTerm: 'Durée du Bail',
     financialTermsSchedule: 'Conditions Financières & Calendrier de Paiement',

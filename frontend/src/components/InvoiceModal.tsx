@@ -10,9 +10,8 @@ interface InvoiceModalProps {
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({ invoice, onClose, onPayNow }) => {
-  if (!invoice) return null;
-
   const { t } = useLanguage();
+  if (!invoice) return null;
 
   const handlePrint = () => {
     window.print();

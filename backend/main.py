@@ -24,35 +24,98 @@ from backend.api.v1 import (
 )
 
 
-def _sync_missing_columns(conn):
-    """create_all() creates missing tables but never alters existing ones, so a
-    newly declared column leaves older databases broken until they are recreated."""
-    inspector = inspect(conn)
-    existing_tables = set(inspector.get_table_names())
-    for table in Base.metadata.sorted_tables:
-        if table.name not in existing_tables:
-            continue
-        present = {c["name"] for c in inspector.get_columns(table.name)}
-        for column in table.columns:
-            if column.name in present:
-                continue
-            if not column.nullable and column.server_default is None:
-                logger.warning(
-                    f"Cannot auto-add non-nullable column {table.name}.{column.name}; migrate manually."
-                )
-                continue
-            col_type = column.type.compile(conn.dialect)
-            conn.exec_driver_sql(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}')
-            logger.info(f"Added missing column {table.name}.{column.name}")
+
+async def _verify_schema() -> None:
+    """
+    Confirm the database actually has what the ORM expects.
+
+    The application no longer creates tables. If the migration has not been run,
+    fail loudly at startup with the fix, rather than at the first query with a
+    confusing ProgrammingError.
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    async with engine.connect() as conn:
+        table_names = await conn.run_sync(lambda c: sa_inspect(c).get_table_names())
+
+    expected = {t.name for t in Base.metadata.sorted_tables}
+    missing = sorted(expected - set(table_names))
+
+    if missing:
+        raise RuntimeError(
+            f"{len(missing)} table(s) missing from the database: {', '.join(missing[:8])}"
+            + (" ..." if len(missing) > 8 else "")
+            + ". Apply supabase_v2_migration.sql in the Supabase SQL editor, then restart."
+        )
+
+    logger.info("Schema verified: %d tables present.", len(expected))
+
+
+DEFAULT_SECRET_KEY = "notify_super_secret_jwt_key_change_in_production_32bytes"
+
+
+def _check_production_secrets() -> None:
+    """
+    The JWT signing key is what makes a token unforgeable. Shipping the shared
+    default would let anyone mint a token for any account, so say so loudly.
+    """
+    if settings.SECRET_KEY == DEFAULT_SECRET_KEY:
+        message = (
+            "SECRET_KEY is still the built-in default. It no longer signs sessions "
+            "(Supabase Auth does), but it does HMAC invitation tokens. Set it in the "
+            "environment."
+        )
+        if settings.ENVIRONMENT.lower() in ("production", "prod"):
+            raise RuntimeError(message)
+        logger.warning("SECURITY: %s", message)
+
+    if settings.ENVIRONMENT.lower() in ("production", "prod") and not settings.CORS_ORIGINS:
+        logger.warning(
+            "SECURITY: CORS_ORIGINS is empty in production, so any origin may call the API. "
+            "Set it to your frontend origin(s)."
+        )
+
+
+def _log_runtime_configuration() -> None:
+    """
+    Say plainly where data is going and whether email can actually be sent.
+
+    Both have caused real confusion: accounts were being written to a local
+    SQLite file while the Supabase dashboard was being checked for them, and
+    confirmation emails were only ever logged because no SMTP server was set.
+    """
+    logger.info("Database backend : %s", settings.database_backend)
+    logger.info("Database location: %s", settings.database_location)
+    logger.info("Identity        : Supabase Auth (%s)", settings.SUPABASE_URL or "SUPABASE_URL not set")
+
+    # Account email (confirmation, password reset) is Supabase Auth's job and is
+    # configured in its dashboard. This setting only covers the application's own
+    # mail: rent reminders, lease notices, receipts.
+    if settings.email_is_configured:
+        logger.info(
+            "App email       : SMTP via %s:%s as %s",
+            settings.SMTP_HOST, settings.SMTP_PORT, settings.smtp_username,
+        )
+    else:
+        logger.warning(
+            "App email       : SIMULATED. Reminders and notices are logged, not sent. "
+            "Set SMTP_USER / SMTP_PASSWORD in backend/.env, then check with "
+            "'python -m backend.scripts.test_email you@example.com'. "
+            "(Confirmation and password-reset email is sent by Supabase Auth, "
+            "configured in its dashboard - see SUPABASE_SETUP.md.)"
+        )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Initializing Notify FastAPI application...")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        await conn.run_sync(_sync_missing_columns)
-    logger.info("Database schemas created/verified successfully.")
+    _check_production_secrets()
+    _log_runtime_configuration()
+    # The schema is owned by supabase_v2_migration.sql, applied in the Supabase
+    # SQL editor. The application no longer creates or alters tables at startup:
+    # doing that against a shared Postgres database races other instances and
+    # hides drift. Instead, check that what the ORM expects is actually there.
+    await _verify_schema()
     yield
     logger.info("Shutting down Notify FastAPI application...")
 
@@ -66,10 +129,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# A wildcard origin and credentialed requests are mutually exclusive per the
+# CORS spec - browsers reject the combination outright. Auth here travels in an
+# Authorization header rather than a cookie, so the permissive development
+# default needs no credentials. Setting CORS_ORIGINS (comma separated) in
+# production narrows it to those origins and re-enables credentials.
+_configured_origins = [o.strip() for o in (settings.CORS_ORIGINS or "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_configured_origins or ["*"],
+    allow_credentials=bool(_configured_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
