@@ -169,12 +169,10 @@ export const LandlordOverviewTab: React.FC<LandlordOverviewTabProps> = ({
   });
   const expiringCount = expiringSoonLeases.length;
 
-  // 5. OVERDUE RENT (Real data)
-  const overdueInvoices = filteredInvoices.filter(
-    (i) =>
-      i.status === 'OVERDUE' ||
-      (Number(i.balance_due) > 0 && i.due_date && new Date(i.due_date).getTime() < now.getTime())
-  );
+  // 5. OVERDUE RENT (Real data) - overdue is decided server-side from the
+  // lease's own end date/time, not a fixed offset from due_date, so this
+  // trusts the backend-computed status rather than re-deriving it here.
+  const overdueInvoices = filteredInvoices.filter((i) => i.status === 'OVERDUE');
   const totalOverdueAmount = overdueInvoices.reduce(
     (acc, i) => acc + (Number(i.balance_due) > 0 ? Number(i.balance_due) : Number(i.total_amount) || 0),
     0

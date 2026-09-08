@@ -1,4 +1,4 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from datetime import datetime, date
 import uuid
@@ -11,7 +11,10 @@ class LeaseCreate(BaseModel):
     monthly_rent: float
     security_deposit: float = 0.0
     payment_due_day: int = 5
-    late_fee: float = 0.0
+    # The late payment penalty defaults to 0 and is only ever applied to an
+    # invoice once this lease has actually ended and it's still unpaid - see
+    # InvoiceService.update_overdue_statuses.
+    late_fee: float = Field(default=0.0, ge=0)
     currency: str = "RWF"
     notes: Optional[str] = None
     status: Optional[LeaseStatus] = None
@@ -28,7 +31,7 @@ class LeaseUpdate(BaseModel):
     monthly_rent: Optional[float] = None
     security_deposit: Optional[float] = None
     payment_due_day: Optional[int] = None
-    late_fee: Optional[float] = None
+    late_fee: Optional[float] = Field(default=None, ge=0)
     notes: Optional[str] = None
     status: Optional[LeaseStatus] = None
 

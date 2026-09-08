@@ -1,9 +1,10 @@
 """
 SMS delivery.
 
-Supports Africa's Talking and Twilio. With no provider configured the send is
-simulated (logged, reported back with simulated=True) so development and demo
-environments behave predictably without silently pretending a real send.
+Supports Africa's Talking, Twilio, and Brevo. With no provider configured the
+send is simulated (logged, reported back with simulated=True) so development
+and demo environments behave predictably without silently pretending a real
+send.
 """
 from typing import Any, Dict, Optional
 
@@ -22,6 +23,8 @@ from backend.integrations.delivery import (
 
 # Providers reject oversized payloads outright; splitting is the caller's job.
 MAX_SMS_LENGTH = 1600
+
+BREVO_SMS_URL = "https://api.brevo.com/v3/transactionalSMS/sms"
 
 
 def _classify_http(status_code: int, body: str) -> Exception:
@@ -105,6 +108,42 @@ async def _send_twilio_sms(phone: str, message: str) -> Dict[str, Any]:
     return {"message_id": data.get("sid"), "provider_status": data.get("status")}
 
 
+async def _send_brevo_sms(phone: str, message: str) -> Dict[str, Any]:
+    if not settings.BREVO_API_KEY:
+        raise PermanentDeliveryError("Brevo API key is not configured")
+
+    # Brevo's SMS API wants the recipient in international format without a
+    # leading "+" (normalize_phone always returns one, e.g. "+250788...").
+    recipient = phone.lstrip("+")
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.DELIVERY_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                BREVO_SMS_URL,
+                json={
+                    "sender": settings.SMS_SENDER_ID or "NOTIFY",
+                    "recipient": recipient,
+                    "content": message,
+                    "type": "transactional",
+                },
+                headers={
+                    "api-key": settings.BREVO_API_KEY,
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+    except httpx.TimeoutException as exc:
+        raise TransientDeliveryError(f"Timed out contacting Brevo: {exc}")
+    except httpx.HTTPError as exc:
+        raise TransientDeliveryError(f"Network error contacting Brevo: {exc}")
+
+    if response.status_code >= 400:
+        raise _classify_http(response.status_code, response.text)
+
+    data = response.json()
+    return {"message_id": data.get("messageId"), "reference": data.get("reference")}
+
+
 async def _simulate(phone: str, message: str) -> Dict[str, Any]:
     logger.info(f"[SMS SIMULATED] to={phone} chars={len(message)} | {message[:160]}")
     return {"simulated": True, "message_id": None}
@@ -127,6 +166,8 @@ async def send_sms_message(phone: Optional[str], message: str) -> DeliveryResult
         return await send_with_retry("SMS", normalized, provider, lambda: _send_africastalking(normalized, body))
     if provider == "twilio":
         return await send_with_retry("SMS", normalized, provider, lambda: _send_twilio_sms(normalized, body))
+    if provider == "brevo":
+        return await send_with_retry("SMS", normalized, provider, lambda: _send_brevo_sms(normalized, body))
 
     return await send_with_retry("SMS", normalized, "simulated", lambda: _simulate(normalized, body), max_attempts=1)
 

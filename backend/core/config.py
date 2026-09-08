@@ -70,12 +70,16 @@ class Settings(BaseSettings):
     DELIVERY_TIMEOUT_SECONDS: float = 15.0
     DEFAULT_COUNTRY_CODE: str = "+250"  # Rwanda
 
-    # SMS - "africastalking" | "twilio" | "" (simulated)
+    # SMS - "africastalking" | "twilio" | "brevo" | "" (simulated)
     SMS_PROVIDER: str = ""
     SMS_SENDER_ID: str = "NOTIFY"
     AFRICASTALKING_USERNAME: Optional[str] = None
     AFRICASTALKING_API_KEY: Optional[str] = None
     AFRICASTALKING_BASE_URL: str = "https://api.africastalking.com/version1/messaging"
+    # Brevo's Transactional SMS API - reuses the same account/API key as
+    # Brevo email, no phone number purchase required (SMS_SENDER_ID above is
+    # used as the alphanumeric sender name).
+    BREVO_API_KEY: Optional[str] = None
 
     # Twilio powers both SMS and WhatsApp when selected
     TWILIO_ACCOUNT_SID: Optional[str] = None

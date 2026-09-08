@@ -50,3 +50,4 @@ class InvitationCreateResponse(BaseModel):
     tenant_id: uuid.UUID
     email: DeliveryChannelResult
     sms: DeliveryChannelResult
+    whatsapp: DeliveryChannelResult

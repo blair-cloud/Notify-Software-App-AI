@@ -118,14 +118,16 @@ class InvitationService:
         raw_token: str,
         property_name: str,
         unit_number: str,
-    ) -> tuple[DeliveryChannelResult, DeliveryChannelResult]:
+    ) -> tuple[DeliveryChannelResult, DeliveryChannelResult, DeliveryChannelResult]:
         """
-        Deliver the invitation link by email and SMS, independently. One
-        channel failing must never hide whether the other worked - the caller
-        gets both results and can tell the landlord exactly what happened.
+        Deliver the invitation link by email, SMS, and WhatsApp, independently.
+        One channel failing must never hide whether the others worked - the
+        caller gets all three results and can tell the landlord exactly what
+        happened.
         """
         from backend.integrations.email import send_email_message
         from backend.integrations.sms import send_sms_message
+        from backend.integrations.whatsapp import send_whatsapp_message
 
         link = f"{settings.FRONTEND_URL.rstrip('/')}/accept-invitation?token={raw_token}"
         first_name = (invitation.tenant_name or "").split()[0] if invitation.tenant_name else "there"
@@ -177,7 +179,23 @@ class InvitationService:
                 logger.exception("Failed to send invitation SMS: %s", exc)
                 sms_result = DeliveryChannelResult(attempted=True, ok=False, detail=str(exc))
 
-        return email_result, sms_result
+        whatsapp_result = DeliveryChannelResult(attempted=False, ok=False)
+        if invitation.tenant_phone:
+            try:
+                message = (
+                    f"Notify: You're invited to rent Unit {unit_number} at {property_name}. "
+                    f"Complete your account: {link}"
+                )
+                result = await send_whatsapp_message(invitation.tenant_phone, message)
+                whatsapp_result = DeliveryChannelResult(
+                    attempted=True, ok=result.ok,
+                    detail=None if result.ok else (result.error or "Delivery failed"),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Failed to send invitation WhatsApp message: %s", exc)
+                whatsapp_result = DeliveryChannelResult(attempted=True, ok=False, detail=str(exc))
+
+        return email_result, sms_result, whatsapp_result
 
     # ------------------------------------------------------------------
     # Lookups

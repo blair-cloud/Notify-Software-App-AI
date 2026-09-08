@@ -331,12 +331,16 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   );
   const [leaseRent, setLeaseRent] = useState(350000);
   const [leaseDeposit, setLeaseDeposit] = useState(350000);
+  const [leaseLateFee, setLeaseLateFee] = useState(0);
   const [leaseNotes, setLeaseNotes] = useState('');
   const [leaseError, setLeaseError] = useState<string | null>(null);
   const [leaseIsDraft, setLeaseIsDraft] = useState(false);
   const [leaseUploadedDoc, setLeaseUploadedDoc] = useState<any | null>(null);
   const [selectedLeaseForDocModal, setSelectedLeaseForDocModal] = useState<Lease | null>(null);
   const [previewLeaseId, setPreviewLeaseId] = useState<string | null>(null);
+  const [editingLateFeeLeaseId, setEditingLateFeeLeaseId] = useState<string | null>(null);
+  const [lateFeeDraft, setLateFeeDraft] = useState(0);
+  const [isSavingLateFee, setIsSavingLateFee] = useState(false);
 
   // Load portfolio data.
   //
@@ -670,14 +674,16 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         ...prev,
       ]);
 
-      // Email and SMS are independent - say plainly which worked, rather than
-      // one pass/fail lumped into "invitation sent".
+      // Email, SMS, and WhatsApp are independent - say plainly which worked,
+      // rather than one pass/fail lumped into "invitation sent".
       const parts: string[] = [];
       if (res.email?.attempted) parts.push(res.email.ok ? 'Email sent.' : `Email failed (${res.email.detail || 'unknown reason'}).`);
       if (res.sms?.attempted) parts.push(res.sms.ok ? 'SMS sent.' : `SMS failed (${res.sms.detail || 'unknown reason'}).`);
-      const bothFailed = res.email?.attempted && !res.email?.ok && res.sms?.attempted && !res.sms?.ok;
+      if (res.whatsapp?.attempted) parts.push(res.whatsapp.ok ? 'WhatsApp sent.' : `WhatsApp failed (${res.whatsapp.detail || 'unknown reason'}).`);
+      const attemptedChannels = [res.email, res.sms, res.whatsapp].filter((c) => c?.attempted);
+      const allFailed = attemptedChannels.length > 0 && attemptedChannels.every((c) => !c.ok);
       const feedback = `Invitation created. ${parts.join(' ')}`.trim();
-      if (bothFailed) {
+      if (allFailed) {
         showError(`${feedback} Share the invitation link below manually.`, 8000);
       } else {
         showSuccess(feedback, 6000);
@@ -735,7 +741,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         monthly_rent: Number(leaseRent),
         security_deposit: Number(leaseDeposit),
         payment_due_day: 5,
-        late_fee: 15000,
+        late_fee: Number(leaseLateFee) || 0,
         currency: 'RWF',
         notes: leaseNotes,
         status: leaseIsDraft ? 'DRAFT' : 'ACTIVE',
@@ -745,6 +751,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setLeaseUploadedDoc(null);
       setLeaseIsDraft(false);
       setLeaseTenantId('');
+      setLeaseLateFee(0);
       showSuccess(
         leaseIsDraft
           ? 'Lease created successfully. Saved as a draft — upload the signed document to activate it.'
@@ -792,6 +799,25 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       await fetchData({ silent: true });
     } catch (err: any) {
       showError(err.message || 'Failed to upload document version');
+    }
+  };
+
+  const startEditingLateFee = (lease: Lease) => {
+    setEditingLateFeeLeaseId(lease.id);
+    setLateFeeDraft(lease.late_fee || 0);
+  };
+
+  const handleSaveLateFee = async (leaseId: string) => {
+    setIsSavingLateFee(true);
+    try {
+      await api.leases.update(leaseId, { late_fee: Number(lateFeeDraft) || 0 });
+      showSuccess('Late payment penalty updated.');
+      setEditingLateFeeLeaseId(null);
+      await fetchData({ silent: true });
+    } catch (err: any) {
+      showError(err.message || 'Failed to update the late payment penalty.');
+    } finally {
+      setIsSavingLateFee(false);
     }
   };
 
@@ -1309,7 +1335,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
   const totalOverdueRent =
     invoices
-      .filter((i) => i.status === 'OVERDUE' || (i.balance_due > 0 && new Date(i.due_date) < new Date()))
+      .filter((i) => i.status === 'OVERDUE')
       .reduce((acc, i) => acc + (i.balance_due || 0), 0) ||
     1500000;
 
@@ -1340,7 +1366,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
   const overdueTenantsCount = tenants.filter((t) => {
     const tInvoices = invoices.filter((i) => i.tenant_id === t.id || i.tenant_name?.includes(t.last_name));
-    return tInvoices.some((i) => i.status === 'OVERDUE' || (i.balance_due > 0 && new Date(i.due_date) < new Date()));
+    return tInvoices.some((i) => i.status === 'OVERDUE');
   }).length || 2;
 
   const totalExpenseSum = expenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0) || 450000;
@@ -2842,6 +2868,48 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                               <span className="block text-[10px] text-slate-400 font-normal">
                                 Deposit: RWF {(l.security_deposit || 0).toLocaleString()}
                               </span>
+                              {editingLateFeeLeaseId === l.id ? (
+                                <span className="mt-1 flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    autoFocus
+                                    value={lateFeeDraft}
+                                    onChange={(e) => setLateFeeDraft(Number(e.target.value))}
+                                    className="w-20 px-1.5 py-0.5 text-[10px] font-normal border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-[#331A6F]/30"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={isSavingLateFee}
+                                    onClick={() => handleSaveLateFee(l.id)}
+                                    className="p-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 cursor-pointer"
+                                    title="Save"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isSavingLateFee}
+                                    onClick={() => setEditingLateFeeLeaseId(null)}
+                                    className="p-1 rounded bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-50 cursor-pointer"
+                                    title="Cancel"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ) : (
+                                <span className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400 font-normal">
+                                  Late Fee: RWF {(l.late_fee || 0).toLocaleString()}
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditingLateFee(l)}
+                                    className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
+                                    title="Edit late payment penalty"
+                                  >
+                                    <Edit className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              )}
                             </td>
                             <td className="py-4 px-4 text-slate-700">
                               <div>{l.start_date} → {l.end_date}</div>
@@ -3573,12 +3641,13 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   </div>
                 </div>
 
-                {/* Email and SMS are sent independently - show each result on
-                    its own rather than one combined pass/fail. */}
-                <div className="grid grid-cols-2 gap-2.5">
+                {/* Email, SMS, and WhatsApp are sent independently - show each
+                    result on its own rather than one combined pass/fail. */}
+                <div className="grid grid-cols-3 gap-2.5">
                   {[
                     { key: 'email', label: 'Email', result: createdInviteResult.email },
                     { key: 'sms', label: 'SMS', result: createdInviteResult.sms },
+                    { key: 'whatsapp', label: 'WhatsApp', result: createdInviteResult.whatsapp },
                   ].map(({ key, label, result }) => {
                     const attempted = result?.attempted;
                     const ok = result?.ok;
@@ -3945,6 +4014,19 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     onChange={(e) => setLeaseDeposit(Number(e.target.value))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
                   />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">Late Payment Penalty (RWF)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={leaseLateFee}
+                    onChange={(e) => setLeaseLateFee(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Defaults to 0. Applied automatically to an invoice only once this lease has ended and it is still unpaid.
+                  </p>
                 </div>
               </div>
 

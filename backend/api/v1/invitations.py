@@ -35,7 +35,7 @@ async def create_invitation(
     await db.commit()
     await db.refresh(invitation)
 
-    email_result, sms_result = await service.send_invitation_notifications(
+    email_result, sms_result, whatsapp_result = await service.send_invitation_notifications(
         invitation,
         raw_token,
         property_name=prop.name if prop else "your property",
@@ -49,6 +49,7 @@ async def create_invitation(
         tenant_id=shell.id,
         email=email_result,
         sms=sms_result,
+        whatsapp=whatsapp_result,
     )
 
 @router.get("", response_model=List[InvitationResponse])

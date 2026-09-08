@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, date, time, timezone, timedelta
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
@@ -103,30 +103,50 @@ class InvoiceService:
 
     @staticmethod
     async def update_overdue_statuses(session: AsyncSession) -> int:
-        today = date.today()
-        stmt = select(Invoice).where(
-            and_(
-                Invoice.due_date < today,
+        """
+        Overdue is driven entirely by the lease's own end date/time, not a
+        fixed offset from the invoice's due_date: an unpaid invoice only
+        becomes OVERDUE once its lease has actually ended. This recomputes
+        every eligible invoice's status from scratch on each call (not just
+        one-directionally to OVERDUE), so the result is correct however many
+        times it's re-run - including reverting an invoice that was
+        previously flagged OVERDUE if its lease's end date/time has not
+        actually passed (e.g. after a lease renewal pushed end_date out).
+        """
+        now = datetime.now(timezone.utc)
+        stmt = (
+            select(Invoice, Lease)
+            .outerjoin(Lease, Invoice.lease_id == Lease.id)
+            .where(
                 Invoice.balance_due > 0,
-                Invoice.status.in_([InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID])
+                Invoice.status.in_([InvoiceStatus.ISSUED, InvoiceStatus.PARTIALLY_PAID, InvoiceStatus.OVERDUE]),
             )
         )
         res = await session.execute(stmt)
-        overdue_invoices = res.scalars().all()
+        rows = res.all()
 
         updated_count = 0
-        for inv in overdue_invoices:
-            inv.status = InvoiceStatus.OVERDUE
-            # Apply lease late fee if applicable and not already added
-            if inv.lease_id:
-                lease_res = await session.execute(select(Lease).where(Lease.id == inv.lease_id))
-                lease = lease_res.scalar_one_or_none()
-                if lease and lease.late_fee > 0 and inv.late_fee == 0:
+        for inv, lease in rows:
+            # The lease's end date has no time-of-day column, so "end date and
+            # time" is treated as end-of-day (23:59:59) on end_date - the
+            # lease is not yet over on its own last day.
+            lease_ended = bool(lease) and now > datetime.combine(lease.end_date, time.max, tzinfo=timezone.utc)
+
+            if lease_ended and inv.status != InvoiceStatus.OVERDUE:
+                inv.status = InvoiceStatus.OVERDUE
+                # Apply the lease's late payment penalty once, the moment the
+                # invoice actually becomes overdue - not reapplied or
+                # recalculated on every subsequent refresh.
+                if lease.late_fee and float(lease.late_fee) > 0 and float(inv.late_fee) == 0:
                     inv.late_fee = float(lease.late_fee)
                     inv.total_amount = float(inv.subtotal) - float(inv.discount) + float(inv.late_fee)
                     inv.balance_due = float(inv.total_amount) - float(inv.amount_paid)
-
-            updated_count += 1
+                updated_count += 1
+            elif not lease_ended and inv.status == InvoiceStatus.OVERDUE:
+                # The lease's end date/time is no longer in the past (e.g. it
+                # was renewed) - this invoice should no longer read as overdue.
+                inv.status = InvoiceStatus.PARTIALLY_PAID if float(inv.amount_paid) > 0 else InvoiceStatus.ISSUED
+                updated_count += 1
 
         if updated_count > 0:
             await session.commit()
