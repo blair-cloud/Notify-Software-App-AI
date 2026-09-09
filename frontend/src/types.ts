@@ -757,6 +757,8 @@ export interface ProcessRemindersResult {
   reminders_skipped_duplicate: number;
   emails_sent: number;
   emails_skipped: number;
+  whatsapp_sent?: number;
+  whatsapp_skipped?: number;
   expired_leases_updated: number;
   details: Array<{
     lease_id: string;
@@ -766,6 +768,8 @@ export interface ProcessRemindersResult {
     days_remaining: number;
     in_app_sent?: boolean;
     email_sent?: boolean;
+    landlord_whatsapp_sent?: boolean;
+    tenant_whatsapp_sent?: boolean;
     status: string;
   }>;
 }

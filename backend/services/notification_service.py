@@ -25,8 +25,13 @@ from backend.models import (
     Property,
     Unit,
     LeaseStatus,
+    Invoice,
+    InvoiceStatus,
+    WhatsAppMessageType,
 )
 from backend.integrations.email import send_email, render_lease_expiry_email_html
+from backend.integrations.whatsapp import send_whatsapp_message
+from backend.services.whatsapp_service import WhatsAppService
 
 logger = logging.getLogger("notification_service")
 
@@ -165,7 +170,7 @@ class NotificationService:
                 lease_expiry_in_app=True,
                 lease_expiry_email=True,
                 lease_expiry_sms=False,
-                lease_expiry_whatsapp=False,
+                lease_expiry_whatsapp=True,
                 payment_in_app=True,
                 payment_email=True,
                 payment_sms=True,
@@ -371,6 +376,8 @@ class NotificationService:
         reminders_skipped_duplicate = 0
         emails_sent = 0
         emails_skipped = 0
+        whatsapp_sent = 0
+        whatsapp_skipped = 0
         expired_leases_updated = 0
         details = []
 
@@ -565,7 +572,68 @@ class NotificationService:
                 else:
                     emails_skipped += 1
 
-                # 3. Record Reminder History for deduplication
+                # 3. Send WhatsApp to the landlord (their own preference/phone).
+                landlord_whatsapp_sent = False
+                if prefs.lease_expiry_whatsapp and landlord_user.phone:
+                    wa_result = await send_whatsapp_message(landlord_user.phone, body)
+                    session.add(NotificationDeliveryLog(
+                        notification_id=in_app_notif.id if in_app_notif else None,
+                        user_id=landlord_user.id,
+                        channel="WHATSAPP",
+                        recipient=landlord_user.phone,
+                        subject=title,
+                        status="SENT" if wa_result.ok else "FAILED",
+                        metadata_info=json.dumps(template_vars),
+                    ))
+                    landlord_whatsapp_sent = wa_result.ok
+                    whatsapp_sent += 1
+                else:
+                    whatsapp_skipped += 1
+
+                # 3b. Send WhatsApp to the tenant too - this reminder is about
+                # their own lease, and (unlike the landlord) they have no
+                # settings screen to opt in from, so it goes out whenever
+                # their preferences row (defaulted on) and phone allow it.
+                # Business-initiated, so it goes as an approved template.
+                tenant_whatsapp_sent = False
+                if tenant_user and tenant_user.phone:
+                    tenant_prefs = await cls.get_or_create_preferences(session, tenant_user.id)
+                    if tenant_prefs.lease_expiry_whatsapp:
+                        params, tenant_body = WhatsAppService.build_lease_expiry(
+                            tenant_name=tenant_name,
+                            property_unit=f"{prop_name} - Unit {unit_num}",
+                            expiry_date=expiry_date_str,
+                            days_remaining=str(days_remaining),
+                        )
+                        tenant_wa_result, _wa_row = await WhatsAppService.send(
+                            session,
+                            phone=tenant_user.phone,
+                            message_type=WhatsAppMessageType.LEASE_EXPIRY,
+                            body_params=params,
+                            fallback_text=tenant_body,
+                            recipient_name=tenant_name,
+                            landlord_id=lease.landlord_id,
+                            tenant_id=lease.tenant_id,
+                            user_id=tenant_user.id,
+                            lease_id=lease.id,
+                        )
+                        session.add(NotificationDeliveryLog(
+                            notification_id=None,
+                            user_id=tenant_user.id,
+                            channel="WHATSAPP",
+                            recipient=tenant_user.phone,
+                            subject=f"Your lease at {prop_name} is expiring soon",
+                            status="SENT" if tenant_wa_result.ok else "FAILED",
+                            metadata_info=json.dumps(template_vars),
+                        ))
+                        tenant_whatsapp_sent = tenant_wa_result.ok
+                        whatsapp_sent += 1
+                    else:
+                        whatsapp_skipped += 1
+                else:
+                    whatsapp_skipped += 1
+
+                # 4. Record Reminder History for deduplication
                 reminder_history = ReminderHistory(
                     lease_id=lease.id,
                     milestone=milestone_code,
@@ -582,6 +650,8 @@ class NotificationService:
                     "days_remaining": days_remaining,
                     "in_app_sent": bool(prefs.lease_expiry_in_app),
                     "email_sent": bool(prefs.lease_expiry_email),
+                    "landlord_whatsapp_sent": landlord_whatsapp_sent,
+                    "tenant_whatsapp_sent": tenant_whatsapp_sent,
                     "status": "PROCESSED",
                 })
 
@@ -593,6 +663,8 @@ class NotificationService:
             "reminders_skipped_duplicate": reminders_skipped_duplicate,
             "emails_sent": emails_sent,
             "emails_skipped": emails_skipped,
+            "whatsapp_sent": whatsapp_sent,
+            "whatsapp_skipped": whatsapp_skipped,
             "expired_leases_updated": expired_leases_updated,
             "details": details,
         }

@@ -52,7 +52,7 @@ class NotificationPreferencesResponse(BaseModel):
     lease_expiry_in_app: bool = True
     lease_expiry_email: bool = True
     lease_expiry_sms: bool = False
-    lease_expiry_whatsapp: bool = False
+    lease_expiry_whatsapp: bool = True
 
     payment_in_app: bool = True
     payment_email: bool = True
@@ -150,5 +150,7 @@ class ProcessRemindersResult(BaseModel):
     reminders_skipped_duplicate: int
     emails_sent: int
     emails_skipped: int
+    whatsapp_sent: int = 0
+    whatsapp_skipped: int = 0
     expired_leases_updated: int
     details: List[Dict[str, Any]] = []

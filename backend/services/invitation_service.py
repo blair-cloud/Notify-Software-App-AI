@@ -118,6 +118,7 @@ class InvitationService:
         raw_token: str,
         property_name: str,
         unit_number: str,
+        landlord_name: str = "Your landlord",
     ) -> tuple[DeliveryChannelResult, DeliveryChannelResult, DeliveryChannelResult]:
         """
         Deliver the invitation link by email, SMS, and WhatsApp, independently.
@@ -127,7 +128,8 @@ class InvitationService:
         """
         from backend.integrations.email import send_email_message
         from backend.integrations.sms import send_sms_message
-        from backend.integrations.whatsapp import send_whatsapp_message
+        from backend.models import WhatsAppMessageType
+        from backend.services.whatsapp_service import WhatsAppService
 
         link = f"{settings.FRONTEND_URL.rstrip('/')}/accept-invitation?token={raw_token}"
         first_name = (invitation.tenant_name or "").split()[0] if invitation.tenant_name else "there"
@@ -182,11 +184,24 @@ class InvitationService:
         whatsapp_result = DeliveryChannelResult(attempted=False, ok=False)
         if invitation.tenant_phone:
             try:
-                message = (
-                    f"Notify: You're invited to rent Unit {unit_number} at {property_name}. "
-                    f"Complete your account: {link}"
+                params, text = WhatsAppService.build_invitation(
+                    tenant_name=(invitation.tenant_name or "").strip(),
+                    property_name=property_name,
+                    unit_number=unit_number,
+                    landlord_name=landlord_name,
+                    link=link,
                 )
-                result = await send_whatsapp_message(invitation.tenant_phone, message)
+                result, _record = await WhatsAppService.send(
+                    self.db,
+                    phone=invitation.tenant_phone,
+                    message_type=WhatsAppMessageType.INVITATION,
+                    body_params=params,
+                    fallback_text=text,
+                    recipient_name=invitation.tenant_name,
+                    landlord_id=invitation.landlord_id,
+                    tenant_id=invitation.tenant_profile_id,
+                    invitation_id=invitation.id,
+                )
                 whatsapp_result = DeliveryChannelResult(
                     attempted=True, ok=result.ok,
                     detail=None if result.ok else (result.error or "Delivery failed"),
@@ -234,6 +249,34 @@ class InvitationService:
             "status": invitation.status.value,
             "expires_at": invitation.expires_at.isoformat(),
         }
+
+    async def reissue_invitation(
+        self, landlord: LandlordProfile, invitation_id: uuid.UUID
+    ) -> tuple[Invitation, str]:
+        """
+        Issue a fresh token for an existing invitation so it can be re-sent.
+
+        Only the hash of a token is stored, so the original link cannot be
+        recovered to send again - a resend mints a new one and invalidates
+        the old, which is also what you want if the first link leaked. The
+        invitation row, its shell tenant, and any lease already built against
+        it are all left exactly as they are.
+        """
+        invitation = await self.invitation_repo.get_by_id(invitation_id)
+        if not invitation or invitation.landlord_id != landlord.id:
+            raise ForbiddenException("Invitation not found or does not belong to you")
+
+        if invitation.status == InvitationStatus.ACCEPTED:
+            raise ConflictException("This invitation has already been accepted.")
+        if invitation.status == InvitationStatus.CANCELLED:
+            raise ConflictException("This invitation was cancelled. Create a new one instead.")
+
+        raw_token = generate_random_token(32)
+        invitation.token_hash = hash_token(raw_token)
+        invitation.status = InvitationStatus.PENDING
+        invitation.expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        await self.invitation_repo.update(invitation)
+        return invitation, raw_token
 
     async def cancel_invitation(self, landlord: LandlordProfile, invitation_id: uuid.UUID) -> Invitation:
         invitation = await self.invitation_repo.get_by_id(invitation_id)

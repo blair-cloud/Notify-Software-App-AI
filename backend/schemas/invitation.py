@@ -46,8 +46,9 @@ class InvitationCreateResponse(BaseModel):
     raw_token: str
     invite_link: str
     # The shell tenant record created immediately, so the frontend can add it
-    # to the Tenants list without waiting for a full refetch.
-    tenant_id: uuid.UUID
+    # to the Tenants list without waiting for a full refetch. None only for a
+    # legacy invitation created before shell profiles existed.
+    tenant_id: Optional[uuid.UUID] = None
     email: DeliveryChannelResult
     sms: DeliveryChannelResult
     whatsapp: DeliveryChannelResult

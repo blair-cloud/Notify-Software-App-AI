@@ -278,3 +278,28 @@ class NotificationType(str, enum.Enum):
     LEASE_EXPIRY_TODAY = "LEASE_EXPIRY_TODAY"
     LEASE_EXPIRED = "LEASE_EXPIRED"
     SYSTEM = "SYSTEM"
+
+
+class WhatsAppMessageType(str, enum.Enum):
+    """What a WhatsApp message was sent for - one per business trigger."""
+    INVITATION = "INVITATION"
+    RENT_DUE = "RENT_DUE"
+    RENT_OVERDUE = "RENT_OVERDUE"
+    LEASE_EXPIRY = "LEASE_EXPIRY"
+    PAYMENT_CONFIRMATION = "PAYMENT_CONFIRMATION"
+    TEST = "TEST"
+
+
+class WhatsAppMessageStatus(str, enum.Enum):
+    """
+    Lifecycle of one WhatsApp message. QUEUED -> SENT happens in our own
+    request; DELIVERED/READ/FAILED arrive later on Meta's status webhook.
+    SIMULATED means no provider is configured, so nothing actually left here.
+    """
+    QUEUED = "QUEUED"
+    SENT = "SENT"
+    DELIVERED = "DELIVERED"
+    READ = "READ"
+    FAILED = "FAILED"
+    SIMULATED = "SIMULATED"
+    SKIPPED = "SKIPPED"

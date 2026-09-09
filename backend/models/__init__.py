@@ -32,6 +32,8 @@ from backend.models.role import (
     ComplaintPriority,
     ComplaintStatus,
     NotificationType,
+    WhatsAppMessageType,
+    WhatsAppMessageStatus,
 )
 from backend.models.user import User
 from backend.models.landlord import LandlordProfile
@@ -66,6 +68,7 @@ from backend.models.complaint import (
     ComplaintComment,
 )
 from backend.models.message import Message
+from backend.models.whatsapp import WhatsAppMessage
 from backend.models.tracker import (
     BankAccount,
     BankStatement,
@@ -107,6 +110,9 @@ __all__ = [
     "ComplaintPriority",
     "ComplaintStatus",
     "NotificationType",
+    "WhatsAppMessageType",
+    "WhatsAppMessageStatus",
+    "WhatsAppMessage",
     "User",
     "LandlordProfile",
     "TenantProfile",

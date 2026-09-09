@@ -86,12 +86,59 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_SMS_FROM: Optional[str] = None
 
-    # WhatsApp - "twilio" | "meta" | "" (simulated)
+    # WhatsApp - "meta" (official Cloud API) | "twilio" | "" (simulated)
     WHATSAPP_PROVIDER: str = ""
     TWILIO_WHATSAPP_FROM: Optional[str] = None
+
+    # Meta WhatsApp Business Cloud API. These are the names Meta's own docs
+    # use; the META_* spellings below are kept as fallbacks so an older .env
+    # keeps working.
+    WHATSAPP_ACCESS_TOKEN: Optional[str] = None
+    WHATSAPP_PHONE_NUMBER_ID: Optional[str] = None
+    WHATSAPP_BUSINESS_ACCOUNT_ID: Optional[str] = None
+    WHATSAPP_API_VERSION: Optional[str] = None
+    # Shared secret echoed back to Meta when it verifies the webhook URL, and
+    # the app secret used to check each callback's X-Hub-Signature-256.
+    WHATSAPP_VERIFY_TOKEN: Optional[str] = None
+    WHATSAPP_APP_SECRET: Optional[str] = None
+    # Approved template names. Business-initiated messages must use a
+    # template Meta has approved; these map each trigger to one.
+    WHATSAPP_TEMPLATE_INVITATION: Optional[str] = None
+    WHATSAPP_TEMPLATE_RENT_DUE: Optional[str] = None
+    WHATSAPP_TEMPLATE_RENT_OVERDUE: Optional[str] = None
+    WHATSAPP_TEMPLATE_LEASE_EXPIRY: Optional[str] = None
+    WHATSAPP_TEMPLATE_PAYMENT_CONFIRMATION: Optional[str] = None
+    WHATSAPP_TEMPLATE_LANGUAGE: str = "en"
+
+    # Legacy spellings, still read so an existing .env is not silently ignored.
     META_WHATSAPP_PHONE_NUMBER_ID: Optional[str] = None
     META_WHATSAPP_TOKEN: Optional[str] = None
     META_WHATSAPP_API_VERSION: str = "v21.0"
+
+    @property
+    def whatsapp_access_token(self) -> Optional[str]:
+        return self.WHATSAPP_ACCESS_TOKEN or self.META_WHATSAPP_TOKEN
+
+    @property
+    def whatsapp_phone_number_id(self) -> Optional[str]:
+        return self.WHATSAPP_PHONE_NUMBER_ID or self.META_WHATSAPP_PHONE_NUMBER_ID
+
+    @property
+    def whatsapp_api_version(self) -> str:
+        return self.WHATSAPP_API_VERSION or self.META_WHATSAPP_API_VERSION or "v21.0"
+
+    @property
+    def whatsapp_is_configured(self) -> bool:
+        """
+        True only when real messages can actually leave. Everything upstream
+        checks this instead of guessing, so an unconfigured environment stays
+        in simulated mode rather than half-sending.
+        """
+        return (
+            (self.WHATSAPP_PROVIDER or "").lower() == "meta"
+            and bool(self.whatsapp_access_token)
+            and bool(self.whatsapp_phone_number_id)
+        )
 
     # Email - "smtp" | "" (auto-detected from the SMTP settings below)
     EMAIL_PROVIDER: str = ""

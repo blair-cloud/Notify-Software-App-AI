@@ -47,7 +47,10 @@ class NotificationPreference(Base):
     lease_expiry_in_app: Mapped[bool] = mapped_column(Boolean, default=True)
     lease_expiry_email: Mapped[bool] = mapped_column(Boolean, default=True)
     lease_expiry_sms: Mapped[bool] = mapped_column(Boolean, default=False)
-    lease_expiry_whatsapp: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Defaults on (unlike every other *_whatsapp column) because tenants have
+    # no settings screen of their own to opt in from - this is the only way a
+    # tenant's lease-expiry WhatsApp reminder reaches them without extra setup.
+    lease_expiry_whatsapp: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Payment & Invoice Reminders
     payment_in_app: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -20,7 +20,7 @@ from backend.core.logging import logger
 from backend.api.v1 import (
     auth, properties, units, invitations, admin, landlords, tenants,
     notifications, tenancies, leases, invoices, payments, receipts, expenses, financials,
-    maintenance, complaints, messages, tracker, realtime
+    maintenance, complaints, messages, tracker, realtime, whatsapp
 )
 
 
@@ -177,6 +177,7 @@ app.include_router(complaints.router, prefix="/api/v1")
 app.include_router(messages.router, prefix="/api/v1")
 app.include_router(tracker.router, prefix="/api/v1")
 app.include_router(realtime.router, prefix="/api/v1")
+app.include_router(whatsapp.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health", tags=["Health"])

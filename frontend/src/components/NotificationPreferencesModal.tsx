@@ -445,7 +445,7 @@ export const NotificationPreferencesModal: React.FC<NotificationPreferencesModal
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                     <div className="p-3 bg-white border border-emerald-200 rounded-xl text-center">
                       <div className="text-xl font-extrabold text-slate-900">{automationResult.checked_leases}</div>
                       <div className="text-[10px] text-slate-500 font-medium">Checked Leases</div>
@@ -457,6 +457,10 @@ export const NotificationPreferencesModal: React.FC<NotificationPreferencesModal
                     <div className="p-3 bg-white border border-emerald-200 rounded-xl text-center">
                       <div className="text-xl font-extrabold text-blue-700">{automationResult.emails_sent}</div>
                       <div className="text-[10px] text-slate-500 font-medium">Emails Dispatched</div>
+                    </div>
+                    <div className="p-3 bg-white border border-emerald-200 rounded-xl text-center">
+                      <div className="text-xl font-extrabold text-green-700">{automationResult.whatsapp_sent ?? 0}</div>
+                      <div className="text-[10px] text-slate-500 font-medium">WhatsApp Sent</div>
                     </div>
                     <div className="p-3 bg-white border border-emerald-200 rounded-xl text-center">
                       <div className="text-xl font-extrabold text-amber-700">{automationResult.expired_leases_updated}</div>
