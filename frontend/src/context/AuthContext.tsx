@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import type { Session } from '@supabase/supabase-js';
 import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../services/api';
-import { supabase, authRedirectTo } from '../services/supabase';
+import { supabase, authRedirectTo, clearAccessTokenCache } from '../services/supabase';
 
 export interface UserProfile {
   id: string;
@@ -219,11 +219,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // single subscription is what makes the session survive a page refresh.
   useEffect(() => {
     let active = true;
+    const bootstrapped = { current: false };
 
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (!active) return;
       await loadProfile(data.session);
+      bootstrapped.current = true;
       if (active) setIsLoading(false);
     })();
 
@@ -246,6 +248,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       if (event === 'TOKEN_REFRESHED' && user) {
         return; // same user, nothing to reload
+      }
+      // getSession() above already loaded the profile; skip the duplicate
+      // INITIAL_SESSION that Supabase fires on every cold boot.
+      if (bootstrapped.current && event === 'INITIAL_SESSION') {
+        return;
       }
       await loadProfile(session);
     });
@@ -420,6 +427,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
+      clearAccessTokenCache();
       await supabase.auth.signOut();
     } catch {
       /* already gone, or offline - clearing locally is still right */

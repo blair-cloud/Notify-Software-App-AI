@@ -43,6 +43,7 @@ import {
   TenantTrackerRow,
   BankStatementItem,
   BankTransactionItem,
+  MatchingAnalysisRow,
   Property,
   Unit,
   Tenant,
@@ -86,10 +87,10 @@ const STEP_ORDER: WizardStep[] = [
 const ANALYSIS_STAGES = [
   'Reading statement',
   'Extracting transactions',
-  'Identifying payments',
-  'Matching tenants',
-  'Comparing payments',
-  'Preparing report',
+  'Identifying expected payments',
+  'Matching tenants (multi-signal)',
+  'Scoring confidence',
+  'Preparing matching report',
 ];
 
 export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
@@ -332,14 +333,14 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
         if (selectedPropertyId && selectedPropertyId !== 'ALL') {
           formData.append('property_id', selectedPropertyId);
         }
-        formData.append('auto_confirm', 'true');
+        formData.append('auto_confirm', 'false');
         uploadPromise = api.tracker.uploadFile(formData);
       } else {
         uploadPromise = api.tracker.uploadContent({
           property_id: selectedPropertyId !== 'ALL' ? selectedPropertyId : undefined,
           file_name: statementFileName || 'Bank_Statement.csv',
           content: statementContent || 'Date,Details,Amount\n2026-09-02,Rent Deposit,450000',
-          auto_confirm: true,
+          auto_confirm: false,
         });
       }
 
@@ -557,7 +558,7 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
         invoice_id: selectedInvoiceForMatch,
         notes: matchNotes || 'Manual match verified in tracker',
       });
-      showNotification('Transaction matched successfully. Receipt issued.');
+      showNotification('Transaction matched successfully. Payment recorded and receipt issued.');
       setIsManualMatchModalOpen(false);
       setSelectedTxnForMatch(null);
       setSelectedInvoiceForMatch('');
@@ -569,6 +570,116 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
     } finally {
       setIsMatching(false);
     }
+  };
+
+  const handleApproveMatch = async (row: MatchingAnalysisRow | BankTransactionItem) => {
+    if (isMatching) return;
+    const suggestedInvoiceId =
+      (row as MatchingAnalysisRow).suggested_invoice_id ||
+      (row as BankTransactionItem).suggested_invoice_id;
+    if (!suggestedInvoiceId) {
+      openManualMatchForRow(row);
+      return;
+    }
+    setIsMatching(true);
+    try {
+      await api.tracker.approveMatch({
+        transaction_id: row.id,
+        notes: 'Approved suggested match from Matching Analysis Report',
+      });
+      showNotification('Match approved. Payment persisted and invoice updated.');
+      await fetchReportData();
+      onRefreshAllData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to approve match', true);
+    } finally {
+      setIsMatching(false);
+    }
+  };
+
+  const handleLeaveUnmatched = async (row: MatchingAnalysisRow | BankTransactionItem) => {
+    if (isMatching) return;
+    setIsMatching(true);
+    try {
+      await api.tracker.rejectMatch({
+        transaction_id: row.id,
+        reason: 'Left unmatched for later review',
+      });
+      showNotification('Transaction left unmatched for later review.');
+      await fetchReportData();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to update transaction', true);
+    } finally {
+      setIsMatching(false);
+    }
+  };
+
+  const openManualMatchForRow = (row: MatchingAnalysisRow | BankTransactionItem) => {
+    setSelectedTxnForMatch(row as BankTransactionItem);
+    const suggested =
+      (row as MatchingAnalysisRow).suggested_invoice_id ||
+      (row as BankTransactionItem).suggested_invoice_id ||
+      '';
+    setSelectedInvoiceForMatch(suggested);
+    setMatchNotes('');
+    setIsManualMatchModalOpen(true);
+  };
+
+  const matchingAnalysisRows: MatchingAnalysisRow[] = useMemo(() => {
+    if (reportData?.matching_analysis_report?.length) {
+      return reportData.matching_analysis_report;
+    }
+    // Fallback: map needs_review into analysis-shaped rows
+    return (reportData?.needs_review_transactions || []).map((t) => ({
+      id: t.id,
+      statement_id: t.statement_id,
+      transaction_reference: t.transaction_reference,
+      transaction_date: t.transaction_date,
+      amount: t.amount,
+      payer_name: t.payer_name,
+      bank_statement_name: (t as any).bank_statement_name || t.payer_name,
+      description: t.description,
+      bank_reference_id: t.transaction_reference,
+      matched_tenant_id: t.suggested_tenant_id,
+      matched_tenant_name: t.matched_tenant_name,
+      property_name: t.property_name,
+      unit_number: t.unit_number,
+      suggested_invoice_id: t.suggested_invoice_id,
+      invoice_number: t.invoice_number,
+      expected_amount: t.expected_amount,
+      amount_kind: (t as any).amount_kind,
+      amount_status: (t as any).amount_status || (t as any).payment_amount_status,
+      match_summary: (t as any).match_summary,
+      confidence_score: t.confidence_score,
+      confidence_label: t.confidence_label || (t.confidence_score >= 0.85 ? 'HIGH' : t.confidence_score >= 0.6 ? 'MEDIUM' : 'LOW'),
+      match_method: t.match_method,
+      matching_signals: t.matching_signals || [],
+      matching_status: t.matching_status,
+      display_status: t.display_status || t.matching_status,
+      pending_approval: t.pending_approval,
+    }));
+  }, [reportData]);
+
+  const matchStatusBadge = (status: string) => {
+    const map: Record<string, string> = {
+      MATCHED: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      PARTIAL: 'bg-amber-100 text-amber-800 border-amber-200',
+      NEEDS_REVIEW: 'bg-orange-100 text-orange-800 border-orange-200',
+      UNMATCHED: 'bg-slate-100 text-slate-700 border-slate-200',
+      DUPLICATE: 'bg-violet-100 text-violet-800 border-violet-200',
+      POSSIBLE_MISMATCH: 'bg-rose-100 text-rose-800 border-rose-200',
+    };
+    return map[status] || 'bg-slate-100 text-slate-600 border-slate-200';
+  };
+
+  const amountStatusBadge = (kind?: string) => {
+    const map: Record<string, string> = {
+      FULLY_PAID: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+      PARTIALLY_PAID: 'bg-amber-50 text-amber-800 border-amber-200',
+      OVERPAID: 'bg-sky-50 text-sky-800 border-sky-200',
+      AMOUNT_REVIEW: 'bg-rose-50 text-rose-800 border-rose-200',
+    };
+    return map[kind || ''] || 'bg-slate-50 text-slate-600 border-slate-200';
   };
 
   // Filtered rows for the report table
@@ -1579,51 +1690,178 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
             </div>
           </div>
 
-          {/* Unmatched / Needs Review Transactions Section (if any) */}
-          {reportData?.needs_review_transactions && reportData.needs_review_transactions.length > 0 && (
-            <div className="bg-white rounded-3xl border border-amber-200 p-6 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
+          {/* Matching Analysis Report */}
+          {matchingAnalysisRows.length > 0 && (
+            <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
-                    <AlertTriangle className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-xl bg-[#331a6f]/10 text-[#331a6f] flex items-center justify-center">
+                    <ShieldCheck className="w-4 h-4" />
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-slate-900">
-                      Unmatched Statement Inflows ({reportData.needs_review_transactions.length})
+                      Matching Analysis Report ({matchingAnalysisRows.length})
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Bank credits requiring landlord confirmation to credit against a tenant invoice.
+                      Each credit is scored on name variants, reference ID, amount vs expected, and due date.
+                      Approve to post payment — nothing is confirmed until you do.
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                {reportData.needs_review_transactions.map((txn) => (
-                  <div
-                    key={txn.id}
-                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
-                  >
-                    <div>
-                      <div className="font-bold text-slate-900 flex items-center gap-2">
-                        <span>+RWF {txn.amount.toLocaleString()}</span>
-                        <span className="font-mono text-[11px] text-slate-500">({txn.transaction_reference})</span>
-                      </div>
-                      <div className="text-slate-600 mt-0.5">{txn.description}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">Date: {txn.transaction_date}</div>
-                    </div>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full text-left text-xs text-slate-600 min-w-[1100px]">
+                  <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-3">Bank-statement name</th>
+                      <th className="py-3 px-3">Reference</th>
+                      <th className="py-3 px-3">Amount paid</th>
+                      <th className="py-3 px-3">Expected</th>
+                      <th className="py-3 px-3">Payment status</th>
+                      <th className="py-3 px-3">Suggested tenant</th>
+                      <th className="py-3 px-3">Confidence</th>
+                      <th className="py-3 px-3">Matching reasons</th>
+                      <th className="py-3 px-3">Match status</th>
+                      <th className="py-3 px-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {matchingAnalysisRows.map((row) => {
+                      const status = row.display_status || row.matching_status;
+                      const confPct = Math.round((row.confidence_score || 0) * 100);
+                      const canApprove =
+                        !!row.pending_approval &&
+                        !!row.suggested_invoice_id &&
+                        !row.payment_id &&
+                        (status === 'MATCHED' || status === 'PARTIAL') &&
+                        (row.confidence_label === 'HIGH' || (row.confidence_score || 0) >= 0.85);
+                      const canAct = !row.payment_id && status !== 'DUPLICATE';
+                      const bankName = row.bank_statement_name || row.payer_name || 'Unknown payer';
+                      const amountLabel =
+                        row.amount_status || row.payment_amount_status || 'Amount review';
 
-                    <button
-                      onClick={() => {
-                        setSelectedTxnForMatch(txn);
-                        setIsManualMatchModalOpen(true);
-                      }}
-                      className="px-4 py-1.5 rounded-lg bg-[#331a6f] hover:bg-[#251352] text-white text-xs font-bold transition-all cursor-pointer shrink-0"
-                    >
-                      Match to Tenant
-                    </button>
-                  </div>
-                ))}
+                      return (
+                        <tr key={row.id} className="hover:bg-slate-50/70 align-top">
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-slate-900 max-w-[180px]">{bankName}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">{row.transaction_date}</div>
+                            <div className="text-[11px] text-slate-500 mt-1 line-clamp-2 max-w-[200px]">
+                              {row.description}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[11px] text-slate-500">
+                            {row.bank_reference_id || row.transaction_reference || '—'}
+                          </td>
+                          <td className="py-3 px-3 font-bold text-emerald-700 whitespace-nowrap">
+                            RWF {row.amount.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            {row.expected_amount != null
+                              ? `RWF ${Number(row.expected_amount).toLocaleString()}`
+                              : '—'}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span
+                              className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${amountStatusBadge(row.amount_kind)}`}
+                            >
+                              {amountLabel}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 max-w-[220px]">
+                            <div className="font-semibold text-slate-800">
+                              {row.matched_tenant_name || '—'}
+                            </div>
+                            {(row.property_name || row.unit_number) && (
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                {[row.property_name, row.unit_number ? `Unit ${row.unit_number}` : null]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </div>
+                            )}
+                            {row.invoice_number && (
+                              <div className="text-[10px] text-slate-400 mt-0.5">{row.invoice_number}</div>
+                            )}
+                            {row.match_summary && (
+                              <p className="text-[11px] text-[#331a6f] mt-1.5 leading-snug font-medium">
+                                {row.match_summary}
+                              </p>
+                            )}
+                            {!row.match_summary && row.matched_tenant_name && bankName !== row.matched_tenant_name && (
+                              <p className="text-[11px] text-[#331a6f] mt-1.5 leading-snug font-medium">
+                                This bank-statement name appears to match {row.matched_tenant_name}.
+                              </p>
+                            )}
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-slate-800">{confPct}%</div>
+                            <div className="text-[10px] text-slate-400">{row.confidence_label || 'NONE'}</div>
+                          </td>
+                          <td className="py-3 px-3">
+                            <ul className="space-y-0.5 max-w-[200px]">
+                              {(row.matching_signals || []).slice(0, 4).map((sig, i) => (
+                                <li key={i} className="text-[10px] text-slate-500 leading-snug">
+                                  • {sig}
+                                </li>
+                              ))}
+                              {(row.matching_signals || []).length === 0 && (
+                                <li className="text-[10px] text-slate-400 italic">No signals</li>
+                              )}
+                            </ul>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span
+                              className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${matchStatusBadge(status)}`}
+                            >
+                              {status.replace(/_/g, ' ')}
+                            </span>
+                            {row.pending_approval && !row.payment_id && (
+                              <div className="text-[10px] text-amber-700 mt-1 font-semibold">
+                                Awaiting approval
+                              </div>
+                            )}
+                            {row.payment_id && (
+                              <div className="text-[10px] text-emerald-700 mt-1 font-semibold">
+                                Payment posted
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="flex flex-col items-end gap-1.5 min-w-[120px]">
+                              {canApprove && (
+                                <button
+                                  onClick={() => handleApproveMatch(row)}
+                                  disabled={isMatching}
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                >
+                                  Approve Match
+                                </button>
+                              )}
+                              {canAct && (
+                                <button
+                                  onClick={() => openManualMatchForRow(row)}
+                                  disabled={isMatching}
+                                  className="w-full px-2.5 py-1.5 rounded-lg bg-[#331a6f] hover:bg-[#251352] text-white text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                >
+                                  {row.matched_tenant_name ? 'Change / Reassign' : 'Manual Match'}
+                                </button>
+                              )}
+                              {canAct && status !== 'UNMATCHED' && (
+                                <button
+                                  onClick={() => handleLeaveUnmatched(row)}
+                                  disabled={isMatching}
+                                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                >
+                                  Leave Unmatched
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

@@ -231,13 +231,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       setLoading(true);
       const user = await login(cleanEmail, password);
       setSuccessMessage(
-        `Welcome back, ${user.first_name}! Redirecting to dashboard...`,
+        `Welcome back, ${user.first_name}! Opening your dashboard...`,
       );
-      setTimeout(() => {
-        if (onAuthSuccess) {
-          onAuthSuccess(user.role);
-        }
-      }, 600);
+      onAuthSuccess?.(user.role);
     } catch (err: any) {
       const msg =
         typeof err.message === "string"
@@ -301,7 +297,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           setSuccessMessage(
             "Landlord account created. Opening your dashboard...",
           );
-          setTimeout(() => onAuthSuccess?.(result.profile.role), 800);
+          onAuthSuccess?.(result.profile.role);
         }
       } else {
         if (!invitationToken.trim()) {
@@ -330,7 +326,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           setMode("CHECK_EMAIL");
         } else {
           setSuccessMessage("Tenant account created. Opening your portal...");
-          setTimeout(() => onAuthSuccess?.(result.profile.role), 800);
+          onAuthSuccess?.(result.profile.role);
         }
       }
     } catch (err: any) {
@@ -439,7 +435,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       const profile = await refreshUser();
       if (profile) {
         setSuccessMessage(`Password updated. Opening your dashboard...`);
-        setTimeout(() => onAuthSuccess?.(profile.role), 800);
+        onAuthSuccess?.(profile.role);
       } else {
         // No usable session came back (link had already expired, say) -
         // the password did change, so send them to sign in with it normally.

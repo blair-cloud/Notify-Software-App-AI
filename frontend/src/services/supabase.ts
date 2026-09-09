@@ -39,9 +39,23 @@ export const supabase: SupabaseClient = createClient(url ?? '', anonKey ?? '', {
 });
 
 /** The current access token, or null when signed out. */
+let _tokenCache: { token: string | null; at: number } | null = null;
+const TOKEN_CACHE_MS = 4000;
+
 export async function getAccessToken(): Promise<string | null> {
+  const now = Date.now();
+  if (_tokenCache && now - _tokenCache.at < TOKEN_CACHE_MS) {
+    return _tokenCache.token;
+  }
   const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  const token = data.session?.access_token ?? null;
+  _tokenCache = { token, at: now };
+  return token;
+}
+
+/** Drop the short-lived token cache (call after sign-out / forced refresh). */
+export function clearAccessTokenCache(): void {
+  _tokenCache = null;
 }
 
 /** Where Supabase should send the user back to after an emailed link. */

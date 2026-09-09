@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Plus, Search, Filter, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, Filter, CheckCircle2 } from 'lucide-react';
 import { UnitDetail } from '../types';
 import { useLanguage } from '../context/LanguageContext';
-import { LanguageSelector } from '../components/LanguageSelector';
 
 interface ManageUnitsPageProps {
   onBack: () => void;
   onOpenGetStarted: (source?: string) => void;
 }
 
-export const ManageUnitsPage: React.FC<ManageUnitsPageProps> = ({ onBack, onOpenGetStarted }) => {
+export const ManageUnitsPage: React.FC<ManageUnitsPageProps> = () => {
   const { t } = useLanguage();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -157,33 +156,7 @@ export const ManageUnitsPage: React.FC<ManageUnitsPageProps> = ({ onBack, onOpen
 
   return (
     <div className="min-h-screen bg-notify-grid text-black pb-24">
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-[#F4F4F0]/90 backdrop-blur-md py-5 px-4 sm:px-8 border-b border-black/10">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <button
-            onClick={onBack}
-            className="px-4 py-2 rounded-[14px] bg-[#331A6F] text-white font-extrabold text-sm border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[0.5px_0.5px_0_#000000] cursor-pointer flex items-center gap-2"
-          >
-            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
-            <span>{t.backToHome}</span>
-          </button>
-
-          <div className="flex items-center gap-3">
-            <LanguageSelector />
-
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 rounded-[14px] bg-[#331A6F] text-white font-extrabold text-sm border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[0.5px_0.5px_0_#000000] cursor-pointer flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>{t.addUnit}</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-10 space-y-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-36 sm:pt-40 space-y-8">
         {/* Title */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
@@ -195,8 +168,17 @@ export const ManageUnitsPage: React.FC<ManageUnitsPageProps> = ({ onBack, onOpen
             </p>
           </div>
 
-          {/* Quick Search & Filter */}
-          <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2 rounded-[14px] bg-[#331A6F] text-white font-extrabold text-sm border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[0.5px_0.5px_0_#000000] cursor-pointer flex items-center gap-2 self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>{t.addUnit}</span>
+          </button>
+        </div>
+
+        {/* Quick Search & Filter */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="relative flex-1 sm:w-64">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 stroke-[2.5]" />
               <input
@@ -220,7 +202,6 @@ export const ManageUnitsPage: React.FC<ManageUnitsPageProps> = ({ onBack, onOpen
                 <option value="vacant">{t.vacantUnits}</option>
               </select>
             </div>
-          </div>
         </div>
 
         {/* Minimal Units List Table */}

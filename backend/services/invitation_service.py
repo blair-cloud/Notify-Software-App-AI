@@ -324,7 +324,7 @@ class InvitationService:
         await self.db.flush()
         return fresh
 
-    async def accept_invitation_transaction(self, raw_token: str, user: User) -> Tenancy:
+    async def accept_invitation_transaction(self, raw_token: str, user: Optional[User]) -> Tenancy:
         """
         Validate the invitation, claim its tenant record, and make sure exactly
         one ACTIVE tenancy and one lease exist for it - reusing whatever the
@@ -342,6 +342,22 @@ class InvitationService:
             invitation.status = InvitationStatus.EXPIRED
             await self.invitation_repo.update(invitation)
             raise ConflictException("Invitation has expired")
+
+        # If no authenticated user was supplied (e.g. email-confirmation flow),
+        # resolve from the invitation's own tenant_profile_id.
+        if user is None:
+            if not invitation.tenant_profile_id:
+                raise ForbiddenException("Cannot resolve tenant account from invitation. Please sign in and try again.")
+            tenant_profile = (await self.db.execute(
+                select(TenantProfile).where(TenantProfile.id == invitation.tenant_profile_id)
+            )).scalar_one_or_none()
+            if not tenant_profile:
+                raise NotFoundException("Tenant profile linked to invitation not found")
+            user = (await self.db.execute(
+                select(User).where(User.id == tenant_profile.user_id)
+            )).scalar_one_or_none()
+            if not user:
+                raise NotFoundException("User account linked to invitation not found")
 
         if user.role != UserRole.TENANT:
             raise ForbiddenException("Only a tenant account can accept a tenant invitation")

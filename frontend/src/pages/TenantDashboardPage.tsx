@@ -138,22 +138,36 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
 
   const tenantId = user?.id || 'mock-tenant-001';
 
-  const loadTenantData = async () => {
-    setLoading(true);
+  const loadTenantData = async (opts: { silent?: boolean } = {}) => {
+    const silent = !!opts.silent;
+    if (!silent) setLoading(true);
     try {
-      const [tenanciesRes, leasesRes, invRes, payRes, rctRes, finRes, maintRes, compRes, notifRes, unreadRes] =
-        await Promise.all([
-          api.tenants.getMyTenancies().catch(() => []),
-          api.leases.listMine().catch(() => []),
-          api.invoices.getTenantInvoices().catch(() => []),
-          api.payments.getTenantPayments().catch(() => []),
-          api.receipts.getTenantReceipts().catch(() => []),
-          api.financials.getTenantFinancials().catch(() => null),
-          api.maintenance.getTenantRequests().catch(() => []),
-          api.complaints.getTenantComplaints().catch(() => []),
-          api.notifications.getUserNotifications(tenantId).catch(() => []),
-          api.notifications.getUnreadCount().catch(() => ({ unread_count: 0 })),
-        ]);
+      const results = await Promise.allSettled([
+        api.tenants.getMyTenancies(),
+        api.leases.listMine(),
+        api.invoices.getTenantInvoices(),
+        api.payments.getTenantPayments(),
+        api.receipts.getTenantReceipts(),
+        api.financials.getTenantFinancials(),
+        api.maintenance.getTenantRequests(),
+        api.complaints.getTenantComplaints(),
+        api.notifications.getUserNotifications(tenantId),
+        api.notifications.getUnreadCount(),
+      ]);
+
+      const val = (i: number) =>
+        results[i].status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<any>).value : null;
+
+      const tenanciesRes = val(0);
+      const leasesRes = val(1);
+      const invRes = val(2);
+      const payRes = val(3);
+      const rctRes = val(4);
+      const finRes = val(5);
+      const maintRes = val(6);
+      const compRes = val(7);
+      const notifRes = val(8);
+      const unreadRes = val(9);
 
       const loadedTenancies = Array.isArray(tenanciesRes) ? tenanciesRes : ((tenanciesRes as any)?.tenancies || []);
       const loadedLeases = Array.isArray(leasesRes) ? leasesRes : [];
@@ -164,16 +178,21 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       const loadedComp = Array.isArray(compRes) ? compRes : ((compRes as any)?.complaints || []);
       const loadedNotif = Array.isArray(notifRes) ? notifRes : ((notifRes as any)?.notifications || []);
 
-      setTenancies(loadedTenancies);
-      setLeases(loadedLeases);
-      setInvoices(loadedInvoices);
-      setPayments(loadedPayments);
-      setReceipts(loadedReceipts);
-      setFinancials(finRes && !(finRes as any).detail ? finRes : null);
-      setMaintenanceRequests(loadedMaint);
-      setComplaints(loadedComp);
-      setNotifications(loadedNotif);
-      setUnreadCount(unreadRes?.unread_count ?? (Array.isArray(notifRes) ? notifRes.filter((n: any) => !n.is_read).length : 0));
+      if (tenanciesRes != null) setTenancies(loadedTenancies);
+      if (leasesRes != null) setLeases(loadedLeases);
+      if (invRes != null) setInvoices(loadedInvoices);
+      if (payRes != null) setPayments(loadedPayments);
+      if (rctRes != null) setReceipts(loadedReceipts);
+      if (finRes != null) setFinancials(finRes && !(finRes as any).detail ? finRes : null);
+      if (maintRes != null) setMaintenanceRequests(loadedMaint);
+      if (compRes != null) setComplaints(loadedComp);
+      if (notifRes != null) setNotifications(loadedNotif);
+      if (unreadRes != null || notifRes != null) {
+        setUnreadCount(
+          unreadRes?.unread_count ??
+            (Array.isArray(loadedNotif) ? loadedNotif.filter((n: any) => !n.is_read).length : 0)
+        );
+      }
 
       // Synchronize active chat objects if open
       setActiveComplaintChat((prev) => {
@@ -187,7 +206,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
     } catch (err) {
       console.error('Error loading tenant data:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -235,7 +254,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
     setLeases((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
     setSuccessMsg('Signed lease copy uploaded successfully!');
     setTimeout(() => setSuccessMsg(null), 4000);
-    loadTenantData();
+    loadTenantData({ silent: true });
   };
 
   const handleSignTenantLease = async (leaseId: string, signatureNameValue: string) => {
@@ -244,7 +263,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
     setLeases((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
     setSuccessMsg('Lease signed successfully!');
     setTimeout(() => setSuccessMsg(null), 4000);
-    loadTenantData();
+    loadTenantData({ silent: true });
   };
 
   // Maintenance Handlers
@@ -262,7 +281,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       setIsCreateMaintenanceOpen(false);
       setSuccessMsg('Maintenance request submitted successfully!');
       setTimeout(() => setSuccessMsg(null), 4000);
-      loadTenantData();
+      loadTenantData({ silent: true });
     } catch (err: any) {
       alert(err.message || 'Failed to submit maintenance request');
     }
@@ -275,7 +294,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       setSelectedMaintenance(null);
       setSuccessMsg('Maintenance resolution confirmed and closed!');
       setTimeout(() => setSuccessMsg(null), 4000);
-      loadTenantData();
+      loadTenantData({ silent: true });
     } catch (err: any) {
       alert(err.message || 'Failed to confirm resolution');
     }
@@ -288,7 +307,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       setSelectedMaintenance(null);
       setSuccessMsg('Maintenance request reopened and sent to landlord.');
       setTimeout(() => setSuccessMsg(null), 4000);
-      loadTenantData();
+      loadTenantData({ silent: true });
     } catch (err: any) {
       alert(err.message || 'Failed to reopen request');
     }
@@ -297,7 +316,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
   const handleAddMaintenanceComment = async (id: string, message: string) => {
     try {
       await api.maintenance.addComment(id, message);
-      loadTenantData();
+      loadTenantData({ silent: true });
     } catch (err: any) {
       alert(err.message || 'Failed to post comment');
     }
@@ -318,7 +337,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       setIsCreateComplaintOpen(false);
       setSuccessMsg('Complaint filed successfully with landlord management.');
       setTimeout(() => setSuccessMsg(null), 4000);
-      loadTenantData();
+      loadTenantData({ silent: true });
     } catch (err: any) {
       alert(err.message || 'Failed to file complaint');
     }
@@ -327,7 +346,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
   const handleAddComplaintComment = async (id: string, message: string) => {
     try {
       await api.complaints.addComment(id, message);
-      loadTenantData();
+      loadTenantData({ silent: true });
     } catch (err: any) {
       alert(err.message || 'Failed to post comment');
     }
@@ -338,7 +357,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       await api.complaints.closeComplaint(id);
       setSuccessMsg('Complaint marked as resolved/closed.');
       setTimeout(() => setSuccessMsg(null), 4000);
-      loadTenantData();
+      loadTenantData({ silent: true });
     } catch (err: any) {
       alert(err.message || 'Failed to close complaint');
     }
@@ -1437,7 +1456,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
                   const match = maintenanceRequests.find((m) => m.id === mId);
                   if (match) setSelectedMaintenance(match);
                 }}
-                onRefreshData={loadTenantData}
+                onRefreshData={() => loadTenantData({ silent: true })}
               />
             )}
 
@@ -1477,7 +1496,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
         invoice={payingInvoice}
         onClose={() => setPayingInvoice(null)}
         onPaymentSuccess={() => {
-          loadTenantData();
+          loadTenantData({ silent: true });
         }}
       />
 

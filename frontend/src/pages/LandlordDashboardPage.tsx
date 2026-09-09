@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  MessageCircle,
   Building2,
   Home,
   Users,
@@ -63,6 +64,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { openWhatsApp, buildInvitationWhatsAppMessage } from '../utils/whatsapp';
 import { LeaseAgreementPreviewModal } from '../components/LeaseAgreementPreviewModal';
 import {
   Property,
@@ -342,98 +344,247 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [lateFeeDraft, setLateFeeDraft] = useState(0);
   const [isSavingLateFee, setIsSavingLateFee] = useState(false);
 
-  // Load portfolio data.
+  // Load portfolio data in two waves so the overview can paint as soon as core
+  // endpoints return, instead of waiting for maintenance/complaints/messages.
   //
-  // `silent` is what every post-action refresh uses: it re-fetches exactly the
-  // same data (nothing is skipped, so accuracy is unaffected) but never touches
-  // `loading`, so the full-page spinner below never displaces the dashboard the
-  // user is already looking at. Only the very first load on mount shows it.
-  const fetchData = async (opts: { silent?: boolean } = {}) => {
-    if (!opts.silent) setLoading(true);
-    setError(null);
-    try {
-      const [
-        propsRes,
-        unitsRes,
-        invRes,
-        tenantsRes,
-        leasesRes,
-        tenanciesRes,
-        statsRes,
-        invoicesRes,
-        paymentsRes,
-        receiptsRes,
-        expensesRes,
-        financialsRes,
-        maintRes,
-        complaintsRes,
-        workersRes,
-        notifRes,
-        unreadRes,
-        conversationsRes
-      ] = await Promise.all([
-        api.properties.list(),
-        api.units.list(),
-        api.invitations.list(),
-        api.tenants.getLandlordTenants(),
-        api.leases.list(),
-        api.tenancies.list(),
-        api.landlord.getStats(),
-        api.invoices.list(),
-        api.payments.list(),
-        api.receipts.list(),
-        api.expenses.list(),
-        api.financials.getLandlordSummary(),
-        api.maintenance.getLandlordRequests(),
-        api.complaints.getLandlordComplaints(),
-        api.maintenance.getWorkers(),
-        api.notifications.getUserNotifications(user?.id || 'mock-lp-001'),
-        api.notifications.getUnreadCount(),
-        api.messages.getConversations().catch(() => [])
-      ]);
+  // `silent` re-fetches without the first-load spinner (keeps existing UI visible).
+  // `scope` limits which slices refresh after mutations.
+  const hasCoreDataRef = React.useRef(false);
+  const fetchGenRef = React.useRef(0);
 
-      setProperties(Array.isArray(propsRes) ? propsRes : ((propsRes as any)?.properties || []));
-      setUnits(Array.isArray(unitsRes) ? unitsRes : ((unitsRes as any)?.units || []));
-      setInvitations(Array.isArray(invRes) ? invRes : ((invRes as any)?.invitations || []));
-      setTenants(Array.isArray(tenantsRes) ? tenantsRes : ((tenantsRes as any)?.tenants || []));
-      setLeases(Array.isArray(leasesRes) ? leasesRes : ((leasesRes as any)?.leases || []));
-      setTenancies(Array.isArray(tenanciesRes) ? tenanciesRes : ((tenanciesRes as any)?.tenancies || []));
-      setStats(statsRes);
-      setInvoices(Array.isArray(invoicesRes) ? invoicesRes : ((invoicesRes as any)?.invoices || []));
-      setPayments(Array.isArray(paymentsRes) ? paymentsRes : ((paymentsRes as any)?.payments || []));
-      setReceipts(Array.isArray(receiptsRes) ? receiptsRes : ((receiptsRes as any)?.receipts || []));
-      setExpenses(Array.isArray(expensesRes) ? expensesRes : ((expensesRes as any)?.expenses || []));
-      setFinancials(financialsRes && !(financialsRes as any).detail ? financialsRes : null);
+  const asArray = (res: any, nestedKey?: string): any[] => {
+    if (Array.isArray(res)) return res;
+    if (nestedKey && res && Array.isArray(res[nestedKey])) return res[nestedKey];
+    return [];
+  };
 
-      setMaintenanceRequests(Array.isArray(maintRes) ? maintRes : []);
-      setComplaints(Array.isArray(complaintsRes) ? complaintsRes : []);
-      setWorkers(Array.isArray(workersRes) ? workersRes : []);
-      setNotifications(Array.isArray(notifRes) ? notifRes : []);
-      setConversations(Array.isArray(conversationsRes) ? conversationsRes : []);
-      setUnreadCount(unreadRes?.unread_count ?? (Array.isArray(notifRes) ? notifRes.filter(n => !n.is_read).length : 0));
+  const applyCoreResults = (results: PromiseSettledResult<any>[]) => {
+    const [
+      propsRes, unitsRes, invRes, tenantsRes, leasesRes, tenanciesRes, statsRes,
+      invoicesRes, paymentsRes, expensesRes, financialsRes,
+    ] = results;
 
-      if (propsRes && propsRes.length > 0) {
-        if (!selectedPropIdForUnit) setSelectedPropIdForUnit(propsRes[0].id);
-        if (!invitePropId) setInvitePropId(propsRes[0].id);
-        if (!leasePropId) setLeasePropId(propsRes[0].id);
-        if (!expPropId) setExpPropId(propsRes[0].id);
+    if (propsRes.status === 'fulfilled') {
+      const list = asArray(propsRes.value, 'properties');
+      setProperties(list);
+      if (list.length > 0) {
+        if (!selectedPropIdForUnit) setSelectedPropIdForUnit(list[0].id);
+        if (!invitePropId) setInvitePropId(list[0].id);
+        if (!leasePropId) setLeasePropId(list[0].id);
+        if (!expPropId) setExpPropId(list[0].id);
       }
-      if (leasesRes && leasesRes.length > 0 && !invLeaseId) {
-        setInvLeaseId(leasesRes[0].id);
-        setInvRentAmount(leasesRes[0].monthly_rent || 350000);
+    } else {
+      console.warn('properties.list failed', propsRes.reason);
+    }
+    if (unitsRes.status === 'fulfilled') setUnits(asArray(unitsRes.value, 'units'));
+    else console.warn('units.list failed', unitsRes.reason);
+    if (invRes.status === 'fulfilled') setInvitations(asArray(invRes.value, 'invitations'));
+    if (tenantsRes.status === 'fulfilled') setTenants(asArray(tenantsRes.value, 'tenants'));
+    if (leasesRes.status === 'fulfilled') {
+      const list = asArray(leasesRes.value, 'leases');
+      setLeases(list);
+      if (list.length > 0 && !invLeaseId) {
+        setInvLeaseId(list[0].id);
+        setInvRentAmount(list[0].monthly_rent || 350000);
+      }
+    }
+    if (tenanciesRes.status === 'fulfilled') setTenancies(asArray(tenanciesRes.value, 'tenancies'));
+    if (statsRes.status === 'fulfilled') setStats(statsRes.value);
+    if (invoicesRes.status === 'fulfilled') setInvoices(asArray(invoicesRes.value, 'invoices'));
+    if (paymentsRes.status === 'fulfilled') setPayments(asArray(paymentsRes.value, 'payments'));
+    if (expensesRes.status === 'fulfilled') setExpenses(asArray(expensesRes.value, 'expenses'));
+    if (financialsRes.status === 'fulfilled') {
+      const fin = financialsRes.value;
+      setFinancials(fin && !(fin as any).detail ? fin : null);
+    }
+  };
+
+  const applySecondaryResults = (results: PromiseSettledResult<any>[]) => {
+    const [receiptsRes, maintRes, complaintsRes, workersRes, notifRes, unreadRes, conversationsRes] = results;
+    if (receiptsRes.status === 'fulfilled') setReceipts(asArray(receiptsRes.value, 'receipts'));
+    if (maintRes.status === 'fulfilled') setMaintenanceRequests(asArray(maintRes.value));
+    if (complaintsRes.status === 'fulfilled') setComplaints(asArray(complaintsRes.value));
+    if (workersRes.status === 'fulfilled') setWorkers(asArray(workersRes.value));
+    if (notifRes.status === 'fulfilled') setNotifications(asArray(notifRes.value));
+    if (conversationsRes.status === 'fulfilled') setConversations(asArray(conversationsRes.value));
+    if (unreadRes.status === 'fulfilled') {
+      setUnreadCount(
+        unreadRes.value?.unread_count ??
+          (notifRes.status === 'fulfilled'
+            ? asArray(notifRes.value).filter((n: any) => !n.is_read).length
+            : 0)
+      );
+    } else if (notifRes.status === 'fulfilled') {
+      setUnreadCount(asArray(notifRes.value).filter((n: any) => !n.is_read).length);
+    }
+  };
+
+  const fetchCorePortfolio = () =>
+    Promise.allSettled([
+      api.properties.list(),
+      api.units.list(),
+      api.invitations.list(),
+      api.tenants.getLandlordTenants(),
+      api.leases.list(),
+      api.tenancies.list(),
+      api.landlord.getStats(),
+      api.invoices.list(),
+      api.payments.list(),
+      api.expenses.list(),
+      api.financials.getLandlordSummary(),
+    ]);
+
+  const fetchSecondaryPortfolio = () =>
+    Promise.allSettled([
+      api.receipts.list(),
+      api.maintenance.getLandlordRequests(),
+      api.complaints.getLandlordComplaints(),
+      api.maintenance.getWorkers(),
+      api.notifications.getUserNotifications(user?.id || 'mock-lp-001'),
+      api.notifications.getUnreadCount(),
+      api.messages.getConversations().catch(() => []),
+    ]);
+
+  type FetchScope =
+    | 'all'
+    | 'core'
+    | 'secondary'
+    | 'properties'
+    | 'financials'
+    | 'maintenance'
+    | 'complaints'
+    | 'notifications'
+    | 'messages';
+
+  const fetchData = async (opts: { silent?: boolean; scope?: FetchScope } = {}) => {
+    const silent = !!opts.silent;
+    const scope = opts.scope || 'all';
+    const gen = ++fetchGenRef.current;
+    // Only the very first cold load (no core data yet) shows a spinner.
+    const showSpinner = !silent && !hasCoreDataRef.current;
+    if (showSpinner) setLoading(true);
+    if (!silent) setError(null);
+
+    try {
+      const needCore =
+        scope === 'all' ||
+        scope === 'core' ||
+        scope === 'properties' ||
+        scope === 'financials';
+      const needSecondary =
+        scope === 'all' ||
+        scope === 'secondary' ||
+        scope === 'maintenance' ||
+        scope === 'complaints' ||
+        scope === 'notifications' ||
+        scope === 'messages';
+
+      if (scope === 'properties') {
+        const [propsRes, unitsRes, statsRes] = await Promise.allSettled([
+          api.properties.list(),
+          api.units.list(),
+          api.landlord.getStats(),
+        ]);
+        if (gen !== fetchGenRef.current) return;
+        if (propsRes.status === 'fulfilled') setProperties(asArray(propsRes.value, 'properties'));
+        if (unitsRes.status === 'fulfilled') setUnits(asArray(unitsRes.value, 'units'));
+        if (statsRes.status === 'fulfilled') setStats(statsRes.value);
+        hasCoreDataRef.current = true;
+        return;
+      }
+
+      if (scope === 'financials') {
+        const [invoicesRes, paymentsRes, expensesRes, financialsRes, receiptsRes] = await Promise.allSettled([
+          api.invoices.list(),
+          api.payments.list(),
+          api.expenses.list(),
+          api.financials.getLandlordSummary(),
+          api.receipts.list(),
+        ]);
+        if (gen !== fetchGenRef.current) return;
+        if (invoicesRes.status === 'fulfilled') setInvoices(asArray(invoicesRes.value, 'invoices'));
+        if (paymentsRes.status === 'fulfilled') setPayments(asArray(paymentsRes.value, 'payments'));
+        if (expensesRes.status === 'fulfilled') setExpenses(asArray(expensesRes.value, 'expenses'));
+        if (financialsRes.status === 'fulfilled') {
+          const fin = financialsRes.value;
+          setFinancials(fin && !(fin as any).detail ? fin : null);
+        }
+        if (receiptsRes.status === 'fulfilled') setReceipts(asArray(receiptsRes.value, 'receipts'));
+        return;
+      }
+
+      if (scope === 'maintenance') {
+        const [maintRes, workersRes] = await Promise.allSettled([
+          api.maintenance.getLandlordRequests(),
+          api.maintenance.getWorkers(),
+        ]);
+        if (gen !== fetchGenRef.current) return;
+        if (maintRes.status === 'fulfilled') setMaintenanceRequests(asArray(maintRes.value));
+        if (workersRes.status === 'fulfilled') setWorkers(asArray(workersRes.value));
+        return;
+      }
+
+      if (scope === 'complaints') {
+        const complaintsRes = await Promise.allSettled([api.complaints.getLandlordComplaints()]);
+        if (gen !== fetchGenRef.current) return;
+        if (complaintsRes[0].status === 'fulfilled') setComplaints(asArray(complaintsRes[0].value));
+        return;
+      }
+
+      if (scope === 'notifications') {
+        const [notifRes, unreadRes] = await Promise.allSettled([
+          api.notifications.getUserNotifications(user?.id || 'mock-lp-001'),
+          api.notifications.getUnreadCount(),
+        ]);
+        if (gen !== fetchGenRef.current) return;
+        if (notifRes.status === 'fulfilled') setNotifications(asArray(notifRes.value));
+        if (unreadRes.status === 'fulfilled') {
+          setUnreadCount(unreadRes.value?.unread_count ?? 0);
+        }
+        return;
+      }
+
+      if (scope === 'messages') {
+        const convRes = await Promise.allSettled([api.messages.getConversations().catch(() => [])]);
+        if (gen !== fetchGenRef.current) return;
+        if (convRes[0].status === 'fulfilled') setConversations(asArray(convRes[0].value));
+        return;
+      }
+
+      // Core wave — overview can render as soon as this settles.
+      if (needCore) {
+        const coreResults = await fetchCorePortfolio();
+        if (gen !== fetchGenRef.current) return;
+        applyCoreResults(coreResults);
+        hasCoreDataRef.current = true;
+        if (showSpinner) setLoading(false);
+      }
+
+      // Secondary wave — deferred on first paint so UI is not blocked.
+      if (needSecondary) {
+        const secondaryPromise = fetchSecondaryPortfolio().then((secondaryResults) => {
+          if (gen !== fetchGenRef.current) return;
+          applySecondaryResults(secondaryResults);
+        });
+        // First cold load: don't await secondary (paint core ASAP).
+        // Silent / explicit secondary refresh: await so callers see fresh data.
+        if (silent || scope === 'secondary') {
+          await secondaryPromise;
+        } else {
+          void secondaryPromise;
+        }
       }
     } catch (err: any) {
       console.error('Failed to load landlord data:', err);
-      // A silent background refresh failing must not blank out data that is
-      // already on screen and still perfectly valid.
-      if (!opts.silent) setError(err.message || 'Failed to sync portfolio data');
+      if (!silent) setError(err.message || 'Failed to sync portfolio data');
     } finally {
-      if (!opts.silent) setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Shared success/error toast helpers - each call clears the other channel and
@@ -459,13 +610,13 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const vacantUnitsForInvite = units.filter(
     (u) =>
       u.property_id === invitePropId &&
-      (u.status === 'VACANT' || u.status === 'vacant' || u.status === 'RESERVED')
+      (u.status === 'VACANT' || u.status === 'RESERVED')
   );
 
   const vacantUnitsForLease = units.filter(
     (u) =>
       u.property_id === leasePropId &&
-      (u.status === 'VACANT' || u.status === 'vacant' || u.status === 'RESERVED')
+      (u.status === 'VACANT' || u.status === 'RESERVED')
   );
 
   // The tenants list has one row per tenancy, so the same tenant can appear more
@@ -498,7 +649,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setPropDesc('');
       setShowAddPropertyModal(false);
       showSuccess('Property created successfully.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'properties' });
     } catch (err: any) {
       showError(err.message || 'Failed to create property.');
     } finally {
@@ -532,7 +683,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
       setEditingProperty(null);
       showSuccess('Property updated successfully.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'properties' });
     } catch (err: any) {
       showError(err.message || 'Failed to update property.');
     } finally {
@@ -563,7 +714,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setUnitDesc('');
       setShowAddUnitModal(false);
       showSuccess('Unit created successfully.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'properties' });
     } catch (err: any) {
       showError(err.message || 'Failed to create unit.');
     } finally {
@@ -599,7 +750,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
       setEditingUnit(null);
       showSuccess('Unit updated successfully!');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'properties' });
     } catch (err: any) {
       showError(err.message || 'Failed to update unit');
     } finally {
@@ -617,12 +768,27 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setUnits((prev) => prev.filter((u) => u.id !== deletedUnitId));
       setUnitPendingDelete(null);
       showSuccess('Unit deleted successfully!');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'properties' });
     } catch (err: any) {
       showError(err.message || 'Failed to delete unit');
     } finally {
       setIsDeletingUnit(false);
     }
+  };
+
+
+  const handleOpenInvitationWhatsApp = () => {
+    if (!createdInviteResult) return;
+    const prop = properties.find((p: any) => p.id === invitePropId);
+    const unit = units.find((u: any) => u.id === inviteUnitId);
+    const fullLink = `${window.location.origin}${createdInviteResult.invite_link}`;
+    const text = buildInvitationWhatsAppMessage({
+      tenantName: inviteName.trim() || undefined,
+      propertyName: prop?.name,
+      unitNumber: unit?.unit_number,
+      inviteLink: fullLink,
+    });
+    openWhatsApp(invitePhone, text);
   };
 
   const handleCreateInvitation = async (e: React.FormEvent) => {
@@ -678,9 +844,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       // rather than one pass/fail lumped into "invitation sent".
       const parts: string[] = [];
       if (res.email?.attempted) parts.push(res.email.ok ? 'Email sent.' : `Email failed (${res.email.detail || 'unknown reason'}).`);
-      if (res.sms?.attempted) parts.push(res.sms.ok ? 'SMS sent.' : `SMS failed (${res.sms.detail || 'unknown reason'}).`);
+      if (res.sms?.attempted && res.sms.ok) parts.push('SMS sent.');
       if (res.whatsapp?.attempted) parts.push(res.whatsapp.ok ? 'WhatsApp sent.' : `WhatsApp failed (${res.whatsapp.detail || 'unknown reason'}).`);
-      const attemptedChannels = [res.email, res.sms, res.whatsapp].filter((c) => c?.attempted);
+      const attemptedChannels = [res.email, res.whatsapp].filter((c) => c?.attempted);
       const allFailed = attemptedChannels.length > 0 && attemptedChannels.every((c) => !c.ok);
       const feedback = `Invitation created. ${parts.join(' ')}`.trim();
       if (allFailed) {
@@ -695,7 +861,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       // The optimistic row above is what the landlord sees immediately; this
       // reconciles it with the server's own view in the background (real
       // tenancy id, canonical name split, etc.) without ever blocking on it.
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'core' });
     } catch (err: any) {
       showError(err.message || 'Failed to assign vacancy to tenant.');
     } finally {
@@ -757,7 +923,6 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           ? 'Lease created successfully. Saved as a draft — upload the signed document to activate it.'
           : 'Lease created successfully.'
       );
-      fetchData({ silent: true });
 
       // Document upload is a secondary step - its failure must not hide the
       // fact that the lease and tenancy were already created successfully.
@@ -773,7 +938,6 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             uploaded_by: `${user?.first_name || 'Landlord'} ${user?.last_name || ''}`.trim() || 'Landlord',
             uploaded_by_role: 'LANDLORD',
           });
-          fetchData({ silent: true });
         } catch (docErr: any) {
           showError(
             docErr.message ||
@@ -781,6 +945,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           );
         }
       }
+      fetchData({ silent: true, scope: 'core' });
     } catch (err: any) {
       setLeaseError(err.message || 'Failed to create lease.');
     } finally {
@@ -796,7 +961,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         uploaded_by_id: user?.id || 'mock-lp-001',
       });
       showSuccess('Lease agreement document uploaded & version history updated!');
-      await fetchData({ silent: true });
+      await fetchData({ silent: true, scope: 'core' });
     } catch (err: any) {
       showError(err.message || 'Failed to upload document version');
     }
@@ -813,7 +978,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       await api.leases.update(leaseId, { late_fee: Number(lateFeeDraft) || 0 });
       showSuccess('Late payment penalty updated.');
       setEditingLateFeeLeaseId(null);
-      await fetchData({ silent: true });
+      await fetchData({ silent: true, scope: 'core' });
     } catch (err: any) {
       showError(err.message || 'Failed to update the late payment penalty.');
     } finally {
@@ -832,7 +997,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.leases.activate(lease.id);
       showSuccess('Lease activated successfully.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'core' });
     } catch (err: any) {
       showError(err.message || 'Failed to activate lease.');
     } finally {
@@ -852,7 +1017,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setUnits((prev) => prev.filter((u) => u.property_id !== deletedPropertyId));
       setPropertyPendingDelete(null);
       showSuccess('Property deleted successfully', 3000);
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'properties' });
     } catch (err: any) {
       showError(err.message || 'Failed to delete property');
     } finally {
@@ -868,7 +1033,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.tenancies.end(tenancyId);
       showSuccess('Tenancy ended successfully. The unit is now vacant.', 3000);
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'core' });
     } catch (err: any) {
       showError(err.message || 'Failed to end tenancy.');
     } finally {
@@ -899,7 +1064,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     setRecordPaymentTenantId(undefined);
     setRecordPaymentInvoiceId(undefined);
     showSuccess('Payment logged successfully and verified receipt issued!');
-    fetchData({ silent: true });
+    fetchData({ silent: true, scope: 'financials' });
     if (receipt) {
       setSelectedReceipt(receipt);
     }
@@ -910,7 +1075,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     setReminderTenant(null);
     setReminderInvoice(null);
     showSuccess(msg || 'Payment reminder sent successfully!');
-    fetchData({ silent: true });
+    fetchData({ silent: true, scope: 'notifications' });
   };
 
   // Phase 4: Maintenance Handlers
@@ -918,7 +1083,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.maintenance.acknowledgeRequest(id);
       showSuccess('Maintenance request acknowledged.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'maintenance' });
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) => (prev ? { ...prev, status: 'ACKNOWLEDGED' } : null));
       }
@@ -940,7 +1105,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.maintenance.scheduleRequest(id, data);
       showSuccess('Maintenance visit scheduled and assigned.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'maintenance' });
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) =>
           prev
@@ -964,7 +1129,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.maintenance.markInProgress(id);
       showSuccess('Maintenance marked as in progress.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'maintenance' });
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) => (prev ? { ...prev, status: 'IN_PROGRESS' } : null));
       }
@@ -980,7 +1145,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.maintenance.resolveRequest(id, data);
       showSuccess('Maintenance marked as resolved. Awaiting tenant confirmation.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'maintenance' });
       if (selectedMaintenance && selectedMaintenance.id === id) {
         setSelectedMaintenance((prev) =>
           prev
@@ -1002,7 +1167,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.maintenance.addToExpenses(id);
       showSuccess('Maintenance cost added to property expenses successfully!');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'maintenance' });
     } catch (err: any) {
       showError(err.message || 'Failed to add to expenses');
     }
@@ -1011,14 +1176,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const handleAddMaintenanceComment = async (id: string, message: string) => {
     try {
       await api.maintenance.addComment(id, message);
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'maintenance' });
       if (selectedMaintenance && selectedMaintenance.id === id) {
         const newComment = {
           id: `cmt-${Date.now()}`,
-          request_id: id,
+          maintenance_request_id: id,
           user_id: user?.id || 'mock-lp-001',
-          user_name: `${user?.first_name || 'Landlord'} ${user?.last_name || ''}`,
-          user_role: 'LANDLORD' as const,
+          author_name: `${user?.first_name || 'Landlord'} ${user?.last_name || ''}`.trim(),
+          author_role: 'LANDLORD',
           message,
           created_at: new Date().toISOString(),
         };
@@ -1041,7 +1206,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.complaints.acknowledgeComplaint(id);
       showSuccess('Complaint acknowledged.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'complaints' });
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) => (prev ? { ...prev, status: 'ACKNOWLEDGED' } : null));
       }
@@ -1054,7 +1219,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.complaints.markUnderReview(id, data);
       showSuccess('Complaint moved to under review with official response.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'complaints' });
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) =>
           prev
@@ -1075,7 +1240,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.complaints.resolveComplaint(id, data);
       showSuccess('Complaint marked as resolved.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'complaints' });
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) =>
           prev
@@ -1096,7 +1261,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.complaints.closeComplaint(id);
       showSuccess('Complaint closed.');
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'complaints' });
       if (selectedComplaint && selectedComplaint.id === id) {
         setSelectedComplaint((prev) => (prev ? { ...prev, status: 'CLOSED' } : null));
       }
@@ -1108,14 +1273,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const handleAddComplaintComment = async (id: string, message: string) => {
     try {
       await api.complaints.addComment(id, message);
-      fetchData({ silent: true });
+      fetchData({ silent: true, scope: 'complaints' });
       if (selectedComplaint && selectedComplaint.id === id) {
         const newComment = {
           id: `cmt-${Date.now()}`,
           complaint_id: id,
           user_id: user?.id || 'mock-lp-001',
-          user_name: `${user?.first_name || 'Landlord'} ${user?.last_name || ''}`,
-          user_role: 'LANDLORD' as const,
+          author_name: `${user?.first_name || 'Landlord'} ${user?.last_name || ''}`.trim(),
+          author_role: 'LANDLORD',
           message,
           created_at: new Date().toISOString(),
         };
@@ -1145,7 +1310,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     // shown inline in the modal rather than being swallowed here.
     await api.maintenance.createWorker(data);
     showSuccess('Technician added to directory successfully.');
-    fetchData({ silent: true });
+    fetchData({ silent: true, scope: 'maintenance' });
   };
 
   // Phase 4 & Phase 5: Notification Handlers
@@ -1191,7 +1356,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       const res = await api.notifications.processReminders();
       showSuccess(`Automated reminder engine executed! ${res.reminders_created} lease reminders created.`, 5000);
-      await fetchData({ silent: true });
+      await fetchData({ silent: true, scope: 'notifications' });
     } catch (err: any) {
       showError(err.message || 'Failed to process reminders');
     } finally {
@@ -1281,7 +1446,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       invoiceStatusFilter === 'ALL'
         ? true
         : invoiceStatusFilter === 'UNPAID'
-        ? i.status === 'ISSUED' || i.status === 'UNPAID' || i.status === 'OVERDUE' || i.status === 'PARTIALLY_PAID'
+        ? i.status === 'ISSUED' || i.status === 'OVERDUE' || i.status === 'PARTIALLY_PAID'
         : i.status === invoiceStatusFilter;
     const matchesSearch =
       i.invoice_number.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
@@ -1561,9 +1726,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           >
             <FileText className="w-4 h-4" />
             <span>Invoices</span>
-            {invoices.filter(i => i.status === 'UNPAID' || i.status === 'OVERDUE').length > 0 && (
+            {invoices.filter(i => i.status === 'ISSUED' || i.status === 'OVERDUE' || i.status === 'PARTIALLY_PAID').length > 0 && (
               <span className="ml-auto bg-amber-400 text-slate-950 font-bold text-[10px] px-1.5 py-0.5 rounded-full">
-                {invoices.filter(i => i.status === 'UNPAID' || i.status === 'OVERDUE').length}
+                {invoices.filter(i => i.status === 'ISSUED' || i.status === 'OVERDUE' || i.status === 'PARTIALLY_PAID').length}
               </span>
             )}
           </button>
@@ -1778,23 +1943,28 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           </div>
         )}
 
-        {/* Global Loading state */}
-        {loading && (
-          <div className="py-12 text-center text-slate-500">
-            <div className="inline-block w-8 h-8 border-3 border-[#331A6F] border-t-transparent rounded-full animate-spin mb-3"></div>
-            <p className="text-sm font-medium">Loading portfolio data...</p>
+        {/* First-load skeleton only — never blank the dashboard during silent refresh */}
+        {loading && !hasCoreDataRef.current && properties.length === 0 && (
+          <div className="space-y-4 animate-pulse py-2">
+            <div className="h-8 w-48 bg-slate-200/80 rounded-lg" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="h-24 rounded-2xl bg-slate-200/70" />
+              ))}
+            </div>
+            <div className="h-64 rounded-2xl bg-slate-200/60" />
           </div>
         )}
 
         {/* Global Error message */}
-        {error && !loading && (
+        {error && (
           <div className="mb-6 bg-rose-50 border border-rose-200 text-rose-800 text-sm px-4 py-3 rounded-lg flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
-        {!loading && (
+        {(!loading || hasCoreDataRef.current || properties.length > 0 || !!stats) && (
           <>
             {/* 1. DASHBOARD OVERVIEW TAB */}
             {activeTab === 'dashboard' && (
@@ -1932,9 +2102,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     [
                       { key: 'ALL', label: 'All Requests', count: maintenanceRequests.length },
                       {
-                        key: 'REPORTED',
+                        key: 'SUBMITTED',
                         label: 'Reported (New)',
-                        count: maintenanceRequests.filter((m) => m.status === 'REPORTED').length,
+                        count: maintenanceRequests.filter((m) => m.status === 'SUBMITTED').length,
                       },
                       {
                         key: 'ACKNOWLEDGED',
@@ -2004,7 +2174,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                       className="px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-700 focus:outline-none"
                     >
                       <option value="ALL">All Priorities</option>
-                      <option value="CRITICAL">Critical Priority</option>
+                      <option value="URGENT">Urgent Priority</option>
                       <option value="HIGH">High Priority</option>
                       <option value="MEDIUM">Medium Priority</option>
                       <option value="LOW">Low Priority</option>
@@ -2070,7 +2240,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             <td className="py-4 px-4">
                               <span
                                 className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                                  m.priority === 'CRITICAL'
+                                  m.priority === 'URGENT'
                                     ? 'bg-rose-100 text-rose-800'
                                     : m.priority === 'HIGH'
                                     ? 'bg-orange-100 text-orange-800'
@@ -2105,7 +2275,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             <td className="py-4 px-4">
                               <span
                                 className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                                  m.status === 'REPORTED'
+                                  m.status === 'SUBMITTED'
                                     ? 'bg-blue-100 text-blue-800'
                                     : m.status === 'ACKNOWLEDGED'
                                     ? 'bg-purple-100 text-purple-800'
@@ -3643,10 +3813,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
                 {/* Email, SMS, and WhatsApp are sent independently - show each
                     result on its own rather than one combined pass/fail. */}
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="flex flex-wrap gap-2.5">
                   {[
                     { key: 'email', label: 'Email', result: createdInviteResult.email },
-                    { key: 'sms', label: 'SMS', result: createdInviteResult.sms },
+                    ...(createdInviteResult.sms?.ok ? [{ key: 'sms', label: 'SMS', result: createdInviteResult.sms }] : []),
                     { key: 'whatsapp', label: 'WhatsApp', result: createdInviteResult.whatsapp },
                   ].map(({ key, label, result }) => {
                     const attempted = result?.attempted;
@@ -3654,7 +3824,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     return (
                       <div
                         key={key}
-                        className={`p-3 rounded-lg border flex items-start gap-2 ${
+                        className={`flex-1 min-w-[130px] p-3 rounded-lg border flex items-start gap-2 ${
                           !attempted
                             ? 'bg-slate-50 border-slate-200 text-slate-500'
                             : ok
@@ -3707,7 +3877,28 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   </div>
                 </div>
 
-                <div className="pt-2 flex justify-end">
+                {/* WhatsApp One-Click Action */}
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-emerald-900">
+                    <div className="w-8 h-8 rounded-lg bg-[#25D366] text-white flex items-center justify-center shrink-0">
+                      <MessageCircle className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold">Send directly via WhatsApp</div>
+                      <div className="text-[11px] text-emerald-700">Opens WhatsApp chat with {invitePhone} and pre-filled invitation</div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenInvitationWhatsApp}
+                    className="px-3.5 py-2 bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold rounded-lg text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>Open WhatsApp</span>
+                  </button>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
                   <button
                     onClick={() => {
                       setShowInviteModal(false);
@@ -4349,14 +4540,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       <NotificationPreferencesModal
         isOpen={isNotificationPrefModalOpen}
         onClose={() => setIsNotificationPrefModalOpen(false)}
-        onRemindersProcessed={() => fetchData({ silent: true })}
+        onRemindersProcessed={() => fetchData({ silent: true, scope: 'notifications' })}
       />
 
       {/* Custom Invoice Generator Modal */}
       <CreateInvoiceModal
         isOpen={showCreateInvoiceModal}
         onClose={() => setShowCreateInvoiceModal(false)}
-        onInvoiceCreated={() => fetchData({ silent: true })}
+        onInvoiceCreated={() => fetchData({ silent: true, scope: 'financials' })}
         properties={properties}
         units={units}
         leases={leases}
@@ -4370,7 +4561,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           setShowRecordExpenseModal(false);
           setSelectedExpenseForEdit(undefined);
         }}
-        onExpenseSaved={() => fetchData({ silent: true })}
+        onExpenseSaved={() => fetchData({ silent: true, scope: 'financials' })}
         properties={properties}
         units={units}
         initialExpense={selectedExpenseForEdit}

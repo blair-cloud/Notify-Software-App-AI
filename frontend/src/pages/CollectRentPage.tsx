@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Search, Send, CheckCircle2 } from 'lucide-react';
+import { Search, Send, CheckCircle2 } from 'lucide-react';
 import { PaymentTransaction } from '../types';
 import { useLanguage } from '../context/LanguageContext';
-import { LanguageSelector } from '../components/LanguageSelector';
 
 interface CollectRentPageProps {
   onBack: () => void;
   onOpenGetStarted: (source?: string) => void;
 }
 
-export const CollectRentPage: React.FC<CollectRentPageProps> = ({ onBack }) => {
+export const CollectRentPage: React.FC<CollectRentPageProps> = () => {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'all' | 'paid' | 'pending' | 'overdue'>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -125,23 +124,7 @@ export const CollectRentPage: React.FC<CollectRentPageProps> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen bg-notify-grid text-black pb-24 font-sans">
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-[#F4F4F0]/90 backdrop-blur-md py-5 px-4 sm:px-8 border-b border-black/10">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <button
-            onClick={onBack}
-            className="px-4 py-2 rounded-[14px] bg-[#331A6F] text-white font-extrabold text-sm border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[0.5px_0.5px_0_#000000] cursor-pointer flex items-center gap-2"
-          >
-            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
-            <span>{t.backToHome}</span>
-          </button>
-
-          <LanguageSelector />
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-10 space-y-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-36 sm:pt-40 space-y-8">
         {/* Title */}
         <div>
           <h1 className="text-3xl sm:text-4xl font-black text-black tracking-tight">

@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { ArrowLeft, MessageSquare, Mail, MapPin, ChevronDown, CheckCircle2, Send, HelpCircle, ArrowRight } from 'lucide-react';
+import { MessageSquare, Mail, MapPin, ChevronDown, CheckCircle2, Send, HelpCircle, ArrowRight } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
-import { LanguageSelector } from '../components/LanguageSelector';
 
 interface SupportPageProps {
   onBack: () => void;
   onOpenGetStarted: (source?: string) => void;
 }
 
-export const SupportPage: React.FC<SupportPageProps> = ({ onBack, onOpenGetStarted }) => {
+export const SupportPage: React.FC<SupportPageProps> = ({ onOpenGetStarted }) => {
   const { t } = useLanguage();
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [name, setName] = useState('');
@@ -62,35 +61,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBack, onOpenGetStart
 
   return (
     <div className="min-h-screen bg-notify-grid text-black pb-24">
-      {/* Top Navigation Bar with No Horizontal Line Under Navbar */}
-      <header className="sticky top-0 z-40 bg-[#F4F4F0]/90 backdrop-blur-md py-5 px-4 sm:px-8 border-b border-black/10">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <button
-            onClick={onBack}
-            className="px-4 py-2 rounded-[14px] bg-[#331A6F] text-white font-extrabold text-sm border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[0.5px_0.5px_0_#000000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[0.5px_0.5px_0_#000000] transition-all duration-150 cursor-pointer flex items-center gap-2"
-          >
-            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
-            <span>{t.backToHome}</span>
-          </button>
-
-          <div className="flex items-center gap-3">
-            <LanguageSelector />
-
-            <span className="hidden sm:inline-flex items-center px-3 py-1 rounded-[12px] text-xs font-bold bg-[#331A6F] text-white border-2 border-black shadow-[0.5px_0.5px_0_#000000]">
-              {t.support}
-            </span>
-            <button
-              onClick={() => onOpenGetStarted('Support Header')}
-              className="px-5 py-2.5 rounded-[14px] bg-white text-black font-extrabold text-xs sm:text-sm border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[0.5px_0.5px_0_#000000] cursor-pointer"
-            >
-              {t.getStarted}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 space-y-12 sm:space-y-16">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-36 sm:pt-40 space-y-12 sm:space-y-16">
         {/* Page Heading */}
         <div className="text-center max-w-3xl mx-auto">
           <h1 className="text-3xl sm:text-5xl font-black text-black tracking-tight mb-4">

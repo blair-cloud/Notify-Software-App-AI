@@ -7,9 +7,11 @@ import type {
 } from '../types';
 
 
-import { supabase, getAccessToken } from './supabase';
+import { supabase, getAccessToken, clearAccessTokenCache } from './supabase';
 
 const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/api/v1';
+/** Abort hung requests so one slow endpoint cannot block a parallel batch forever. */
+const REQUEST_TIMEOUT_MS = 25000;
 
 export class ApiError extends Error {
   status: number;
@@ -131,9 +133,11 @@ function isAuthEndpoint(endpoint: string): boolean {
 /** Forces Supabase to mint a fresh access token; used once after a 401. */
 async function forceRefreshSession(): Promise<string | null> {
   try {
+    clearAccessTokenCache();
     const { data, error } = await supabase.auth.refreshSession();
     if (error) return null;
-    return data.session?.access_token ?? null;
+    const token = data.session?.access_token ?? null;
+    return token;
   } catch {
     return null;
   }
@@ -149,8 +153,17 @@ async function request<T>(endpoint: string, options: RequestInit = {}, isRetry =
     ...((options.headers as Record<string, string>) || {}),
   };
 
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  // Honour a caller-supplied signal as well as our timeout.
+  const outerSignal = options.signal;
+  if (outerSignal) {
+    if (outerSignal.aborted) controller.abort();
+    else outerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
   try {
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(url, { ...options, headers, signal: controller.signal });
 
     // Supabase normally refreshes in the background, but a tab that has been
     // asleep can still present a stale token. Refresh once and replay.
@@ -192,7 +205,12 @@ async function request<T>(endpoint: string, options: RequestInit = {}, isRetry =
 
     return data as T;
   } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new ApiError(408, 'Request timed out. Please try again.');
+    }
     throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 }
 
@@ -871,8 +889,17 @@ export const api = {
         headers,
         body: formData,
       });
-      return res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.detail || 'Failed to upload bank statement');
+      }
+      return data;
     },
+    approveMatch: (data: { transaction_id: string; notes?: string }) =>
+      request<any>('/tracker/approve-match', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     manualMatch: (data: {
       transaction_id: string;
       invoice_id: string;
@@ -890,6 +917,8 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    getStatementAnalysis: (statementId: string) =>
+      request<any>(`/tracker/statements/${statementId}/analysis`),
     getStatements: () => request<any[]>('/tracker/statements'),
     getAccounts: () => request<any[]>('/tracker/accounts'),
     createAccount: (data: {

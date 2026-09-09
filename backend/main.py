@@ -29,9 +29,8 @@ async def _verify_schema() -> None:
     """
     Confirm the database actually has what the ORM expects.
 
-    The application no longer creates tables. If the migration has not been run,
-    fail loudly at startup with the fix, rather than at the first query with a
-    confusing ProgrammingError.
+    If any expected tables are missing from PostgreSQL, automatically create them
+    using SQLAlchemy metadata.
     """
     from sqlalchemy import inspect as sa_inspect
 
@@ -42,11 +41,10 @@ async def _verify_schema() -> None:
     missing = sorted(expected - set(table_names))
 
     if missing:
-        raise RuntimeError(
-            f"{len(missing)} table(s) missing from the database: {', '.join(missing[:8])}"
-            + (" ..." if len(missing) > 8 else "")
-            + ". Apply supabase_v2_migration.sql in the Supabase SQL editor, then restart."
-        )
+        logger.info("Database missing %d table(s): %s. Auto-creating missing tables...", len(missing), ", ".join(missing))
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Missing tables auto-created successfully.")
 
     logger.info("Schema verified: %d tables present.", len(expected))
 
@@ -143,6 +141,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    """
+    Catch-all so that unexpected 500s still carry CORS headers.
+    Without this, unhandled exceptions bypass the CORS middleware and
+    the browser reports a misleading CORS error instead of the real one.
+    """
+    from fastapi import HTTPException as _HTTPEx
+    if isinstance(exc, _HTTPEx):
+        raise exc
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):

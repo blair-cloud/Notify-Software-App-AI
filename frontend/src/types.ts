@@ -271,7 +271,12 @@ export interface PricingPlan {
   id: string;
   name: string;
   tagline: string;
+  /** List / standard monthly price in RWF (shown struck through during promo). */
   priceRwfMonthly?: number;
+  /** Promotional monthly price in RWF (0 = free promo). */
+  promoPriceRwf?: number;
+  /** Price per additional unit beyond the plan base, in RWF. */
+  additionalUnitPriceRwf?: number;
   priceRwfAnnualDiscount?: number;
   priceDisplay?: string;
   pricingStatus?: string;
@@ -946,6 +951,59 @@ export interface BankTransactionItem {
   suggested_tenant_id?: string;
   suggested_invoice_id?: string;
   match_method?: string;
+  matched_tenant_name?: string;
+  property_name?: string;
+  unit_number?: string;
+  expected_amount?: number;
+  confidence_label?: TrackerMatchConfidence;
+  matching_signals?: string[];
+  display_status?: string;
+  pending_approval?: boolean;
+  invoice_number?: string;
+}
+
+export type MatchingAnalysisStatus =
+  | 'MATCHED'
+  | 'NEEDS_REVIEW'
+  | 'UNMATCHED'
+  | 'DUPLICATE'
+  | 'POSSIBLE_MISMATCH'
+  | 'PARTIAL';
+
+export interface MatchingAnalysisRow {
+  id: string;
+  statement_id: string;
+  transaction_reference?: string;
+  transaction_date: string;
+  amount: number;
+  currency?: string;
+  payer_name?: string;
+  bank_statement_name?: string;
+  description: string;
+  bank_reference_id?: string;
+  matched_tenant_id?: string;
+  matched_tenant_name?: string;
+  property_name?: string;
+  unit_number?: string;
+  suggested_invoice_id?: string;
+  invoice_number?: string;
+  expected_amount?: number;
+  /** FULLY_PAID | PARTIALLY_PAID | OVERPAID | AMOUNT_REVIEW */
+  amount_kind?: string;
+  /** Landlord-facing amount classification */
+  amount_status?: string;
+  payment_amount_status?: string;
+  /** e.g. "This bank-statement name appears to match X. Why: similar name + …" */
+  match_summary?: string;
+  confidence_score: number;
+  confidence_label: TrackerMatchConfidence;
+  match_method?: string;
+  matching_signals: string[];
+  matching_status: string;
+  display_status: MatchingAnalysisStatus | string;
+  review_status?: string;
+  pending_approval?: boolean;
+  payment_id?: string;
 }
 
 export interface PaymentTimelineDay {
@@ -966,6 +1024,7 @@ export interface TrackerDashboardData {
   today_tracking: TodayTracking;
   tenant_tracking_list: TenantTrackerRow[];
   needs_review_transactions: BankTransactionItem[];
+  matching_analysis_report?: MatchingAnalysisRow[];
   recent_statements: BankStatementItem[];
   payment_timeline: PaymentTimelineDay[];
 }

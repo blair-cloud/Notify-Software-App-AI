@@ -3,8 +3,8 @@ from typing import List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.database import get_db
-from backend.core.dependencies import get_current_landlord, get_current_user
-from backend.models import LandlordProfile, User, Property, Unit
+from backend.core.dependencies import get_current_landlord
+from backend.models import LandlordProfile, Property, Unit
 from backend.schemas.invitation import (
     InvitationCreate,
     InvitationCreateResponse,
@@ -137,8 +137,13 @@ async def cancel_invitation(
 @router.post("/accept", response_model=TenancyResponse)
 async def accept_invitation(
     req: InvitationAccept,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
+    """
+    Accept a tenant invitation using the token from the invite link.
+
+    No authentication required - the signed token proves identity.
+    The service resolves the tenant account from the invitation record itself.
+    """
     service = InvitationService(db)
-    return await service.accept_invitation_transaction(req.token, user)
+    return await service.accept_invitation_transaction(req.token, None)

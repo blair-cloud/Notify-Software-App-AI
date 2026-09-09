@@ -232,11 +232,18 @@ function HomePage() {
   );
 }
 
-/** One of the informational marketing pages. */
+/** One of the informational marketing pages — same Navbar as the home landing. */
 function InfoPage({ Page, ctaLabel }: { Page: any; ctaLabel: string }) {
   const nav = useAppNavigation();
   return (
     <PublicLayout>
+      <Navbar
+        onOpenGetStarted={(source, mode) => nav.openAuth(source || ctaLabel, mode || 'SIGNUP', 'LANDLORD')}
+        onOpenSupport={() => nav.goToPage('/support')}
+        onOpenPricing={() => nav.goToPage('/pricing')}
+        onGoHome={nav.goHome}
+        onGoToDashboard={nav.goToDashboard}
+      />
       <Page onBack={nav.goHome} onOpenGetStarted={() => nav.openAuth(ctaLabel, 'SIGNUP', 'LANDLORD')} />
     </PublicLayout>
   );

@@ -181,7 +181,7 @@ export const LandlordOverviewTab: React.FC<LandlordOverviewTabProps> = ({
 
   // 6. PENDING PAYMENTS (Real data)
   const pendingInvoices = filteredInvoices.filter(
-    (i) => i.status === 'ISSUED' || i.status === 'PENDING' || i.status === 'PARTIALLY_PAID'
+    (i) => i.status === 'ISSUED' || i.status === 'PARTIALLY_PAID'
   );
   const totalPendingAmount = pendingInvoices.reduce(
     (acc, i) => acc + (Number(i.balance_due) > 0 ? Number(i.balance_due) : Number(i.total_amount) || 0),
@@ -191,10 +191,10 @@ export const LandlordOverviewTab: React.FC<LandlordOverviewTabProps> = ({
 
   // 7. MAINTENANCE & SUPPORT (Real data)
   const openMaintenance = filteredMaintenance.filter(
-    (m) => m.status === 'SUBMITTED' || m.status === 'IN_PROGRESS' || m.status === 'PENDING'
+    (m) => m.status === 'SUBMITTED' || m.status === 'IN_PROGRESS' || m.status === 'ACKNOWLEDGED' || m.status === 'SCHEDULED' || m.status === 'REOPENED'
   );
   const emergencyMaintenanceCount = openMaintenance.filter(
-    (m) => m.priority === 'EMERGENCY' || m.priority === 'HIGH'
+    (m) => m.priority === 'URGENT' || m.priority === 'HIGH'
   ).length;
   const activeComplaintsCount = filteredComplaints.filter(
     (c) => c.status === 'SUBMITTED' || c.status === 'ACKNOWLEDGED' || c.status === 'UNDER_REVIEW'

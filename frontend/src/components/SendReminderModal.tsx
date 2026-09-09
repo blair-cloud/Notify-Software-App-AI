@@ -8,6 +8,7 @@ import {
   CommunicationChannel,
 } from '../types';
 import { api } from '../services/api';
+import { openWhatsApp, buildReminderWhatsAppMessage } from '../utils/whatsapp';
 import {
   X,
   Send,
@@ -233,6 +234,31 @@ export const SendReminderModal: React.FC<SendReminderModalProps> = ({
     }
   };
 
+
+  const handleOpenDirectWhatsApp = (targetTenant?: Tenant | null) => {
+    const t = targetTenant || (tenant ? tenant : directory.find((d) => selectedIds.includes(d.id)));
+    if (!t) {
+      setErrorMsg('Please select a tenant to send via WhatsApp.');
+      return;
+    }
+    const lang = t.preferred_language || activeLang || 'EN';
+    const bodyTemplate = messages[lang]?.body || messages['EN']?.body || messages['FR']?.body || messages['RW']?.body || '';
+    if (!bodyTemplate.trim()) {
+      setErrorMsg('Please write a reminder message before opening WhatsApp.');
+      return;
+    }
+    const text = buildReminderWhatsAppMessage({
+      templateBody: bodyTemplate,
+      tenantName: `${t.first_name} ${t.last_name}`.trim(),
+      unitNumber: t.unit_number,
+      propertyName: t.property_name,
+      amount: variables.amount,
+      dueDate: variables.due_date,
+      invoiceNumber: variables.invoice_number,
+    });
+    openWhatsApp(t.phone || '', text);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedIds.length === 0) {
@@ -324,10 +350,24 @@ export const SendReminderModal: React.FC<SendReminderModalProps> = ({
               {result.results.map((r) => (
                 <div key={r.tenant_id} className="p-3 rounded-xl border border-slate-200 bg-white space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-slate-900">{r.name}</span>
-                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                      {r.language}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900">{r.name}</span>
+                      <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                        {r.language}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const recTenant = directory.find((d) => d.id === r.tenant_id);
+                        if (recTenant) handleOpenDirectWhatsApp(recTenant);
+                      }}
+                      className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="Open WhatsApp chat with pre-filled message"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-[#008069]" />
+                      <span>Chat on WhatsApp</span>
+                    </button>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {r.channels.map((c) => (
@@ -570,20 +610,32 @@ export const SendReminderModal: React.FC<SendReminderModalProps> = ({
             </div>
 
             {/* Actions */}
-            <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+            <div className="pt-2 flex flex-wrap items-center justify-between gap-2.5 border-t border-slate-100">
               <button
                 type="button"
-                onClick={onClose}
-                disabled={isSending}
-                className="px-4 py-2 border border-slate-300 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                onClick={() => handleOpenDirectWhatsApp()}
+                disabled={selectedIds.length === 0}
+                className="px-4 py-2 bg-[#25D366] hover:bg-[#1EBE5D] text-white rounded-xl font-bold transition-colors cursor-pointer flex items-center gap-2 shadow-xs disabled:opacity-50"
+                title="Open WhatsApp with prefilled reminder message"
               >
-                Cancel
+                <MessageCircle className="w-4 h-4" />
+                <span>Open in WhatsApp</span>
               </button>
-              <button
-                type="submit"
-                disabled={isSending}
-                className="px-5 py-2.5 bg-[#331A6F] hover:bg-[#251352] text-white font-bold rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-              >
+
+              <div className="flex items-center gap-2.5 ml-auto">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={isSending}
+                  className="px-4 py-2 border border-slate-300 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSending}
+                  className="px-5 py-2.5 bg-[#331A6F] hover:bg-[#251352] text-white font-bold rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
                 {isSending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" /> Sending...
@@ -596,7 +648,8 @@ export const SendReminderModal: React.FC<SendReminderModalProps> = ({
                     </span>
                   </>
                 )}
-              </button>
+                </button>
+              </div>
             </div>
           </form>
         )}
