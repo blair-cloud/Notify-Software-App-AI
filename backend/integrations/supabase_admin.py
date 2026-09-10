@@ -138,3 +138,25 @@ async def send_password_reset(email: str, redirect_to: Optional[str] = None) -> 
         raise SupabaseAdminError(f"Could not reach Supabase: {exc}") from exc
     if resp.status_code >= 400:
         raise SupabaseAdminError(f"Supabase returned {resp.status_code}: {resp.text}")
+
+
+async def generate_password_reset_link(email: str, redirect_to: Optional[str] = None) -> Optional[str]:
+    """Ask Supabase Admin API to generate a password recovery token_hash.
+    Returns the hashed_token, or None if the user does not exist.
+    """
+    base, key = _require_config()
+    url = f"{base}/auth/v1/admin/generate_link"
+    body: Dict[str, Any] = {"type": "recovery", "email": email.strip().lower()}
+    if redirect_to:
+        body["options"] = {"redirectTo": redirect_to}
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(url, headers=_headers(key), json=body)
+    except Exception as exc:  # noqa: BLE001
+        raise SupabaseAdminError(f"Could not reach Supabase: {exc}") from exc
+    if resp.status_code == 404:
+        return None
+    if resp.status_code >= 400:
+        raise SupabaseAdminError(f"Supabase returned {resp.status_code}: {resp.text}")
+    data = resp.json()
+    return data.get("hashed_token")

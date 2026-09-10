@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from typing import List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,9 +33,16 @@ def _landlord_display_name(landlord: LandlordProfile) -> str:
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=InvitationCreateResponse)
 async def create_invitation(
     req: InvitationCreate,
+    request: Request,
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
+    from urllib.parse import urlparse
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    frontend_base = None
+    if origin:
+        p = urlparse(origin)
+        frontend_base = f"{p.scheme}://{p.netloc}".rstrip("/")
     service = InvitationService(db)
     invitation, raw_token, shell = await service.create_invitation(landlord, req)
 
@@ -53,6 +60,7 @@ async def create_invitation(
         property_name=prop.name if prop else "your property",
         unit_number=unit.unit_number if unit else "",
         landlord_name=_landlord_display_name(landlord),
+        frontend_base_url=frontend_base,
     )
     # The WhatsApp send writes its own delivery record; persist it (and any
     # other channel bookkeeping) now that the sends are done.
@@ -71,9 +79,16 @@ async def create_invitation(
 @router.post("/{invitation_id}/resend", response_model=InvitationCreateResponse)
 async def resend_invitation(
     invitation_id: str,
+    request: Request,
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db),
 ):
+    from urllib.parse import urlparse
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    frontend_base = None
+    if origin:
+        p = urlparse(origin)
+        frontend_base = f"{p.scheme}://{p.netloc}".rstrip("/")
     """
     Re-send an invitation whose delivery failed (or that the tenant lost).
 
@@ -95,6 +110,7 @@ async def resend_invitation(
         property_name=prop.name if prop else "your property",
         unit_number=unit.unit_number if unit else "",
         landlord_name=_landlord_display_name(landlord),
+        frontend_base_url=frontend_base,
     )
     await db.commit()
 

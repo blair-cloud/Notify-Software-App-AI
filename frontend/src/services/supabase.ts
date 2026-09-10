@@ -60,5 +60,11 @@ export function clearAccessTokenCache(): void {
 
 /** Where Supabase should send the user back to after an emailed link. */
 export function authRedirectTo(path: string): string {
-  return `${window.location.origin}${path}`;
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    const origin = window.location.origin.replace(/\/+$/, '');
+    if (!origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+      return `${origin}${path}`;
+    }
+  }
+  return `https://notify-c2d43.web.app${path}`;
 }

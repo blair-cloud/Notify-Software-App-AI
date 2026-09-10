@@ -28,6 +28,20 @@ class Settings(BaseSettings):
     # verification and password-reset emails, so they must match the SPA routes.
     FRONTEND_URL: str = "http://localhost:3000"
 
+    @property
+    def frontend_origin(self) -> str:
+        raw = (self.FRONTEND_URL or "").strip().rstrip("/")
+        is_prod = (
+            self.ENVIRONMENT.lower() in ("production", "prod")
+            or bool(os.environ.get("RENDER"))
+            or bool(os.environ.get("VERCEL"))
+            or bool(os.environ.get("FLY_ALLOC_ID"))
+        )
+        if is_prod and ("localhost" in raw or not raw):
+            return "https://notify-c2d43.web.app"
+        return raw or "https://notify-c2d43.web.app"
+
+
     # Browsers reject a credentialed request to a wildcard origin, so when an
     # explicit origin list is configured we also allow credentials. Leaving this
     # empty keeps the permissive development default.

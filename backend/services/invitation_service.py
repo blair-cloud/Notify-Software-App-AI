@@ -119,6 +119,7 @@ class InvitationService:
         property_name: str,
         unit_number: str,
         landlord_name: str = "Your landlord",
+        frontend_base_url: Optional[str] = None,
     ) -> tuple[DeliveryChannelResult, DeliveryChannelResult, DeliveryChannelResult]:
         """
         Deliver the invitation link by email, SMS, and WhatsApp, independently.
@@ -131,7 +132,16 @@ class InvitationService:
         from backend.models import WhatsAppMessageType
         from backend.services.whatsapp_service import WhatsAppService
 
-        link = f"{settings.FRONTEND_URL.rstrip('/')}/accept-invitation?token={raw_token}"
+        base = (frontend_base_url or settings.frontend_origin).rstrip("/")
+        is_prod = (
+            settings.ENVIRONMENT.lower() in ("production", "prod")
+            or bool(os.environ.get("RENDER"))
+            or bool(os.environ.get("VERCEL"))
+            or bool(os.environ.get("FLY_ALLOC_ID"))
+        )
+        if is_prod and "localhost" in base:
+            base = "https://notify-c2d43.web.app"
+        link = f"{base}/accept-invitation?token={raw_token}"
         first_name = (invitation.tenant_name or "").split()[0] if invitation.tenant_name else "there"
 
         email_result = DeliveryChannelResult(attempted=False, ok=False)

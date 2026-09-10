@@ -366,16 +366,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const forgotPassword = (email: string) =>
     runOnce('forgot-password', 'Could not send the reset email. Please try again.', async () => {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        email.trim().toLowerCase(),
-        { redirectTo: authRedirectTo('/reset-password') }
-      );
-      if (resetError) throw resetError;
-      return {
-        message:
-          'If that email address has a Notify account, a password reset link is on its way. ' +
-          'Please check your inbox, including the spam folder.',
-      };
+      const cleanEmail = email.trim().toLowerCase();
+      try {
+        // First try backend password-reset endpoint (sends branded Notify email with direct production domain)
+        const res = await api.post<{ message: string }>('/auth/forgot-password', { email: cleanEmail });
+        return res;
+      } catch (err) {
+        console.warn('Backend forgot-password endpoint unavailable, falling back to Supabase auth client:', err);
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+          cleanEmail,
+          { redirectTo: authRedirectTo('/reset-password') }
+        );
+        if (resetError) throw resetError;
+        return {
+          message:
+            'If that email address has a Notify account, a password reset link is on its way. ' +
+            'Please check your inbox, including the spam folder.',
+        };
+      }
     });
 
   /**

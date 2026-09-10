@@ -16,6 +16,7 @@ import {
   Copy,
   Check,
   Menu,
+  MoreHorizontal,
   ShieldCheck,
   Building,
   Search,
@@ -157,6 +158,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   // and Back/Forward all land on the right section.
   const [activeTab, setActiveTab] = useTabRoute<LandlordTab>('/landlord', 'dashboard', LANDLORD_TABS);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
 
   // Data states
   const [properties, setProperties] = useState<Property[]>([]);
@@ -1870,55 +1872,497 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         </div>
       </aside>
 
-      {/* Mobile Header - Clean & Minimalist */}
-      <header className="md:hidden bg-[#331A6F] text-white p-4 flex items-center justify-between border-b border-purple-900 shrink-0">
+      {/* =========================================================================
+          MOBILE TOP APP BAR (Clean Native Mobile Header)
+      ========================================================================= */}
+      <header className="md:hidden bg-[#331A6F] text-white px-4 py-3 flex items-center justify-between border-b border-purple-900/50 shrink-0 sticky top-0 z-30 shadow-xs">
         <div className="flex items-center gap-2.5">
           <img src={whiteLogo} alt="Notify" className="h-8 w-auto object-contain" loading="eager" decoding="async" />
         </div>
         <div className="flex items-center gap-2">
+          {/* Quick Messages Indicator */}
+          {unreadMessagesCount > 0 && (
+            <button
+              onClick={() => { setActiveTab('messages'); setIsMoreOpen(false); }}
+              className="relative p-2 text-purple-100 hover:text-white transition-colors cursor-pointer"
+              title="Messages"
+            >
+              <MessageSquare className="w-5 h-5" />
+              <span className="absolute top-1 right-1 bg-emerald-500 text-white font-bold text-[10px] min-w-[16px] h-[16px] px-1 rounded-full flex items-center justify-center">
+                {unreadMessagesCount}
+              </span>
+            </button>
+          )}
+
+          {/* User Account Avatar / Initial */}
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+            onClick={() => { setActiveTab('account'); setIsMoreOpen(false); }}
+            className={`w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center transition-all cursor-pointer ${
+              activeTab === 'account' || activeTab === 'profile'
+                ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
+                : 'bg-white/15 text-white hover:bg-white/25'
+            }`}
+            title="Account & Profile"
           >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {user?.first_name ? user.first_name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
           </button>
         </div>
       </header>
 
-      {/* Mobile Drawer Navigation */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-[#331A6F] text-white p-4 border-b border-purple-900 space-y-1.5 max-h-[75vh] overflow-y-auto scrollbar-subtle shrink-0">
-          {(['dashboard', 'tracker', 'properties', 'units', 'tenants', 'leases', 'invitations', 'financials', 'invoices', 'payments', 'expenses', 'messages', 'maintenance', 'complaints', 'workers', 'account'] as LandlordTab[]).map((tab) => (
+      {/* =========================================================================
+          MOBILE FIXED BOTTOM NAVIGATION BAR (Polished Native Mobile App Style)
+      ========================================================================= */}
+      <nav
+        aria-label="Mobile Navigation"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_25px_rgba(0,0,0,0.06)] px-2 pt-1.5 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around select-none"
+      >
+        {/* 1. Overview */}
+        <button
+          type="button"
+          onClick={() => { setActiveTab('dashboard'); setIsMoreOpen(false); }}
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+            activeTab === 'dashboard'
+              ? 'text-[#331A6F] font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''}`}>
+            <BarChart3 className="w-5 h-5 stroke-[2.2]" />
+          </div>
+          <span className="text-[10px] tracking-tight">Overview</span>
+        </button>
+
+        {/* 2. Tracker */}
+        <button
+          type="button"
+          onClick={() => { setActiveTab('tracker'); setIsMoreOpen(false); }}
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer relative ${
+            activeTab === 'tracker'
+              ? 'text-[#331A6F] font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-all relative ${activeTab === 'tracker' ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''}`}>
+            <FileSpreadsheet className="w-5 h-5 stroke-[2.2]" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-400 rounded-full" />
+          </div>
+          <span className="text-[10px] tracking-tight flex items-center gap-0.5">
+            Tracker
+          </span>
+        </button>
+
+        {/* 3. Tenants */}
+        <button
+          type="button"
+          onClick={() => { setActiveTab('tenants'); setIsMoreOpen(false); }}
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+            activeTab === 'tenants'
+              ? 'text-[#331A6F] font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'tenants' ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''}`}>
+            <Users className="w-5 h-5 stroke-[2.2]" />
+          </div>
+          <span className="text-[10px] tracking-tight">Tenants</span>
+        </button>
+
+        {/* 4. Payments */}
+        <button
+          type="button"
+          onClick={() => { setActiveTab('payments'); setIsMoreOpen(false); }}
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+            activeTab === 'payments'
+              ? 'text-[#331A6F] font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
+          }`}
+        >
+          <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'payments' ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''}`}>
+            <CreditCard className="w-5 h-5 stroke-[2.2]" />
+          </div>
+          <span className="text-[10px] tracking-tight">Payments</span>
+        </button>
+
+        {/* 5. More Tab */}
+        {(() => {
+          const isMoreActive = !['dashboard', 'tracker', 'tenants', 'payments'].includes(activeTab);
+          const activeLabel =
+            activeTab === 'properties' ? 'Properties' :
+            activeTab === 'units' ? 'Units' :
+            activeTab === 'leases' ? 'Leases' :
+            activeTab === 'invitations' ? 'Invitations' :
+            activeTab === 'financials' ? 'Financials' :
+            activeTab === 'invoices' ? 'Invoices' :
+            activeTab === 'expenses' ? 'Expenses' :
+            activeTab === 'maintenance' ? 'Maintenance' :
+            activeTab === 'messages' ? 'Messages' :
+            activeTab === 'complaints' ? 'Complaints' :
+            activeTab === 'workers' ? 'Technicians' :
+            activeTab === 'account' ? 'Settings' : 'More';
+
+          return (
             <button
-              key={tab}
-              onClick={() => {
-                setActiveTab(tab);
-                setMobileMenuOpen(false);
-              }}
-              className={`w-full text-left px-3.5 py-2 rounded-xl font-semibold text-xs transition-colors ${
-                activeTab === tab ? 'bg-white text-[#331A6F]' : 'text-purple-100 hover:bg-white/10'
+              type="button"
+              onClick={() => setIsMoreOpen(!isMoreOpen)}
+              className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer relative ${
+                isMoreActive || isMoreOpen
+                  ? 'text-[#331A6F] font-bold'
+                  : 'text-slate-400 hover:text-slate-600 font-medium'
               }`}
             >
-              {tab === 'tracker'
-                ? '⚡ Payment Tracker'
-                : tab === 'financials'
-                ? 'Financial Overview'
-                : tab === 'expenses'
-                ? 'Expense Tracker'
-                : tab === 'payments'
-                ? 'Payments & Verify'
-                : tab === 'workers'
-                ? 'Technicians'
-                : tab === 'account'
-                ? 'Account & Profile'
-                : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              <div className={`p-1.5 rounded-xl transition-all relative ${
+                isMoreActive || isMoreOpen ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''
+              }`}>
+                <MoreHorizontal className="w-5 h-5 stroke-[2.2]" />
+                {isMoreActive && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#331A6F] rounded-full" />
+                )}
+              </div>
+              <span className="text-[10px] tracking-tight truncate max-w-[56px]">
+                {isMoreActive ? activeLabel : 'More'}
+              </span>
             </button>
-          ))}
+          );
+        })()}
+      </nav>
+
+      {/* =========================================================================
+          "MORE" BOTTOM SHEET DRAWER / MODAL
+      ========================================================================= */}
+      {isMoreOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop (tap outside to close) */}
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsMoreOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Bottom Sheet Modal */}
+          <div
+            className="relative z-10 bg-white rounded-t-[28px] border-t border-slate-200/90 shadow-2xl max-h-[85vh] flex flex-col animate-in slide-in-from-bottom duration-250"
+            role="dialog"
+            aria-modal="true"
+            aria-label="More Navigation Options"
+          >
+            {/* Sheet Handle */}
+            <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-3 shrink-0" />
+
+            {/* Header */}
+            <div className="px-5 pb-3 pt-1 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 tracking-tight">Landlord Navigation</h3>
+                <p className="text-xs text-slate-500 font-normal">All tools and workspace sections</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMoreOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+                aria-label="Close menu"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Sheet Body - Clean Touch-Friendly Grid of Sections */}
+            <div className="overflow-y-auto max-h-[calc(85vh-95px)] px-4 py-4 space-y-4 pb-12">
+              {/* Section 1: Portfolio & Tenancies */}
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-2">
+                  Portfolio & Tenancies
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('properties'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'properties'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'properties' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <Building className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Properties</div>
+                      <div className="text-[10px] text-slate-400 truncate">Buildings & Arcades</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('units'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'units'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'units' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <Home className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Units</div>
+                      <div className="text-[10px] text-slate-400 truncate">Shops & Spaces</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('leases'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'leases'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'leases' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Leases</div>
+                      <div className="text-[10px] text-slate-400 truncate">Agreements & Terms</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('invitations'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'invitations'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'invitations' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <UserCheck className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Invitations</div>
+                      <div className="text-[10px] text-slate-400 truncate">Onboard Tenants</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 2: Financial Management */}
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-2">
+                  Financial Management
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('financials'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'financials'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'financials' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <TrendingUp className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Financials</div>
+                      <div className="text-[10px] text-slate-400 truncate">Cash Flow & P&L</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('invoices'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'invoices'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'invoices' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <ReceiptIcon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Invoices</div>
+                      <div className="text-[10px] text-slate-400 truncate">Rent Demands</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('expenses'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'expenses'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'expenses' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <Wallet className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Expenses</div>
+                      <div className="text-[10px] text-slate-400 truncate">Outflows & Costs</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('tracker'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'tracker'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'tracker' ? 'bg-[#331A6F] text-white' : 'bg-amber-100 text-amber-800 border border-amber-300'}`}>
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate flex items-center gap-1">
+                        Bank Tracker
+                      </div>
+                      <div className="text-[10px] text-slate-400 truncate">AI Reconcile</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 3: Operations & Support */}
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-2">
+                  Operations & Support
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('messages'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'messages'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 relative ${activeTab === 'messages' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <MessageSquare className="w-4 h-4" />
+                      {unreadMessagesCount > 0 && (
+                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-500 rounded-full" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Messages</div>
+                      <div className="text-[10px] text-slate-400 truncate">Tenant Chat & WhatsApp</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('maintenance'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'maintenance'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'maintenance' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <ToolIcon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Maintenance</div>
+                      <div className="text-[10px] text-slate-400 truncate">Repair Requests</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('complaints'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'complaints'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'complaints' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Complaints</div>
+                      <div className="text-[10px] text-slate-400 truncate">Disputes & Notices</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('workers'); setIsMoreOpen(false); }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                      activeTab === 'workers'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'workers' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                      <Wrench className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold truncate">Technicians</div>
+                      <div className="text-[10px] text-slate-400 truncate">Contractors</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 4: Account & Session */}
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 mb-2">
+                  Account & Settings
+                </div>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('account'); setIsMoreOpen(false); }}
+                    className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
+                      activeTab === 'account' || activeTab === 'profile'
+                        ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
+                        : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'account' || activeTab === 'profile' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                        <Settings className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold">Account & Profile Settings</div>
+                        <div className="text-[10px] text-slate-400">{user?.email || 'Manage profile & business'}</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="w-full p-3.5 rounded-2xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100/70 text-rose-700 text-left transition-all flex items-center justify-between cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-xl bg-white text-rose-600 border border-rose-200 shrink-0">
+                        <LogOut className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold">Sign Out</div>
+                        <div className="text-[10px] text-rose-500">End session securely</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-rose-400" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* DASHBOARD CONTENT AREA - CLEAN, MODERN, SaaS DESIGN (NO NEO-BRUTALISM HERE) */}
-      <main className="flex-1 h-full p-6 md:p-8 max-w-7xl mx-auto w-full overflow-y-auto scrollbar-subtle-dark">
+      <main className="flex-1 h-full p-4 sm:p-6 md:p-8 pb-32 md:pb-8 max-w-7xl mx-auto w-full overflow-y-auto scrollbar-subtle-dark">
         {/* Success toast / notification banner */}
         {successMsg && (
           <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-4 py-3 rounded-lg flex items-center justify-between shadow-sm">

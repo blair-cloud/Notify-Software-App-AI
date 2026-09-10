@@ -127,11 +127,13 @@ def render_lease_expiry_email_html(
     days_remaining: int,
     milestone: str,
     recommended_action: str,
-    action_url: str = "https://notify.rw/dashboard/leases"
+    action_url: Optional[str] = None
 ) -> str:
     """
     Renders an HTML email with Kigali Notify branding (#331A6F)
     """
+    if not action_url:
+        action_url = f"{settings.frontend_origin.rstrip('/')}/dashboard/leases"
     urgency_color = "#E11D48" if days_remaining <= 3 else "#D97706" if days_remaining <= 14 else "#331A6F"
     days_text = "TODAY" if days_remaining == 0 else f"{days_remaining} Day{'s' if days_remaining != 1 else ''}"
 

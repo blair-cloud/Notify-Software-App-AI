@@ -133,8 +133,29 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   useEffect(() => {
     let active = true;
     supabase.auth.getSession().then(({ data }) => {
-      if (active) setHasRecoverySession(Boolean(data.session));
+      if (active && data.session) setHasRecoverySession(true);
     });
+
+    // Automatically verify direct token_hash recovery links from production reset email
+    const searchParams = new URLSearchParams(window.location.search);
+    const tokenHash = searchParams.get("token_hash") || searchParams.get("token");
+    const recoveryType = searchParams.get("type");
+
+    if (tokenHash && (recoveryType === "recovery" || !recoveryType || mode === "RESET_PASSWORD")) {
+      supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: "recovery",
+      }).then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          console.error("Error verifying recovery token:", error);
+          setErrorMessage("This password reset link is invalid or has expired. Please request a new one.");
+        } else if (data?.session) {
+          setHasRecoverySession(true);
+        }
+      });
+    }
+
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
       if (event === "PASSWORD_RECOVERY" || session)
@@ -144,7 +165,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       active = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [mode]);
 
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);
