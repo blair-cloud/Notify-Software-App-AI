@@ -76,11 +76,15 @@ export const ValueProposition: React.FC<ValuePropositionProps> = ({ onSelectFeat
             src={cyberLogo}
             alt="Cyber security certification"
             className="h-24 sm:h-28 w-auto object-contain"
+            loading="lazy"
+            decoding="async"
           />
           <img
             src={rdbLogo}
             alt="Rwanda Development Board (RDB)"
             className="h-24 sm:h-28 w-auto object-contain"
+            loading="lazy"
+            decoding="async"
           />
         </div>
       </div>

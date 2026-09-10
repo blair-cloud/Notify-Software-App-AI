@@ -28,6 +28,7 @@ import { SystemAdminDashboardPage } from './pages/SystemAdminDashboardPage';
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { EmailVerificationBanner } from './components/EmailVerificationBanner';
+import { TriangularPreloader } from './components/TriangularPreloader';
 
 export type ActivePage =
   | 'home'
@@ -155,11 +156,7 @@ function ProtectedRoute({
   // Wait for the session to restore before deciding - otherwise a refresh on a
   // dashboard URL would bounce the user to sign-in every time.
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
-        <div className="w-8 h-8 border-2 border-[#331A6F] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <TriangularPreloader variant="fullscreen" />;
   }
 
   if (!user) {

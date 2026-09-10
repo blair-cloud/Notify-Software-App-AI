@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { AdminTabKey } from '../../services/adminService';
+import whiteLogo from '../../assets/images/white_logo.png';
 export type { AdminTabKey };
 
 export interface AdminSidebarProps {
@@ -245,7 +246,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {/* Brand Header */}
       <div className="p-4 sm:p-5 border-b border-purple-900/40 bg-[#140824] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <img src="/src/assets/images/white_logo.png" alt="Notify" className="h-9 w-auto object-contain" />
+          <img src={whiteLogo} alt="Notify" className="h-9 w-auto object-contain" loading="eager" decoding="async" />
         </div>
         {setMobileOpen && (
           <button

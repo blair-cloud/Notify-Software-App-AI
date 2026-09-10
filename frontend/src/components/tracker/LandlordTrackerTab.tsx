@@ -9,7 +9,6 @@ import {
   FileText,
   Building2,
   Calendar,
-  ChevronRight,
   ArrowRight,
   ArrowLeft,
   FileSpreadsheet,
@@ -240,40 +239,6 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
     }
   };
 
-  // Sample Statement Presets for 1-Click Testing
-  const handleSelectSample = (bank: 'BK' | 'MOMO' | 'IM') => {
-    if (bank === 'BK') {
-      setStatementBankName('Bank of Kigali');
-      setStatementFileName('Bank_of_Kigali_Statement_Sept2026.csv');
-      setStatementContent(
-        `Date,Details,Reference,Debit,Credit,Balance\n` +
-        `2026-09-02,BK TRF: ALINE MUKAMANA - RENT UNIT 101,BK-889120,,450000,12450000\n` +
-        `2026-09-03,FT FRM JEAN BOSCO MUGISHA REF NOTIFY-INV-2026-0002,BK-889121,,600000,13050000\n` +
-        `2026-09-04,BK TRF: CLAUDINE UWIMANA RENT UNIT 103,BK-889122,,350000,13400000\n` +
-        `2026-09-05,BK TRF: EMMANUEL HABIMANA PARTIAL RENT,BK-889123,,350000,13750000\n` +
-        `2026-09-06,DIRECT DEPOSIT ERIC RUTAYISIRE,BK-889124,,280000,14030000\n` +
-        `2026-09-08,INTER-BANK TRF KIGALI LOGISTICS HUB LTD,BK-889125,,500000,14530000`
-      );
-    } else if (bank === 'MOMO') {
-      setStatementBankName('MTN MoMo Pay');
-      setStatementFileName('MTN_MoMo_Merchant_Settlement.csv');
-      setStatementContent(
-        `Transaction Date,Narration,Transaction ID,Amount,Payer Phone,Status\n` +
-        `2026-09-02,MOMO FROM 0788123456 ALINE MUKAMANA,MOMO-99120,450000,0788123456,SUCCESSFUL\n` +
-        `2026-09-04,MOMO FROM 0788654321 CLAUDINE UWIMANA,MOMO-99121,350000,0788654321,SUCCESSFUL\n` +
-        `2026-09-05,MOMO FROM 0788776655 EMMANUEL HABIMANA,MOMO-99122,350000,0788776655,SUCCESSFUL`
-      );
-    } else {
-      setStatementBankName('I&M Bank Rwanda');
-      setStatementFileName('IM_Bank_Corporate_Statement.csv');
-      setStatementContent(
-        `Value Date,Description,Cheque No,Debit,Credit,Running Balance\n` +
-        `02/09/2026,INCOMING EFT: TECH HUB LTD LEASE UNIT 201,, ,1200000,24500000\n` +
-        `04/09/2026,EFT CREDIT: JEAN BOSCO MUGISHA,, ,600000,25100000\n` +
-        `05/09/2026,CASH DEPOSIT KIGALI LOGISTICS HUB,, ,500000,25600000`
-      );
-    }
-  };
 
   // Handle File Input Selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1230,49 +1195,7 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
             </div>
           </div>
 
-          {/* Quick Select Sample Presets (for testing / demo) */}
-          <div className="space-y-2.5">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Or Choose a Verified Bank Sample
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => handleSelectSample('BK')}
-                className={`p-3.5 rounded-xl border text-left transition-all text-xs font-bold flex items-center justify-between cursor-pointer ${statementBankName === 'Bank of Kigali' && statementFileName
-                  ? 'border-[#331a6f] bg-[#331a6f]/5 text-[#331a6f]'
-                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                  }`}
-              >
-                <span>Bank of Kigali (BK)</span>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectSample('MOMO')}
-                className={`p-3.5 rounded-xl border text-left transition-all text-xs font-bold flex items-center justify-between cursor-pointer ${statementBankName === 'MTN MoMo Pay' && statementFileName
-                  ? 'border-[#331a6f] bg-[#331a6f]/5 text-[#331a6f]'
-                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                  }`}
-              >
-                <span>MTN MoMo Pay</span>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectSample('IM')}
-                className={`p-3.5 rounded-xl border text-left transition-all text-xs font-bold flex items-center justify-between cursor-pointer ${statementBankName === 'I&M Bank Rwanda' && statementFileName
-                  ? 'border-[#331a6f] bg-[#331a6f]/5 text-[#331a6f]'
-                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                  }`}
-              >
-                <span>I&M Bank Rwanda</span>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </button>
-            </div>
-          </div>
+          
 
           {/* Statement Selected Confirmation Box */}
           {statementFileName && (

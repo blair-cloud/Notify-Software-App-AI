@@ -197,17 +197,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   }, [invitationToken, mode, selectedRole]);
 
-  const handleAutofillDemo = (role: "LANDLORD" | "TENANT") => {
-    if (role === "LANDLORD") {
-      setEmail("landlord@notify.test");
-      setPassword("Password123!");
-      setErrorMessage(null);
-    } else {
-      setEmail("tenant@notify.test");
-      setPassword("Password123!");
-      setErrorMessage(null);
-    }
-  };
 
   // 1. Submit Login Form
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -253,6 +242,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setErrorMessage(null);
     setSuccessMessage(null);
 
+    // Tenant: Enter invitation code and proceed to onboarding
+    if (selectedRole === "TENANT") {
+      const cleanToken = invitationToken.trim();
+      if (!cleanToken) {
+        setErrorMessage("Please enter your invitation code from your landlord.");
+        return;
+      }
+      window.location.href = `/accept-invitation?token=${encodeURIComponent(cleanToken)}`;
+      return;
+    }
+
+    // Landlord validations
     if (!fullName.trim()) {
       setErrorMessage("Full name is required.");
       return;
@@ -281,53 +282,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
     try {
       setLoading(true);
-      if (selectedRole === "LANDLORD") {
-        const result = await registerLandlord({
-          first_name: firstName,
-          last_name: lastName,
-          full_name: fullName.trim(),
-          email: email.trim(),
-          phone: phoneNumber.trim(),
-          password,
-        });
-        if (result.status === "CONFIRM_EMAIL") {
-          setPendingEmail(result.email);
-          setMode("CHECK_EMAIL");
-        } else {
-          setSuccessMessage(
-            "Landlord account created. Opening your dashboard...",
-          );
-          onAuthSuccess?.(result.profile.role);
-        }
+      const result = await registerLandlord({
+        first_name: firstName,
+        last_name: lastName,
+        full_name: fullName.trim(),
+        email: email.trim(),
+        phone: phoneNumber.trim(),
+        password,
+      });
+      if (result.status === "CONFIRM_EMAIL") {
+        setPendingEmail(result.email);
+        setMode("CHECK_EMAIL");
       } else {
-        if (!invitationToken.trim()) {
-          setErrorMessage("Invitation token required from your landlord.");
-          setLoading(false);
-          return;
-        }
-        if (!username.trim()) {
-          setErrorMessage("Username is required.");
-          setLoading(false);
-          return;
-        }
-
-        const result = await registerTenant({
-          first_name: firstName,
-          last_name: lastName,
-          full_name: fullName.trim(),
-          invitation_token: invitationToken.trim(),
-          email: email.trim(),
-          username: username.trim().toLowerCase(),
-          phone: phoneNumber.trim(),
-          password,
-        });
-        if (result.status === "CONFIRM_EMAIL") {
-          setPendingEmail(result.email);
-          setMode("CHECK_EMAIL");
-        } else {
-          setSuccessMessage("Tenant account created. Opening your portal...");
-          onAuthSuccess?.(result.profile.role);
-        }
+        setSuccessMessage(
+          "Landlord account created. Opening your dashboard...",
+        );
+        onAuthSuccess?.(result.profile.role);
       }
     } catch (err: any) {
       const msg =
@@ -481,6 +451,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               src={notifyLogo}
               alt="Notify"
               className="h-10 w-auto object-contain transition-transform duration-150 hover:scale-105"
+              loading="eager"
+              decoding="async"
             />
           </div>
         </div>
@@ -679,30 +651,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       </div>
                     </div>
 
-                    {/* Quick Demo Test Buttons */}
-                    <div className="p-3.5 rounded-[16px] bg-slate-50 border-2 border-black shadow-[0.5px_0.5px_0_#000000] flex items-center justify-between flex-wrap gap-2">
-                      <span className="text-xs font-black uppercase text-slate-700 tracking-wider">
-                        One-Click Demo Credentials:
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleAutofillDemo("LANDLORD")}
-                          className="px-3 py-1.5 rounded-[10px] bg-white hover:bg-purple-50 text-xs font-extrabold text-[#331A6F] border-2 border-black shadow-[0.5px_0.5px_0_#000000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Building2 className="w-3.5 h-3.5" />
-                          <span>Landlord Demo</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleAutofillDemo("TENANT")}
-                          className="px-3 py-1.5 rounded-[10px] bg-white hover:bg-yellow-50 text-xs font-extrabold text-black border-2 border-black shadow-[0.5px_0.5px_0_#000000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <User className="w-3.5 h-3.5" />
-                          <span>Tenant Demo</span>
-                        </button>
-                      </div>
-                    </div>
 
                     <button
                       type="submit"
@@ -797,19 +745,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                     {/* Tenant specific: Invitation Token */}
                     {selectedRole === "TENANT" && (
-                      <div className="p-3 rounded-[16px] bg-amber-50 border-2 border-black shadow-[0.5px_0.5px_0_#000000] space-y-1.5">
+                      <div className="p-3.5 rounded-[16px] bg-amber-50 border-2 border-black shadow-[0.5px_0.5px_0_#000000] space-y-2">
                         <div className="flex items-center justify-between">
                           <label className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5">
                             <Ticket className="w-4 h-4 text-[#331A6F]" />
                             <span>Invitation Code from Landlord *</span>
                           </label>
-                          <button
-                            type="button"
-                            onClick={() => setInvitationToken("INV-KGL-2026")}
-                            className="text-xs font-black underline text-[#331A6F] cursor-pointer"
-                          >
-                            Sample: INV-KGL-2026
-                          </button>
                         </div>
                         <input
                           type="text"
@@ -820,7 +761,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                           }
                           placeholder="e.g. INV-KGL-2026"
                           disabled={loading}
-                          className="w-full px-3 py-2 rounded-[12px] bg-white text-black font-black text-sm tracking-wider uppercase border-2 border-black focus:outline-none shadow-[0.5px_0.5px_0_#000000]"
+                          className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-black text-sm tracking-wider uppercase border-2 border-black focus:outline-none shadow-[0.5px_0.5px_0_#000000]"
                         />
                         {tokenValidationState.valid && (
                           <div className="text-xs font-bold text-green-900 flex items-center gap-1.5 pt-0.5">
@@ -839,184 +780,161 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       </div>
                     )}
 
-                    {/* Form Fields: Two Columns on Tablets/Desktops */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                      {/* Full Name */}
-                      <div>
-                        <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
-                          Full Name *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={fullName}
-                          onChange={(e) => setFullName(e.target.value)}
-                          placeholder={
-                            selectedRole === "LANDLORD"
-                              ? "Jean-Paul Mugabo"
-                              : "Aline Uwase"
-                          }
-                          disabled={loading}
-                          className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
-                        />
-                      </div>
+                    {/* Landlord Registration Fields: Full Name, Email, Phone, District, Password */}
+                    {selectedRole === "LANDLORD" && (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                          {/* Full Name */}
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
+                              Full Name *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={fullName}
+                              onChange={(e) => setFullName(e.target.value)}
+                              placeholder="Jean-Paul Mugabo"
+                              disabled={loading}
+                              className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
+                            />
+                          </div>
 
-                      {/* Email */}
-                      <div>
-                        <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
-                          Email Address *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="email"
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder={
-                              selectedRole === "LANDLORD"
-                                ? "landlord@kigali.rw"
-                                : "tenant@shop.rw"
-                            }
-                            disabled={loading}
-                            className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
-                          />
-                          <Mail className="absolute right-3.5 top-3 w-4 h-4 text-slate-500 pointer-events-none" />
-                        </div>
-                      </div>
+                          {/* Email */}
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
+                              Email Address *
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="email"
+                                required
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="landlord@kigali.rw"
+                                disabled={loading}
+                                className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
+                              />
+                              <Mail className="absolute right-3.5 top-3 w-4 h-4 text-slate-500 pointer-events-none" />
+                            </div>
+                          </div>
 
-                      {/* Phone Number */}
-                      <div>
-                        <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
-                          Phone Number (MTN / Airtel) *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="tel"
-                            required
-                            value={phoneNumber}
-                            onChange={(e) => setPhoneNumber(e.target.value)}
-                            placeholder="+250 788 123 456"
-                            disabled={loading}
-                            className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
-                          />
-                          <Phone className="absolute right-3.5 top-3 w-4 h-4 text-slate-500 pointer-events-none" />
-                        </div>
-                      </div>
+                          {/* Phone Number */}
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
+                              Phone Number (MTN / Airtel) *
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="tel"
+                                required
+                                value={phoneNumber}
+                                onChange={(e) => setPhoneNumber(e.target.value)}
+                                placeholder="+250 788 123 456"
+                                disabled={loading}
+                                className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
+                              />
+                              <Phone className="absolute right-3.5 top-3 w-4 h-4 text-slate-500 pointer-events-none" />
+                            </div>
+                          </div>
 
-                      {/* Username (Tenant) or Region (Landlord) */}
-                      {selectedRole === "TENANT" ? (
-                        <div>
-                          <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
-                            Username *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={username}
-                            onChange={(e) =>
-                              setUsername(e.target.value.toLowerCase())
-                            }
-                            placeholder="e.g. aline_boutique"
-                            disabled={loading}
-                            className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
-                          />
-                        </div>
-                      ) : (
-                        <div>
-                          <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1">
-                            Primary District (default)
-                          </label>
-                          <div className="px-3.5 py-2.5 rounded-[12px] bg-slate-100 border-2 border-black text-xs font-bold text-black flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-green-500" />
-                            <span>Kigali Commercial Districts</span>
+                          {/* Region (Landlord) */}
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-600 mb-1">
+                              Primary District (default)
+                            </label>
+                            <div className="px-3.5 py-2.5 rounded-[12px] bg-slate-100 border-2 border-black text-xs font-bold text-black flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-green-500" />
+                              <span>Kigali Commercial Districts</span>
+                            </div>
+                          </div>
+
+                          {/* Password */}
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
+                              Password (8+ chars) *
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showPassword ? "text" : "password"}
+                                required
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="••••••••"
+                                disabled={loading}
+                                className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3.5 top-3 text-slate-600 hover:text-black"
+                                tabIndex={-1}
+                              >
+                                {showPassword ? (
+                                  <EyeOff className="w-4 h-4" />
+                                ) : (
+                                  <Eye className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Confirm Password */}
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
+                              Confirm Password *
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showConfirmPassword ? "text" : "password"}
+                                required
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                placeholder="••••••••"
+                                disabled={loading}
+                                className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowConfirmPassword(!showConfirmPassword)
+                                }
+                                className="absolute right-3.5 top-3 text-slate-600 hover:text-black"
+                                tabIndex={-1}
+                              >
+                                {showConfirmPassword ? (
+                                  <EyeOff className="w-4 h-4" />
+                                ) : (
+                                  <Eye className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      )}
 
-                      {/* Password */}
-                      <div>
-                        <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
-                          Password (8+ chars) *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showPassword ? "text" : "password"}
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="••••••••"
-                            disabled={loading}
-                            className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="absolute right-3.5 top-3 text-slate-600 hover:text-black"
-                            tabIndex={-1}
+                        {/* Password Match Feedback */}
+                        {password && confirmPassword && (
+                          <p
+                            className={`text-xs font-extrabold flex items-center gap-1.5 ${
+                              password === confirmPassword
+                                ? "text-green-700"
+                                : "text-red-600"
+                            }`}
                           >
-                            {showPassword ? (
-                              <EyeOff className="w-4 h-4" />
+                            {password === confirmPassword ? (
+                              <>
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>Passwords match successfully.</span>
+                              </>
                             ) : (
-                              <Eye className="w-4 h-4" />
+                              <>
+                                <AlertCircle className="w-4 h-4" />
+                                <span>Passwords do not match yet.</span>
+                              </>
                             )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Confirm Password */}
-                      <div>
-                        <label className="block text-xs font-black uppercase tracking-wider text-black mb-1">
-                          Confirm Password *
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showConfirmPassword ? "text" : "password"}
-                            required
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            placeholder="••••••••"
-                            disabled={loading}
-                            className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setShowConfirmPassword(!showConfirmPassword)
-                            }
-                            className="absolute right-3.5 top-3 text-slate-600 hover:text-black"
-                            tabIndex={-1}
-                          >
-                            {showConfirmPassword ? (
-                              <EyeOff className="w-4 h-4" />
-                            ) : (
-                              <Eye className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Password Match Feedback */}
-                    {password && confirmPassword && (
-                      <p
-                        className={`text-xs font-extrabold flex items-center gap-1.5 ${
-                          password === confirmPassword
-                            ? "text-green-700"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {password === confirmPassword ? (
-                          <>
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Passwords match successfully.</span>
-                          </>
-                        ) : (
-                          <>
-                            <AlertCircle className="w-4 h-4" />
-                            <span>Passwords do not match yet.</span>
-                          </>
+                          </p>
                         )}
-                      </p>
+                      </>
                     )}
 
                     <button
@@ -1031,11 +949,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       {loading ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Creating Account...</span>
+                          <span>
+                            {selectedRole === "LANDLORD"
+                              ? "Creating Account..."
+                              : "Opening Invitation..."}
+                          </span>
                         </>
                       ) : (
                         <>
-                          <span>Create {selectedRole} Account</span>
+                          <span>
+                            {selectedRole === "LANDLORD"
+                              ? "Create Landlord Account"
+                              : "Continue with Invitation"}
+                          </span>
                           <ArrowRight className="w-5 h-5 stroke-[2.5]" />
                         </>
                       )}
@@ -1230,6 +1156,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 src={cartoonImage}
                 alt="Notify Mascot"
                 className="w-full max-w-sm sm:max-w-md lg:max-w-[480px] h-auto object-contain filter drop-shadow-[0_20px_40px_rgba(51,26,111,0.18)] transition-transform duration-300 hover:scale-105"
+                loading="eager"
+                decoding="async"
               />
             </div>
           )}

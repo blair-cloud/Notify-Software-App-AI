@@ -66,7 +66,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted, onExploreNotify })
                   className="cursor-pointer inline-block"
                   aria-label="Get it on Google Play"
                 >
-                  <img src={playstoreImage} alt="Get it on Google Play" className="h-14 w-auto object-contain" />
+                  <img src={playstoreImage} alt="Get it on Google Play" className="h-14 w-auto object-contain" loading="lazy" decoding="async" />
                 </a>
 
                 {/* Apple App Store */}
@@ -79,7 +79,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted, onExploreNotify })
                   className="cursor-pointer inline-block"
                   aria-label="Download on the App Store"
                 >
-                  <img src={appStoreImage} alt="Download on the App Store" className="h-14 w-auto object-contain" />
+                  <img src={appStoreImage} alt="Download on the App Store" className="h-14 w-auto object-contain" loading="lazy" decoding="async" />
                 </a>
               </div>
             </div>
@@ -92,6 +92,8 @@ export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted, onExploreNotify })
                 src={notifyLandingImage}
                 alt="Notify — Commercial Rental & Property Management Software Rwanda"
                 className="w-full h-auto object-contain filter drop-shadow-[0_25px_45px_rgba(51,26,111,0.22)]"
+                loading="eager"
+                decoding="async"
               />
             </div>
           </div>

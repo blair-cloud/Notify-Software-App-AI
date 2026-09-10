@@ -269,6 +269,8 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
               src={notifyLogo}
               alt="Notify"
               className="h-12 sm:h-14 w-auto object-contain transition-transform duration-150 group-hover:scale-105"
+              loading="eager"
+              decoding="async"
             />
           </button>
 

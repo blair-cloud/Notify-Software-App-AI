@@ -61,6 +61,7 @@ import {
   FileCheck,
   UserCircle
 } from 'lucide-react';
+import whiteLogo from '../assets/images/white_logo.png';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -102,6 +103,7 @@ import { LandlordExpensesTab } from '../components/LandlordExpensesTab';
 import { LandlordComplaintsTab } from '../components/LandlordComplaintsTab';
 import { LandlordMessagesTab } from '../components/LandlordMessagesTab';
 import { LandlordAccountTab } from '../components/LandlordAccountTab';
+import { TriangularPreloader } from '../components/TriangularPreloader';
 import { LandlordTrackerTab } from '../components/tracker/LandlordTrackerTab';
 import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { AddExpenseModal } from '../components/AddExpenseModal';
@@ -1589,7 +1591,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       <aside className="hidden md:flex flex-col w-64 h-full bg-[#331A6F] text-white border-r border-purple-900/40 shrink-0 select-none">
         {/* Brand header - Minimalist and Clean */}
         <div className="p-6 pb-5 shrink-0 flex items-center gap-3 border-b border-purple-900/40">
-          <img src="/src/assets/images/white_logo.png" alt="Notify" className="h-12 w-auto object-contain" />
+          <img src={whiteLogo} alt="Notify" className="h-12 w-auto object-contain" loading="eager" decoding="async" />
         </div>
 
         {/* Navbar tabs - Clean, modern, independently scrollable */}
@@ -1871,7 +1873,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       {/* Mobile Header - Clean & Minimalist */}
       <header className="md:hidden bg-[#331A6F] text-white p-4 flex items-center justify-between border-b border-purple-900 shrink-0">
         <div className="flex items-center gap-2.5">
-          <img src="/src/assets/images/white_logo.png" alt="Notify" className="h-8 w-auto object-contain" />
+          <img src={whiteLogo} alt="Notify" className="h-8 w-auto object-contain" loading="eager" decoding="async" />
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -1943,18 +1945,11 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           </div>
         )}
 
-        {/* First-load skeleton only — never blank the dashboard during silent refresh */}
+        {/* Initial Cold Load Preloader – 3-dot triangular formation with rotating messages */}
         {loading && !hasCoreDataRef.current && properties.length === 0 && (
-          <div className="space-y-4 animate-pulse py-2">
-            <div className="h-8 w-48 bg-slate-200/80 rounded-lg" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-24 rounded-2xl bg-slate-200/70" />
-              ))}
-            </div>
-            <div className="h-64 rounded-2xl bg-slate-200/60" />
-          </div>
+          <TriangularPreloader className="my-8" />
         )}
+
 
         {/* Global Error message */}
         {error && (
@@ -1965,7 +1960,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         )}
 
         {(!loading || hasCoreDataRef.current || properties.length > 0 || !!stats) && (
-          <>
+          <div className="transition-opacity duration-300 ease-out opacity-100">
             {/* 1. DASHBOARD OVERVIEW TAB */}
             {activeTab === 'dashboard' && (
               <LandlordOverviewTab
@@ -3278,7 +3273,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
               />
             )}
 
-          </>
+          </div>
         )}
       </main>
 

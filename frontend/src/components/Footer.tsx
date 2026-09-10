@@ -15,6 +15,8 @@ export const Footer: React.FC = () => {
               src={notifyLogo}
               alt="Notify"
               className="h-16 sm:h-20 w-auto object-contain"
+              loading="lazy"
+              decoding="async"
             />
             <p className="text-xs text-slate-700 font-normal mt-1">
               {t.heroTitle1}{t.heroTitle2}

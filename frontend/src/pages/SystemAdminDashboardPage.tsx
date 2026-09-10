@@ -1,3 +1,4 @@
+import { TriangularPreloader } from '../components/TriangularPreloader';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
@@ -202,9 +203,7 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
         {/* Dynamic Admin Workspace Body */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 scrollbar-subtle max-w-7xl w-full mx-auto">
           {loading ? (
-            <div className="p-12 text-center text-slate-500 font-medium">
-              Loading Platform Administration Center...
-            </div>
+            <TriangularPreloader className="my-12" />
           ) : (
             <div className="pb-12">
               {loadError && (

@@ -30,6 +30,7 @@ import {
   ChevronRight,
   Check
 } from 'lucide-react';
+import whiteLogo from '../assets/images/white_logo.png';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
@@ -57,6 +58,7 @@ import { TenantLeaseDocumentModal } from '../components/TenantLeaseDocumentModal
 import { TenantLeaseCountdownCard } from '../components/TenantLeaseCountdownCard';
 import { LeaseAgreementPreviewModal } from '../components/LeaseAgreementPreviewModal';
 import { TenantProfileSettingsTab } from '../components/TenantProfileSettingsTab';
+import { TriangularPreloader } from '../components/TriangularPreloader';
 import { useTabRoute } from '../hooks/useTabRoute';
 
 interface TenantDashboardPageProps {
@@ -489,7 +491,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
         {/* Logo & Portal Badge */}
         <div className="p-4 lg:p-6 pb-3 lg:pb-4 shrink-0 border-b border-purple-800/30">
           <div className="flex items-center gap-3">
-            <img src="/src/assets/images/white_logo.png" alt="Notify" className="h-12 w-auto object-contain" />
+            <img src={whiteLogo} alt="Notify" className="h-12 w-auto object-contain" loading="eager" decoding="async" />
           </div>
         </div>
 
@@ -592,7 +594,7 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       {/* Mobile Top App Bar - Clean, modern, minimalist */}
       <header className="md:hidden bg-[#331A6F] text-white px-4 py-3 flex items-center justify-between border-b border-purple-800/40 shrink-0 sticky top-0 z-30 shadow-xs">
         <div className="flex items-center gap-2.5">
-          <img src="/src/assets/images/white_logo.png" alt="Notify" className="h-8 w-auto object-contain" />
+          <img src={whiteLogo} alt="Notify" className="h-8 w-auto object-contain" loading="eager" decoding="async" />
         </div>
 
         <div className="flex items-center gap-2">
@@ -731,7 +733,11 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       ) : (
         /* Main Content Area - Clean SaaS Design */
         <main className="flex-1 h-full overflow-y-auto max-w-5xl mx-auto w-full p-4 sm:p-6 md:p-8 flex flex-col justify-between scrollbar-subtle-dark pb-24 md:pb-8">
-          <div>
+          {loading ? (
+            <TriangularPreloader className="my-16" />
+          ) : (
+            <div className="transition-opacity duration-300 ease-out opacity-100 flex flex-col justify-between flex-1">
+              <div>
             {/* Success Toast */}
             {successMsg && (
               <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-4 py-3 rounded-xl flex items-center justify-between shadow-xs">
@@ -1474,6 +1480,8 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
           <footer className="mt-8 pt-6 border-t border-slate-200/80 text-center text-xs text-slate-500 font-medium">
             © 2026 Notify Rental Property Management Kigali. All rights reserved.
           </footer>
+            </div>
+          )}
         </main>
       )}
 
