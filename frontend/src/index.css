@@ -1,21 +1,31 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: 'Poppins', system-ui, -apple-system, sans-serif;
+  --font-sans: "Poppins", system-ui, -apple-system, sans-serif;
 }
 
 @layer base {
   body {
-    font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background-color: #F4F4F0;
+    font-family:
+      "Poppins",
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      Roboto,
+      Oxygen,
+      Ubuntu,
+      Cantarell,
+      sans-serif;
+    background-color: #f4f4f0;
     color: #000000;
   }
 }
 
 /* Subtle repeating staggered/offset grid of square dots (3px × 3px, #C3C3C0) with reduced row spacing on #F4F4F0 */
 .bg-notify-grid {
-  background-color: #F4F4F0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect x='0' y='0' width='3' height='3' fill='%23E0E0DD'/%3E%3Crect x='24' y='24' width='3' height='3' fill='%23E0E0DD'/%3E%3C/svg%3E");
+  background-color: #f4f4f0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect x='0' y='0' width='3' height='3' fill='%23E7E7E3'/%3E%3Crect x='24' y='24' width='3' height='3' fill='%23E7E7E3'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 48px 48px;
 }
@@ -27,12 +37,12 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #FFFFFF;
+  background: #ffffff;
   border-left: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #331A6F;
+  background: #331a6f;
   border-radius: 4px;
 }
 
@@ -106,17 +116,17 @@
 }
 
 .brand-purple {
-  color: #331A6F;
+  color: #331a6f;
 }
 
 .bg-brand-purple {
-  background-color: #331A6F;
+  background-color: #331a6f;
 }
 
 /* Neo-Brutalist Utility Classes */
 .btn-primary {
-  background-color: #331A6F;
-  color: #FFFFFF;
+  background-color: #331a6f;
+  color: #ffffff;
   border: 2px solid #000000;
   border-radius: 17px;
   font-weight: 700;
@@ -139,7 +149,7 @@
 }
 
 .btn-secondary {
-  background-color: #FFFFFF;
+  background-color: #ffffff;
   color: #000000;
   border: 2px solid #000000;
   border-radius: 17px;
@@ -155,7 +165,7 @@
 .btn-secondary:hover {
   transform: translate(2px, 2px);
   box-shadow: 4px 4px 0 #000000;
-  background-color: #FAFAFA;
+  background-color: #fafafa;
 }
 
 .btn-secondary:active {
@@ -164,14 +174,14 @@
 }
 
 .neo-card {
-  background-color: #FFFFFF;
+  background-color: #ffffff;
   border: 2px solid #000000;
   border-radius: 18px;
   box-shadow: 6px 6px 0 #000000;
 }
 
 .neo-card-interactive {
-  background-color: #FFFFFF;
+  background-color: #ffffff;
   border: 2px solid #000000;
   border-radius: 18px;
   box-shadow: 6px 6px 0 #000000;
@@ -190,7 +200,7 @@
 }
 
 .neo-input {
-  background-color: #FFFFFF;
+  background-color: #ffffff;
   color: #000000;
   border: 2px solid #000000;
   border-radius: 15px;
@@ -201,20 +211,20 @@
 
 .neo-input:focus {
   outline: none;
-  border-color: #331A6F;
-  box-shadow: 4px 4px 0 #331A6F;
+  border-color: #331a6f;
+  box-shadow: 4px 4px 0 #331a6f;
 }
 
 .neo-modal {
-  background-color: #FFFFFF;
+  background-color: #ffffff;
   border: 2px solid #000000;
   border-radius: 20px;
   box-shadow: 8px 8px 0 #000000;
 }
 
 .neo-badge {
-  background-color: #331A6F;
-  color: #FFFFFF;
+  background-color: #331a6f;
+  color: #ffffff;
   border: 2px solid #000000;
   border-radius: 14px;
   box-shadow: 3px 3px 0 #000000;
@@ -222,8 +232,8 @@
 }
 
 .neo-badge-white {
-  background-color: #FFFFFF;
-  color: #331A6F;
+  background-color: #ffffff;
+  color: #331a6f;
   border: 2px solid #000000;
   border-radius: 14px;
   box-shadow: 3px 3px 0 #000000;

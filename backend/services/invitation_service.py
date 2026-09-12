@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 from typing import Optional
 from datetime import datetime, date, timezone, timedelta
@@ -140,7 +141,7 @@ class InvitationService:
             or bool(os.environ.get("FLY_ALLOC_ID"))
         )
         if is_prod and "localhost" in base:
-            base = "https://notify-c2d43.web.app"
+            base = "https://notifyappo.web.app"
         link = f"{base}/accept-invitation?token={raw_token}"
         first_name = (invitation.tenant_name or "").split()[0] if invitation.tenant_name else "there"
 

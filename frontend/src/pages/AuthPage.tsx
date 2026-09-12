@@ -138,22 +138,32 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
     // Automatically verify direct token_hash recovery links from production reset email
     const searchParams = new URLSearchParams(window.location.search);
-    const tokenHash = searchParams.get("token_hash") || searchParams.get("token");
+    const tokenHash =
+      searchParams.get("token_hash") || searchParams.get("token");
     const recoveryType = searchParams.get("type");
 
-    if (tokenHash && (recoveryType === "recovery" || !recoveryType || mode === "RESET_PASSWORD")) {
-      supabase.auth.verifyOtp({
-        token_hash: tokenHash,
-        type: "recovery",
-      }).then(({ data, error }) => {
-        if (!active) return;
-        if (error) {
-          console.error("Error verifying recovery token:", error);
-          setErrorMessage("This password reset link is invalid or has expired. Please request a new one.");
-        } else if (data?.session) {
-          setHasRecoverySession(true);
-        }
-      });
+    if (
+      tokenHash &&
+      (recoveryType === "recovery" ||
+        !recoveryType ||
+        mode === "RESET_PASSWORD")
+    ) {
+      supabase.auth
+        .verifyOtp({
+          token_hash: tokenHash,
+          type: "recovery",
+        })
+        .then(({ data, error }) => {
+          if (!active) return;
+          if (error) {
+            console.error("Error verifying recovery token:", error);
+            setErrorMessage(
+              "This password reset link is invalid or has expired. Please request a new one.",
+            );
+          } else if (data?.session) {
+            setHasRecoverySession(true);
+          }
+        });
     }
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
@@ -218,7 +228,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   }, [invitationToken, mode, selectedRole]);
 
-
   // 1. Submit Login Form
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,7 +276,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     if (selectedRole === "TENANT") {
       const cleanToken = invitationToken.trim();
       if (!cleanToken) {
-        setErrorMessage("Please enter your invitation code from your landlord.");
+        setErrorMessage(
+          "Please enter your invitation code from your landlord.",
+        );
         return;
       }
       window.location.href = `/accept-invitation?token=${encodeURIComponent(cleanToken)}`;
@@ -626,7 +637,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                           required
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          placeholder="e.g. landlord@notify.test or tenant@notify.test"
+                          placeholder="e.g. landlord@gmail.com"
                           disabled={loading}
                           className="w-full px-4 py-3 rounded-[14px] bg-white text-black font-bold text-sm sm:text-base border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
                         />
@@ -671,7 +682,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         </button>
                       </div>
                     </div>
-
 
                     <button
                       type="submit"
@@ -910,7 +920,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                                 type={showConfirmPassword ? "text" : "password"}
                                 required
                                 value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                onChange={(e) =>
+                                  setConfirmPassword(e.target.value)
+                                }
                                 placeholder="••••••••"
                                 disabled={loading}
                                 className="w-full px-3.5 py-2.5 rounded-[12px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"

@@ -111,7 +111,7 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request):
         or bool(os.environ.get("FLY_ALLOC_ID"))
     )
     if is_prod and ("localhost" in base_url or not base_url):
-        base_url = "https://notify-c2d43.web.app"
+        base_url = "https://notifyappo.web.app"
 
     try:
         token_hash = await generate_password_reset_link(clean_email)

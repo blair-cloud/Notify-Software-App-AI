@@ -110,8 +110,50 @@ import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { AddExpenseModal } from '../components/AddExpenseModal';
 import { LeaseDocumentUploadSection } from '../components/LeaseDocumentUploadSection';
 import { LeaseDocumentDetailsModal } from '../components/LeaseDocumentDetailsModal';
+import { getLeaseTiming } from '../components/TenantLeaseCountdownCard';
 import { specializationLabel } from '../constants/workerSpecializations';
 import { useTabRoute } from '../hooks/useTabRoute';
+
+/** Lifecycle label for landlord Leases tab — derived from real end_date (and terminal statuses). */
+type LeaseLifecycleKey = 'DRAFT' | 'PENDING' | 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' | 'TERMINATED' | 'OTHER';
+
+const SOON_ENDING_DAYS = 5;
+
+const getLeaseLifecycle = (lease: Lease): LeaseLifecycleKey => {
+  if (lease.status === 'DRAFT') return 'DRAFT';
+  if (lease.status === 'TERMINATED') return 'TERMINATED';
+  if (lease.status === 'PENDING') return 'PENDING';
+
+  const { daysRemaining } = getLeaseTiming(lease);
+  if (daysRemaining === null) {
+    if (lease.status === 'ACTIVE' || lease.status === 'EXPIRING_SOON' || lease.status === 'EXPIRED') {
+      return lease.status;
+    }
+    return 'OTHER';
+  }
+  if (daysRemaining < 0) return 'EXPIRED';
+  if (daysRemaining <= SOON_ENDING_DAYS) return 'EXPIRING_SOON';
+  return 'ACTIVE';
+};
+
+const leaseLifecycleLabel = (key: LeaseLifecycleKey): string => {
+  switch (key) {
+    case 'ACTIVE':
+      return 'Active';
+    case 'EXPIRING_SOON':
+      return 'Soon Ending';
+    case 'EXPIRED':
+      return 'Expired';
+    case 'DRAFT':
+      return 'Draft';
+    case 'PENDING':
+      return 'Pending';
+    case 'TERMINATED':
+      return 'Terminated';
+    default:
+      return 'Other';
+  }
+};
 
 interface LandlordDashboardPageProps {
   onLogout: () => void;
@@ -195,6 +237,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [tenantSearch, setTenantSearch] = useState('');
   const [leaseSearch, setLeaseSearch] = useState('');
   const [leaseStatusFilter, setLeaseStatusFilter] = useState('ALL');
+  const [leaseRemainingDaysFilter, setLeaseRemainingDaysFilter] = useState('');
   const [leasePage, setLeasePage] = useState(1);
   const LEASES_PER_PAGE = 5;
 
@@ -1426,12 +1469,26 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   });
 
   const filteredLeases = leases.filter((l) => {
-    const matchesStatus = leaseStatusFilter === 'ALL' || l.status === leaseStatusFilter;
+    const lifecycle = getLeaseLifecycle(l);
+    const matchesStatus = leaseStatusFilter === 'ALL' || lifecycle === leaseStatusFilter;
+
     const matchesSearch =
+      !leaseSearch.trim() ||
       (l.tenant_name && l.tenant_name.toLowerCase().includes(leaseSearch.toLowerCase())) ||
       (l.property_name && l.property_name.toLowerCase().includes(leaseSearch.toLowerCase())) ||
       (l.unit_number && l.unit_number.toLowerCase().includes(leaseSearch.toLowerCase()));
-    return matchesStatus && matchesSearch;
+
+    const remainingFilterRaw = leaseRemainingDaysFilter.trim();
+    let matchesRemainingDays = true;
+    if (remainingFilterRaw !== '') {
+      const targetDays = Number(remainingFilterRaw);
+      if (!Number.isNaN(targetDays)) {
+        const { daysRemaining } = getLeaseTiming(l);
+        matchesRemainingDays = daysRemaining !== null && daysRemaining === targetDays;
+      }
+    }
+
+    return matchesStatus && matchesSearch && matchesRemainingDays;
   });
 
   const leaseTotalPages = Math.max(1, Math.ceil(filteredLeases.length / LEASES_PER_PAGE));
@@ -1443,7 +1500,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
   useEffect(() => {
     setLeasePage(1);
-  }, [leaseSearch, leaseStatusFilter]);
+  }, [leaseSearch, leaseStatusFilter, leaseRemainingDaysFilter]);
 
   const filteredInvoices = invoices.filter((i) => {
     const matchesStatus =
@@ -1582,7 +1639,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     (c) => c.status !== 'CLOSED' && c.status !== 'RESOLVED'
   ).length;
 
-  const expiringSoonLeases = leases.filter((l) => l.status === 'EXPIRING_SOON');
+  const expiringSoonLeases = leases.filter((l) => getLeaseLifecycle(l) === 'EXPIRING_SOON');
+  const activeLeasesCount = leases.filter((l) => getLeaseLifecycle(l) === 'ACTIVE').length;
 
   const unreadMessagesCount = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
 
@@ -3408,11 +3466,11 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <div className="flex items-center gap-3">
                     <div className="bg-white/10 px-3 py-2 rounded-lg text-center backdrop-blur-xs">
                       <div className="text-[10px] uppercase font-bold text-purple-200">Active Leases</div>
-                      <div className="text-base font-bold text-white">{leases.filter(l => l.status === 'ACTIVE').length}</div>
+                      <div className="text-base font-bold text-white">{activeLeasesCount}</div>
                     </div>
                     <div className="bg-white/10 px-3 py-2 rounded-lg text-center backdrop-blur-xs">
-                      <div className="text-[10px] uppercase font-bold text-amber-300">Expiring &le;5D</div>
-                      <div className="text-base font-bold text-amber-300">{leases.filter(l => (l.days_remaining !== undefined && l.days_remaining <= 5 && l.days_remaining >= 0) || l.status === 'EXPIRING_SOON').length}</div>
+                      <div className="text-[10px] uppercase font-bold text-amber-300">Soon Ending ≤{SOON_ENDING_DAYS}D</div>
+                      <div className="text-base font-bold text-amber-300">{expiringSoonLeases.length}</div>
                     </div>
                   </div>
                 </div>
@@ -3438,9 +3496,36 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     >
                       <option value="ALL">All Lease Statuses</option>
                       <option value="ACTIVE">Active</option>
-                      <option value="EXPIRING_SOON">Expiring Soon (5 Days)</option>
+                      <option value="EXPIRING_SOON">Soon Ending (≤{SOON_ENDING_DAYS} Days)</option>
                       <option value="EXPIRED">Expired</option>
+                      <option value="DRAFT">Draft</option>
+                      <option value="TERMINATED">Terminated</option>
                     </select>
+
+                    <div className="relative w-full sm:w-44">
+                      <Clock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        placeholder="Remaining days…"
+                        value={leaseRemainingDaysFilter}
+                        onChange={(e) => setLeaseRemainingDaysFilter(e.target.value)}
+                        className="w-full pl-9 pr-8 py-2 rounded-lg text-xs border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#331A6F]/30"
+                        title="Filter by exact remaining days (e.g. 5, 10, 30)"
+                      />
+                      {leaseRemainingDaysFilter !== '' && (
+                        <button
+                          type="button"
+                          onClick={() => setLeaseRemainingDaysFilter('')}
+                          className="absolute right-2 top-2 p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                          title="Clear remaining days filter"
+                          aria-label="Clear remaining days filter"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="text-xs text-slate-500 font-medium">
@@ -3459,13 +3544,19 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                           <th className="py-3.5 px-4">Property & Unit</th>
                           <th className="py-3.5 px-4">Rent / Deposit</th>
                           <th className="py-3.5 px-4">Term Dates</th>
+                          <th className="py-3.5 px-4">Remaining Days</th>
                           <th className="py-3.5 px-4">Signed Document</th>
                           <th className="py-3.5 px-4">Status</th>
                           <th className="py-3.5 px-4 text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {paginatedLeases.map((l) => (
+                        {paginatedLeases.map((l) => {
+                          const timing = getLeaseTiming(l);
+                          const lifecycle = getLeaseLifecycle(l);
+                          const daysRemaining = timing.daysRemaining;
+
+                          return (
                           <tr key={l.id} className="hover:bg-slate-50/60 transition-colors">
                             <td className="py-4 px-4 font-mono text-[11px] text-slate-500">{l.id}</td>
                             <td className="py-4 px-4 font-bold text-slate-900">{l.tenant_name || 'Test Tenant'}</td>
@@ -3522,9 +3613,21 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             </td>
                             <td className="py-4 px-4 text-slate-700">
                               <div>{l.start_date} → {l.end_date}</div>
-                              {l.days_remaining !== undefined && (
-                                <span className="text-[10px] font-semibold text-amber-700">
-                                  {l.days_remaining} days remaining
+                            </td>
+                            <td className="py-4 px-4">
+                              {daysRemaining === null ? (
+                                <span className="text-[11px] font-medium text-slate-400">—</span>
+                              ) : daysRemaining < 0 ? (
+                                <span className="text-[11px] font-bold text-rose-700">
+                                  Expired {Math.abs(daysRemaining)} day{Math.abs(daysRemaining) === 1 ? '' : 's'} ago
+                                </span>
+                              ) : (
+                                <span
+                                  className={`text-[11px] font-bold ${
+                                    daysRemaining <= SOON_ENDING_DAYS ? 'text-amber-700' : 'text-slate-800'
+                                  }`}
+                                >
+                                  {daysRemaining} day{daysRemaining === 1 ? '' : 's'} remaining
                                 </span>
                               )}
                             </td>
@@ -3550,16 +3653,18 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             <td className="py-4 px-4">
                               <span
                                 className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                                  l.status === 'ACTIVE'
+                                  lifecycle === 'ACTIVE'
                                     ? 'bg-emerald-100 text-emerald-800'
-                                    : l.status === 'EXPIRING_SOON'
+                                    : lifecycle === 'EXPIRING_SOON'
                                     ? 'bg-amber-100 text-amber-800'
-                                    : l.status === 'DRAFT'
+                                    : lifecycle === 'DRAFT'
                                     ? 'bg-blue-100 text-blue-800'
+                                    : lifecycle === 'PENDING'
+                                    ? 'bg-indigo-100 text-indigo-800'
                                     : 'bg-rose-100 text-rose-800'
                                 }`}
                               >
-                                {l.status}
+                                {leaseLifecycleLabel(lifecycle)}
                               </span>
                             </td>
                             <td className="py-4 px-4 text-right">
@@ -3598,7 +3703,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                               </div>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

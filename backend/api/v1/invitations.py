@@ -10,6 +10,7 @@ from backend.schemas.invitation import (
     InvitationCreateResponse,
     InvitationResponse,
     InvitationAccept,
+    DeliveryChannelResult,
 )
 from backend.schemas.tenancy import TenancyResponse
 from backend.services.invitation_service import InvitationService
@@ -54,17 +55,32 @@ async def create_invitation(
     await db.commit()
     await db.refresh(invitation)
 
-    email_result, sms_result, whatsapp_result = await service.send_invitation_notifications(
-        invitation,
-        raw_token,
-        property_name=prop.name if prop else "your property",
-        unit_number=unit.unit_number if unit else "",
-        landlord_name=_landlord_display_name(landlord),
-        frontend_base_url=frontend_base,
-    )
-    # The WhatsApp send writes its own delivery record; persist it (and any
-    # other channel bookkeeping) now that the sends are done.
-    await db.commit()
+    email_result = DeliveryChannelResult(attempted=False, ok=False)
+    sms_result = DeliveryChannelResult(attempted=False, ok=False)
+    whatsapp_result = DeliveryChannelResult(attempted=False, ok=False)
+    try:
+        email_result, sms_result, whatsapp_result = await service.send_invitation_notifications(
+            invitation,
+            raw_token,
+            property_name=prop.name if prop else "your property",
+            unit_number=unit.unit_number if unit else "",
+            landlord_name=_landlord_display_name(landlord),
+            frontend_base_url=frontend_base,
+        )
+        # The WhatsApp send writes its own delivery record; persist it (and any
+        # other channel bookkeeping) now that the sends are done.
+        await db.commit()
+    except Exception:
+        # Invitation is already saved - never fail the create API because a
+        # notification channel crashed. Landlord can resend from the UI.
+        import logging
+        logging.getLogger("invitations").exception(
+            "Invitation %s created but notification dispatch failed", invitation.id
+        )
+        try:
+            await db.rollback()
+        except Exception:
+            pass
 
     return InvitationCreateResponse(
         invitation=InvitationResponse.model_validate(invitation),
@@ -104,15 +120,28 @@ async def resend_invitation(
     await db.commit()
     await db.refresh(invitation)
 
-    email_result, sms_result, whatsapp_result = await service.send_invitation_notifications(
-        invitation,
-        raw_token,
-        property_name=prop.name if prop else "your property",
-        unit_number=unit.unit_number if unit else "",
-        landlord_name=_landlord_display_name(landlord),
-        frontend_base_url=frontend_base,
-    )
-    await db.commit()
+    email_result = DeliveryChannelResult(attempted=False, ok=False)
+    sms_result = DeliveryChannelResult(attempted=False, ok=False)
+    whatsapp_result = DeliveryChannelResult(attempted=False, ok=False)
+    try:
+        email_result, sms_result, whatsapp_result = await service.send_invitation_notifications(
+            invitation,
+            raw_token,
+            property_name=prop.name if prop else "your property",
+            unit_number=unit.unit_number if unit else "",
+            landlord_name=_landlord_display_name(landlord),
+            frontend_base_url=frontend_base,
+        )
+        await db.commit()
+    except Exception:
+        import logging
+        logging.getLogger("invitations").exception(
+            "Invitation %s reissued but notification dispatch failed", invitation.id
+        )
+        try:
+            await db.rollback()
+        except Exception:
+            pass
 
     return InvitationCreateResponse(
         invitation=InvitationResponse.model_validate(invitation),

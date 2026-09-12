@@ -38,14 +38,23 @@ class Settings(BaseSettings):
             or bool(os.environ.get("FLY_ALLOC_ID"))
         )
         if is_prod and ("localhost" in raw or not raw):
-            return "https://notify-c2d43.web.app"
-        return raw or "https://notify-c2d43.web.app"
+            return "https://notifyappo.web.app"
+        return raw or "https://notifyappo.web.app"
 
 
     # Browsers reject a credentialed request to a wildcard origin, so when an
     # explicit origin list is configured we also allow credentials. Leaving this
     # empty keeps the permissive development default.
+    # Production Firebase hosts are always allowed in addition to CORS_ORIGINS.
     CORS_ORIGINS: str = ""
+
+    # Known browser origins for the hosted SPA (Firebase). Always merged into
+    # the CORS allow-list so a redeploy to a new hosting URL does not silently
+    # break the API from the browser.
+    KNOWN_FRONTEND_ORIGINS: str = (
+        "https://notifyappo.web.app,"
+        "https://notify-c2d43.web.app"
+    )
 
     # Single-use email links.
     EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS: int = 48

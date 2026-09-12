@@ -132,15 +132,51 @@ app = FastAPI(
 # Authorization header rather than a cookie, so the permissive development
 # default needs no credentials. Setting CORS_ORIGINS (comma separated) in
 # production narrows it to those origins and re-enables credentials.
-_configured_origins = [o.strip() for o in (settings.CORS_ORIGINS or "").split(",") if o.strip()]
+_configured_origins = [
+    o.strip().rstrip("/")
+    for o in (settings.CORS_ORIGINS or "").split(",")
+    if o.strip()
+]
+_known_frontend_origins = [
+    o.strip().rstrip("/")
+    for o in (settings.KNOWN_FRONTEND_ORIGINS or "").split(",")
+    if o.strip()
+]
+# Always allow the hosted Firebase SPAs, even when CORS_ORIGINS is a narrow list.
+_cors_allow_origins = list(dict.fromkeys(_configured_origins + _known_frontend_origins))
+_use_wildcard = not _configured_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_configured_origins or ["*"],
-    allow_credentials=bool(_configured_origins),
+    allow_origins=["*"] if _use_wildcard else _cors_allow_origins,
+    allow_credentials=not _use_wildcard,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+def _cors_headers_for(request: Request) -> dict:
+    """
+    Mirror the middleware allow-list onto exception responses. Unhandled
+    exceptions can otherwise leave the browser with a bare 500 and no
+    Access-Control-Allow-Origin, which it reports as a CORS failure.
+    """
+    origin = (request.headers.get("origin") or "").rstrip("/")
+    if _use_wildcard:
+        return {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "*",
+        }
+    if origin and origin in _cors_allow_origins:
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Vary": "Origin",
+        }
+    return {}
 
 
 @app.exception_handler(Exception)
@@ -154,7 +190,11 @@ async def generic_exception_handler(request: Request, exc: Exception):
     if isinstance(exc, _HTTPEx):
         raise exc
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=_cors_headers_for(request),
+    )
 
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
@@ -166,8 +206,11 @@ async def value_error_handler(request: Request, exc: ValueError):
     """
     detail = "Malformed identifier in request." if "UUID" in str(exc) else f"Invalid request: {exc}"
     logger.warning(f"400 on {request.method} {request.url.path}: {exc}")
-    return JSONResponse(status_code=400, content={"detail": detail})
-
+    return JSONResponse(
+        status_code=400,
+        content={"detail": detail},
+        headers=_cors_headers_for(request),
+    )
 # Mount API Routers
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(properties.router, prefix="/api/v1")
