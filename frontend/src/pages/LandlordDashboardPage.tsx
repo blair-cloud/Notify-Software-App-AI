@@ -62,7 +62,7 @@ import {
   FileCheck,
   UserCircle
 } from 'lucide-react';
-import whiteLogo from '../assets/images/white_logo.png';
+import { BRAND_IMAGES, BrandPicture } from '../constants/brandImages';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -210,6 +210,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [tenancies, setTenancies] = useState<Tenancy[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
+  const [leasesLoading, setLeasesLoading] = useState(false);
+  const [leasesError, setLeasesError] = useState<string | null>(null);
+  const hasLoadedLeasesRef = React.useRef(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -492,12 +495,42 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       api.messages.getConversations().catch(() => []),
     ]);
 
+  const fetchLeasesImmediate = React.useCallback(async (silent = false) => {
+    if (!silent) setLeasesLoading(true);
+    setLeasesError(null);
+    try {
+      const res = await api.leases.list();
+      const list = asArray(res, 'leases');
+      setLeases(list);
+      hasLoadedLeasesRef.current = true;
+      if (list.length > 0 && !invLeaseId) {
+        setInvLeaseId(list[0].id);
+        setInvRentAmount(list[0].monthly_rent || 350000);
+      }
+      return list;
+    } catch (err: any) {
+      console.error('Failed to load leases:', err);
+      const msg = err.message || 'Failed to load lease agreements';
+      setLeasesError(msg);
+      return [];
+    } finally {
+      if (!silent) setLeasesLoading(false);
+    }
+  }, [invLeaseId]);
+
+  useEffect(() => {
+    if (activeTab === 'leases') {
+      fetchLeasesImmediate(leases.length > 0);
+    }
+  }, [activeTab, fetchLeasesImmediate, leases.length]);
+
   type FetchScope =
     | 'all'
     | 'core'
     | 'secondary'
     | 'properties'
     | 'financials'
+    | 'leases'
     | 'maintenance'
     | 'complaints'
     | 'notifications'
@@ -513,6 +546,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     if (!silent) setError(null);
 
     try {
+      if (scope === 'leases') {
+        await fetchLeasesImmediate(silent);
+        return;
+      }
       const needCore =
         scope === 'all' ||
         scope === 'core' ||
@@ -600,6 +637,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
       // Core wave — overview can render as soon as this settles.
       if (needCore) {
+        // Eagerly fetch leases in parallel so the Leases tab never waits for unrelated endpoints
+        void fetchLeasesImmediate(silent);
+
         const coreResults = await fetchCorePortfolio();
         if (gen !== fetchGenRef.current) return;
         applyCoreResults(coreResults);
@@ -993,6 +1033,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         }
       }
       fetchData({ silent: true, scope: 'core' });
+      void fetchLeasesImmediate(true);
     } catch (err: any) {
       setLeaseError(err.message || 'Failed to create lease.');
     } finally {
@@ -1009,6 +1050,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       });
       showSuccess('Lease agreement document uploaded & version history updated!');
       await fetchData({ silent: true, scope: 'core' });
+      void fetchLeasesImmediate(true);
     } catch (err: any) {
       showError(err.message || 'Failed to upload document version');
     }
@@ -1026,6 +1068,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       showSuccess('Late payment penalty updated.');
       setEditingLateFeeLeaseId(null);
       await fetchData({ silent: true, scope: 'core' });
+      void fetchLeasesImmediate(true);
     } catch (err: any) {
       showError(err.message || 'Failed to update the late payment penalty.');
     } finally {
@@ -1045,6 +1088,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       await api.leases.activate(lease.id);
       showSuccess('Lease activated successfully.');
       fetchData({ silent: true, scope: 'core' });
+      void fetchLeasesImmediate(true);
     } catch (err: any) {
       showError(err.message || 'Failed to activate lease.');
     } finally {
@@ -1081,6 +1125,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       await api.tenancies.end(tenancyId);
       showSuccess('Tenancy ended successfully. The unit is now vacant.', 3000);
       fetchData({ silent: true, scope: 'core' });
+      void fetchLeasesImmediate(true);
     } catch (err: any) {
       showError(err.message || 'Failed to end tenancy.');
     } finally {
@@ -1470,13 +1515,19 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
   const filteredLeases = leases.filter((l) => {
     const lifecycle = getLeaseLifecycle(l);
-    const matchesStatus = leaseStatusFilter === 'ALL' || lifecycle === leaseStatusFilter;
+    const matchesStatus =
+      leaseStatusFilter === 'ALL'
+        ? true
+        : leaseStatusFilter === 'ACTIVE'
+        ? lifecycle === 'ACTIVE' || lifecycle === 'EXPIRING_SOON' || l.status === 'ACTIVE'
+        : lifecycle === leaseStatusFilter;
 
     const matchesSearch =
       !leaseSearch.trim() ||
       (l.tenant_name && l.tenant_name.toLowerCase().includes(leaseSearch.toLowerCase())) ||
       (l.property_name && l.property_name.toLowerCase().includes(leaseSearch.toLowerCase())) ||
-      (l.unit_number && l.unit_number.toLowerCase().includes(leaseSearch.toLowerCase()));
+      (l.unit_number && l.unit_number.toLowerCase().includes(leaseSearch.toLowerCase())) ||
+      (l.tenant_email && l.tenant_email.toLowerCase().includes(leaseSearch.toLowerCase()));
 
     const remainingFilterRaw = leaseRemainingDaysFilter.trim();
     let matchesRemainingDays = true;
@@ -1640,7 +1691,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   ).length;
 
   const expiringSoonLeases = leases.filter((l) => getLeaseLifecycle(l) === 'EXPIRING_SOON');
-  const activeLeasesCount = leases.filter((l) => getLeaseLifecycle(l) === 'ACTIVE').length;
+  const activeLeasesCount = leases.filter(
+    (l) => l.status === 'ACTIVE' || getLeaseLifecycle(l) === 'ACTIVE' || getLeaseLifecycle(l) === 'EXPIRING_SOON'
+  ).length;
 
   const unreadMessagesCount = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
 
@@ -1651,7 +1704,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       <aside className="hidden md:flex flex-col w-64 h-full bg-[#331A6F] text-white border-r border-purple-900/40 shrink-0 select-none">
         {/* Brand header - Minimalist and Clean */}
         <div className="p-6 pb-5 shrink-0 flex items-center gap-3 border-b border-purple-900/40">
-          <img src={whiteLogo} alt="Notify" className="h-12 w-auto object-contain" loading="eager" decoding="async" />
+          <BrandPicture
+            webp={BRAND_IMAGES.whiteLogo}
+            png={BRAND_IMAGES.whiteLogoPng}
+            alt="Notify"
+            className="h-12 w-auto object-contain"
+            loading="eager"
+            fetchPriority="high"
+          />
         </div>
 
         {/* Navbar tabs - Clean, modern, independently scrollable */}
@@ -1935,7 +1995,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       ========================================================================= */}
       <header className="md:hidden bg-[#331A6F] text-white px-4 py-3 flex items-center justify-between border-b border-purple-900/50 shrink-0 sticky top-0 z-30 shadow-xs">
         <div className="flex items-center gap-2.5">
-          <img src={whiteLogo} alt="Notify" className="h-8 w-auto object-contain" loading="eager" decoding="async" />
+          <BrandPicture
+            webp={BRAND_IMAGES.whiteLogo}
+            png={BRAND_IMAGES.whiteLogoPng}
+            alt="Notify"
+            className="h-8 w-auto object-contain"
+            loading="eager"
+            fetchPriority="high"
+          />
         </div>
         <div className="flex items-center gap-2">
           {/* Quick Messages Indicator */}
@@ -3453,24 +3520,26 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 </div>
 
                 {/* Automated Lease Expiry Engine Status Card */}
-                <div className="bg-gradient-to-r from-purple-900 to-[#331A6F] text-white p-5 rounded-xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="space-y-1">
+                <div className="bg-[#331A6F] text-white p-5 sm:p-6 rounded-xl shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-5 border border-[#331A6F]/20">
+                  <div className="space-y-1.5">
                     <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-amber-300" />
-                      <span className="font-bold text-sm text-amber-300">Phase 5 Automated Lease Expiry Reminder Engine</span>
+                      <div className="p-1.5 rounded-lg bg-white/10 flex items-center justify-center">
+                        <Clock className="w-4 h-4 text-white" />
+                      </div>
+                      <span className="font-bold text-sm text-white">Phase 5 Automated Lease Expiry Reminder Engine</span>
                     </div>
-                    <p className="text-xs text-purple-100 max-w-2xl leading-relaxed">
+                    <p className="text-xs text-white/80 max-w-2xl leading-relaxed">
                       Reminders are automatically evaluated for active leases at 30, 14, 7, 3, 2, 1 day(s) and on expiration day. Notifications and email dispatches are generated without manual entry.
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="bg-white/10 px-3 py-2 rounded-lg text-center backdrop-blur-xs">
-                      <div className="text-[10px] uppercase font-bold text-purple-200">Active Leases</div>
-                      <div className="text-base font-bold text-white">{activeLeasesCount}</div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="bg-white/10 border border-white/10 px-4 py-2.5 rounded-xl text-center">
+                      <div className="text-[10px] uppercase font-bold tracking-wider text-white/75">Active Leases</div>
+                      <div className="text-lg font-bold text-white mt-0.5">{activeLeasesCount}</div>
                     </div>
-                    <div className="bg-white/10 px-3 py-2 rounded-lg text-center backdrop-blur-xs">
-                      <div className="text-[10px] uppercase font-bold text-amber-300">Soon Ending ≤{SOON_ENDING_DAYS}D</div>
-                      <div className="text-base font-bold text-amber-300">{expiringSoonLeases.length}</div>
+                    <div className="bg-white/10 border border-white/10 px-4 py-2.5 rounded-xl text-center">
+                      <div className="text-[10px] uppercase font-bold tracking-wider text-amber-300">Soon Ending ≤{SOON_ENDING_DAYS}D</div>
+                      <div className="text-lg font-bold text-amber-300 mt-0.5">{expiringSoonLeases.length}</div>
                     </div>
                   </div>
                 </div>
@@ -3551,160 +3620,232 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {paginatedLeases.map((l) => {
-                          const timing = getLeaseTiming(l);
-                          const lifecycle = getLeaseLifecycle(l);
-                          const daysRemaining = timing.daysRemaining;
-
-                          return (
-                          <tr key={l.id} className="hover:bg-slate-50/60 transition-colors">
-                            <td className="py-4 px-4 font-mono text-[11px] text-slate-500">{l.id}</td>
-                            <td className="py-4 px-4 font-bold text-slate-900">{l.tenant_name || 'Test Tenant'}</td>
-                            <td className="py-4 px-4 font-medium text-slate-800">
-                              {l.property_name} ({l.unit_number})
-                            </td>
-                            <td className="py-4 px-4 font-semibold text-slate-900">
-                              RWF {(l.monthly_rent || 0).toLocaleString()}
-                              <span className="block text-[10px] text-slate-400 font-normal">
-                                Deposit: RWF {(l.security_deposit || 0).toLocaleString()}
-                              </span>
-                              {editingLateFeeLeaseId === l.id ? (
-                                <span className="mt-1 flex items-center gap-1">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    autoFocus
-                                    value={lateFeeDraft}
-                                    onChange={(e) => setLateFeeDraft(Number(e.target.value))}
-                                    className="w-20 px-1.5 py-0.5 text-[10px] font-normal border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-[#331A6F]/30"
-                                  />
-                                  <button
-                                    type="button"
-                                    disabled={isSavingLateFee}
-                                    onClick={() => handleSaveLateFee(l.id)}
-                                    className="p-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 cursor-pointer"
-                                    title="Save"
-                                  >
-                                    <Check className="w-3 h-3" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={isSavingLateFee}
-                                    onClick={() => setEditingLateFeeLeaseId(null)}
-                                    className="p-1 rounded bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-50 cursor-pointer"
-                                    title="Cancel"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
+                        {leasesLoading && leases.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="py-14 text-center">
+                              <div className="flex flex-col items-center justify-center gap-3">
+                                <RefreshCw className="w-6 h-6 text-[#331A6F] animate-spin" />
+                                <span className="text-xs font-semibold text-slate-600">
+                                  Loading lease agreements from database...
                                 </span>
-                              ) : (
-                                <span className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400 font-normal">
-                                  Late Fee: RWF {(l.late_fee || 0).toLocaleString()}
-                                  <button
-                                    type="button"
-                                    onClick={() => startEditingLateFee(l)}
-                                    className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
-                                    title="Edit late payment penalty"
-                                  >
-                                    <Edit className="w-3 h-3" />
-                                  </button>
-                                </span>
-                              )}
+                              </div>
                             </td>
-                            <td className="py-4 px-4 text-slate-700">
-                              <div>{l.start_date} → {l.end_date}</div>
-                            </td>
-                            <td className="py-4 px-4">
-                              {daysRemaining === null ? (
-                                <span className="text-[11px] font-medium text-slate-400">—</span>
-                              ) : daysRemaining < 0 ? (
-                                <span className="text-[11px] font-bold text-rose-700">
-                                  Expired {Math.abs(daysRemaining)} day{Math.abs(daysRemaining) === 1 ? '' : 's'} ago
-                                </span>
-                              ) : (
-                                <span
-                                  className={`text-[11px] font-bold ${
-                                    daysRemaining <= SOON_ENDING_DAYS ? 'text-amber-700' : 'text-slate-800'
-                                  }`}
-                                >
-                                  {daysRemaining} day{daysRemaining === 1 ? '' : 's'} remaining
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-4 px-4">
-                              {l.agreement_document || l.has_signed_document ? (
+                          </tr>
+                        ) : leasesError && leases.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="py-12 text-center">
+                              <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto px-4">
+                                <AlertCircle className="w-6 h-6 text-rose-600" />
+                                <span className="text-xs font-semibold text-rose-700">{leasesError}</span>
                                 <button
-                                  onClick={() => setSelectedLeaseForDocModal(l)}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-50 text-[#331A6F] border border-purple-200 text-[11px] font-bold hover:bg-purple-100 transition-colors cursor-pointer"
+                                  type="button"
+                                  onClick={() => fetchLeasesImmediate(false)}
+                                  className="mt-2 px-3 py-1.5 rounded-lg bg-[#331A6F] text-white text-xs font-semibold hover:bg-[#251352] cursor-pointer"
                                 >
-                                  <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
-                                  <span>v{l.agreement_document?.version || 1} Document</span>
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => setSelectedLeaseForDocModal(l)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold hover:bg-amber-100 transition-colors cursor-pointer"
-                                >
-                                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                                  <span>Upload Document</span>
-                                </button>
-                              )}
-                            </td>
-                            <td className="py-4 px-4">
-                              <span
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                                  lifecycle === 'ACTIVE'
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : lifecycle === 'EXPIRING_SOON'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : lifecycle === 'DRAFT'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : lifecycle === 'PENDING'
-                                    ? 'bg-indigo-100 text-indigo-800'
-                                    : 'bg-rose-100 text-rose-800'
-                                }`}
-                              >
-                                {leaseLifecycleLabel(lifecycle)}
-                              </span>
-                            </td>
-                            <td className="py-4 px-4 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <button
-                                  onClick={() => setPreviewLeaseId(l.id)}
-                                  className="px-2.5 py-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-[#331A6F] text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
-                                  title="View / Preview the formatted lease document"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>View</span>
-                                </button>
-                                <button
-                                  onClick={() => setSelectedLeaseForDocModal(l)}
-                                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer"
-                                  title="View Agreement & Document History"
-                                >
-                                  Document
-                                </button>
-                                {l.status === 'DRAFT' && (
-                                  <button
-                                    onClick={() => handleActivateDraftLease(l)}
-                                    disabled={activatingLeaseId === l.id}
-                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    {activatingLeaseId === l.id ? 'Activating...' : 'Activate'}
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleEndTenancy(l.tenancy_id)}
-                                  disabled={endingTenancyId === l.tenancy_id}
-                                  className="px-2.5 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-700 text-[11px] font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                  {endingTenancyId === l.tenancy_id ? 'Ending...' : 'Terminate'}
+                                  Retry Fetching Leases
                                 </button>
                               </div>
                             </td>
                           </tr>
-                          );
-                        })}
+                        ) : filteredLeases.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="py-16 text-center">
+                              {leases.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center max-w-md mx-auto text-center px-4">
+                                  <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center mb-3">
+                                    <FileText className="w-6 h-6 text-[#331A6F]" />
+                                  </div>
+                                  <h3 className="text-base font-bold text-slate-900 mb-1">No Lease Agreements Found</h3>
+                                  <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+                                    You don't have any lease agreements registered in your portfolio yet. Create your first agreement to track terms, automated reminders, and documents.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowCreateLeaseModal(true)}
+                                    className="bg-[#331A6F] hover:bg-[#251352] text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                    <span>Create First Lease Agreement</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center justify-center max-w-sm mx-auto px-4">
+                                  <Filter className="w-6 h-6 text-slate-400 mb-2" />
+                                  <p className="text-sm font-semibold text-slate-700">No leases match your active filters</p>
+                                  <p className="text-xs text-slate-400 mt-1 mb-3">Try adjusting your search query or status filter.</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setLeaseSearch('');
+                                      setLeaseStatusFilter('ALL');
+                                      setLeaseRemainingDaysFilter('');
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                                  >
+                                    Clear Filters
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedLeases.map((l) => {
+                            const timing = getLeaseTiming(l);
+                            const lifecycle = getLeaseLifecycle(l);
+                            const daysRemaining = timing.daysRemaining;
+
+                            return (
+                              <tr key={l.id} className="hover:bg-slate-50/60 transition-colors">
+                                <td className="py-4 px-4 font-mono text-[11px] text-slate-500">{l.id}</td>
+                                <td className="py-4 px-4 font-bold text-slate-900">
+                                  {l.tenant_name || l.tenant_email || (l.tenant_id ? `Tenant (${String(l.tenant_id).slice(0, 8)})` : 'Unassigned Tenant')}
+                                </td>
+                                <td className="py-4 px-4 font-medium text-slate-800">
+                                  {l.property_name || 'Property'} {l.unit_number ? `(${l.unit_number})` : ''}
+                                </td>
+                                <td className="py-4 px-4 font-semibold text-slate-900">
+                                  RWF {(l.monthly_rent || 0).toLocaleString()}
+                                  <span className="block text-[10px] text-slate-400 font-normal">
+                                    Deposit: RWF {(l.security_deposit || 0).toLocaleString()}
+                                  </span>
+                                  {editingLateFeeLeaseId === l.id ? (
+                                    <span className="mt-1 flex items-center gap-1">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        autoFocus
+                                        value={lateFeeDraft}
+                                        onChange={(e) => setLateFeeDraft(Number(e.target.value))}
+                                        className="w-20 px-1.5 py-0.5 text-[10px] font-normal border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-[#331A6F]/30"
+                                      />
+                                      <button
+                                        type="button"
+                                        disabled={isSavingLateFee}
+                                        onClick={() => handleSaveLateFee(l.id)}
+                                        className="p-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 cursor-pointer"
+                                        title="Save"
+                                      >
+                                        <Check className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={isSavingLateFee}
+                                        onClick={() => setEditingLateFeeLeaseId(null)}
+                                        className="p-1 rounded bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-50 cursor-pointer"
+                                        title="Cancel"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </span>
+                                  ) : (
+                                    <span className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400 font-normal">
+                                      Late Fee: RWF {(l.late_fee || 0).toLocaleString()}
+                                      <button
+                                        type="button"
+                                        onClick={() => startEditingLateFee(l)}
+                                        className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
+                                        title="Edit late payment penalty"
+                                      >
+                                        <Edit className="w-3 h-3" />
+                                      </button>
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-4 px-4 text-slate-700">
+                                  <div>{l.start_date} → {l.end_date}</div>
+                                </td>
+                                <td className="py-4 px-4">
+                                  {daysRemaining === null ? (
+                                    <span className="text-[11px] font-medium text-slate-400">—</span>
+                                  ) : daysRemaining < 0 ? (
+                                    <span className="text-[11px] font-bold text-rose-700">
+                                      Expired {Math.abs(daysRemaining)} day{Math.abs(daysRemaining) === 1 ? '' : 's'} ago
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={`text-[11px] font-bold ${
+                                        daysRemaining <= SOON_ENDING_DAYS ? 'text-amber-700' : 'text-slate-800'
+                                      }`}
+                                    >
+                                      {daysRemaining} day{daysRemaining === 1 ? '' : 's'} remaining
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-4 px-4">
+                                  {l.agreement_document || l.has_signed_document ? (
+                                    <button
+                                      onClick={() => setSelectedLeaseForDocModal(l)}
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-50 text-[#331A6F] border border-purple-200 text-[11px] font-bold hover:bg-purple-100 transition-colors cursor-pointer"
+                                    >
+                                      <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                      <span>v{l.agreement_document?.version || 1} Document</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => setSelectedLeaseForDocModal(l)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold hover:bg-amber-100 transition-colors cursor-pointer"
+                                    >
+                                      <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                                      <span>Upload Document</span>
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="py-4 px-4">
+                                  <span
+                                    className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
+                                      lifecycle === 'ACTIVE'
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : lifecycle === 'EXPIRING_SOON'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : lifecycle === 'DRAFT'
+                                        ? 'bg-blue-100 text-blue-800'
+                                        : lifecycle === 'PENDING'
+                                        ? 'bg-indigo-100 text-indigo-800'
+                                        : 'bg-rose-100 text-rose-800'
+                                    }`}
+                                  >
+                                    {leaseLifecycleLabel(lifecycle)}
+                                  </span>
+                                </td>
+                                <td className="py-4 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button
+                                      onClick={() => setPreviewLeaseId(l.id)}
+                                      className="px-2.5 py-1.5 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-[#331A6F] text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                                      title="View / Preview the formatted lease document"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>View</span>
+                                    </button>
+                                    <button
+                                      onClick={() => setSelectedLeaseForDocModal(l)}
+                                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer"
+                                      title="View Agreement & Document History"
+                                    >
+                                      Document
+                                    </button>
+                                    {l.status === 'DRAFT' && (
+                                      <button
+                                        onClick={() => handleActivateDraftLease(l)}
+                                        disabled={activatingLeaseId === l.id}
+                                        className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        {activatingLeaseId === l.id ? 'Activating...' : 'Activate'}
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleEndTenancy(l.tenancy_id)}
+                                      disabled={endingTenancyId === l.tenancy_id}
+                                      className="px-2.5 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-700 text-[11px] font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      {endingTenancyId === l.tenancy_id ? 'Ending...' : 'Terminate'}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                   </div>

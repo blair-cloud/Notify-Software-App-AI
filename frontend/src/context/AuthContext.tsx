@@ -369,7 +369,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const cleanEmail = email.trim().toLowerCase();
       try {
         // First try backend password-reset endpoint (sends branded Notify email with direct production domain)
-        const res = await api.post<{ message: string }>('/auth/forgot-password', { email: cleanEmail });
+        const res = await api.auth.forgotPassword(cleanEmail);
         return res;
       } catch (err) {
         console.warn('Backend forgot-password endpoint unavailable, falling back to Supabase auth client:', err);

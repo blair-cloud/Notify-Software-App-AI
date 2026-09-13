@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabase';
-import notifyLogo from '../assets/images/logo.png';
+import { BRAND_IMAGES, BrandPicture } from '../constants/brandImages';
 
 type State = 'CHECKING' | 'CONFIRMED' | 'FAILED';
 
@@ -83,7 +83,14 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({ onGoToSignIn, 
   return (
     <div className="min-h-screen bg-notify-grid text-black font-sans flex flex-col items-center justify-center px-4 py-10">
       <button onClick={onGoHome} className="mb-6 cursor-pointer" aria-label="Notify home">
-        <img src={notifyLogo} alt="Notify" className="h-10 w-auto object-contain" loading="eager" decoding="async" />
+        <BrandPicture
+          webp={BRAND_IMAGES.logo}
+          png={BRAND_IMAGES.logoPng}
+          alt="Notify"
+          className="h-10 w-auto object-contain"
+          loading="eager"
+          fetchPriority="high"
+        />
       </button>
 
       <div className="w-full max-w-md bg-white rounded-[20px] border-2 border-black shadow-[2px_2px_0_#000000] p-6 sm:p-8">

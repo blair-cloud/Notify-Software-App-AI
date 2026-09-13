@@ -30,7 +30,7 @@ import {
   ChevronRight,
   Check
 } from 'lucide-react';
-import whiteLogo from '../assets/images/white_logo.png';
+import { BRAND_IMAGES, BrandPicture } from '../constants/brandImages';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
@@ -491,7 +491,14 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
         {/* Logo & Portal Badge */}
         <div className="p-4 lg:p-6 pb-3 lg:pb-4 shrink-0 border-b border-purple-800/30">
           <div className="flex items-center gap-3">
-            <img src={whiteLogo} alt="Notify" className="h-12 w-auto object-contain" loading="eager" decoding="async" />
+            <BrandPicture
+              webp={BRAND_IMAGES.whiteLogo}
+              png={BRAND_IMAGES.whiteLogoPng}
+              alt="Notify"
+              className="h-12 w-auto object-contain"
+              loading="eager"
+              fetchPriority="high"
+            />
           </div>
         </div>
 
@@ -594,7 +601,14 @@ export const TenantDashboardPage: React.FC<TenantDashboardPageProps> = ({ onLogo
       {/* Mobile Top App Bar - Clean, modern, minimalist */}
       <header className="md:hidden bg-[#331A6F] text-white px-4 py-3 flex items-center justify-between border-b border-purple-800/40 shrink-0 sticky top-0 z-30 shadow-xs">
         <div className="flex items-center gap-2.5">
-          <img src={whiteLogo} alt="Notify" className="h-8 w-auto object-contain" loading="eager" decoding="async" />
+          <BrandPicture
+            webp={BRAND_IMAGES.whiteLogo}
+            png={BRAND_IMAGES.whiteLogoPng}
+            alt="Notify"
+            className="h-8 w-auto object-contain"
+            loading="eager"
+            fetchPriority="high"
+          />
         </div>
 
         <div className="flex items-center gap-2">

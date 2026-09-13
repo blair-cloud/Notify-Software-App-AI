@@ -18,7 +18,7 @@ import {
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { isMockAuthDisabled } from '../utils/mockAuth';
-import notifyLogo from '../assets/images/logo.png';
+import { BRAND_IMAGES, BrandPicture } from '../constants/brandImages';
 
 interface GetStartedPageProps {
   onGoHome: () => void;
@@ -32,7 +32,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
   onAcceptInviteClick,
 }) => {
   const { t, language, setLanguage } = useLanguage();
-  const { login, mockLogin, registerLandlord, error: authError, clearError } = useAuth();
+  const { login, registerLandlord, error: authError, clearError } = useAuth();
 
   // Selected flow role
   const [selectedRole, setSelectedRole] = useState<SelectedRole>(null);
@@ -265,12 +265,13 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
             className="flex items-center gap-3 group text-left cursor-pointer focus:outline-none"
             aria-label="Return Home"
           >
-            <img
-              src={notifyLogo}
+            <BrandPicture
+              webp={BRAND_IMAGES.logo}
+              png={BRAND_IMAGES.logoPng}
               alt="Notify"
               className="h-12 sm:h-14 w-auto object-contain transition-transform duration-150 group-hover:scale-105"
               loading="eager"
-              decoding="async"
+              fetchPriority="high"
             />
           </button>
 
@@ -810,7 +811,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => mockLogin('SYSTEM_ADMIN')}
+                      onClick={() => {/* demo mode removed */}}
                       className="p-3 rounded-xl bg-black text-white text-xs font-black border-2 border-black hover:bg-slate-800 transition-all flex flex-col items-center gap-1 cursor-pointer shadow-xs group"
                     >
                       <ShieldCheck className="w-4 h-4 text-red-400 group-hover:scale-110 transition-transform" />
@@ -820,7 +821,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => mockLogin('LANDLORD')}
+                      onClick={() => {/* demo mode removed */}}
                       className="p-3 rounded-xl bg-[#331A6F] text-white text-xs font-black border-2 border-[#331A6F] hover:bg-[#281458] transition-all flex flex-col items-center gap-1 cursor-pointer shadow-xs group"
                     >
                       <Building className="w-4 h-4 text-amber-300 group-hover:scale-110 transition-transform" />
@@ -830,7 +831,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => mockLogin('TENANT')}
+                      onClick={() => {/* demo mode removed */}}
                       className="p-3 rounded-xl bg-emerald-700 text-white text-xs font-black border-2 border-emerald-800 hover:bg-emerald-800 transition-all flex flex-col items-center gap-1 cursor-pointer shadow-xs group"
                     >
                       <User className="w-4 h-4 text-emerald-200 group-hover:scale-110 transition-transform" />

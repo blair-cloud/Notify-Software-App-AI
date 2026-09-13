@@ -70,7 +70,20 @@ class LeaseService:
 
     async def list_all_leases(self) -> Sequence[Lease]:
         """Every lease on the platform. System-admin views only."""
-        res = await self.db.execute(select(Lease).order_by(Lease.created_at.desc()))
+        from sqlalchemy.orm import selectinload
+        stmt = (
+            select(Lease)
+            .options(
+                selectinload(Lease.documents),
+                selectinload(Lease.tenancy),
+                selectinload(Lease.property),
+                selectinload(Lease.unit),
+                selectinload(Lease.tenant),
+                selectinload(Lease.landlord),
+            )
+            .order_by(Lease.created_at.desc())
+        )
+        res = await self.db.execute(stmt)
         leases = list(res.scalars().all())
         for lease in leases:
             new_status = self.calculate_lease_status(lease.start_date, lease.end_date, lease.status)

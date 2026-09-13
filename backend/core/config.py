@@ -53,7 +53,13 @@ class Settings(BaseSettings):
     # break the API from the browser.
     KNOWN_FRONTEND_ORIGINS: str = (
         "https://notifyappo.web.app,"
-        "https://notify-c2d43.web.app"
+        "https://notify-c2d43.web.app,"
+        "http://localhost:3000,"
+        "http://localhost:5173,"
+        "http://127.0.0.1:3000,"
+        "http://127.0.0.1:5173,"
+        "http://localhost:4173,"
+        "http://127.0.0.1:4173"
     )
 
     # Single-use email links.

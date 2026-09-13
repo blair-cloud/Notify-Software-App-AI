@@ -1,4 +1,5 @@
 import sys
+import re
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -149,6 +150,7 @@ _use_wildcard = not _configured_origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if _use_wildcard else _cors_allow_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$" if not _use_wildcard else None,
     allow_credentials=not _use_wildcard,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -168,7 +170,7 @@ def _cors_headers_for(request: Request) -> dict:
             "Access-Control-Allow-Headers": "*",
             "Access-Control-Allow-Methods": "*",
         }
-    if origin and origin in _cors_allow_origins:
+    if origin and (origin in _cors_allow_origins or re.match(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$", origin)):
         return {
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true",

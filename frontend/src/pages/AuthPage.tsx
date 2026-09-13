@@ -23,8 +23,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
 import { supabase } from "../services/supabase";
-import notifyLogo from "../assets/images/logo.png";
-import cartoonImage from "../assets/images/cartoon.png";
+import { BRAND_IMAGES, BrandPicture } from "../constants/brandImages";
 
 export type AuthMode =
   | "LOGIN"
@@ -479,12 +478,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </button>
 
           <div className="flex items-center">
-            <img
-              src={notifyLogo}
+            <BrandPicture
+              webp={BRAND_IMAGES.logo}
+              png={BRAND_IMAGES.logoPng}
               alt="Notify"
               className="h-10 w-auto object-contain transition-transform duration-150 hover:scale-105"
               loading="eager"
-              decoding="async"
+              fetchPriority="high"
             />
           </div>
         </div>
@@ -1185,12 +1185,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           {/* ===================== RIGHT SIDE: CARTOON MASCOT ===================== */}
           {!isCheckEmail && (
             <div className="hidden lg:flex flex-col order-2 items-center justify-center py-4 sm:py-8">
-              <img
-                src={cartoonImage}
+              <BrandPicture
+                webp={BRAND_IMAGES.cartoon}
+                png={BRAND_IMAGES.cartoonPng}
                 alt="Notify Mascot"
                 className="w-full max-w-sm sm:max-w-md lg:max-w-[480px] h-auto object-contain filter drop-shadow-[0_20px_40px_rgba(51,26,111,0.18)] transition-transform duration-300 hover:scale-105"
                 loading="eager"
-                decoding="async"
               />
             </div>
           )}

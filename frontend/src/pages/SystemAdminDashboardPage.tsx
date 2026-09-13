@@ -225,14 +225,13 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
                 <AdminLandlordsTab
                   landlords={landlords}
                   onRefresh={refreshAllData}
-                  onNavigateToProperties={() => handleNavigate('properties')}
+                  onNavigateToProperty={() => handleNavigate('properties')}
                 />
               )}
 
               {activeTab === 'tenants' && (
                 <AdminTenantsTab
                   tenants={tenants}
-                  properties={properties}
                   onRefresh={refreshAllData}
                 />
               )}

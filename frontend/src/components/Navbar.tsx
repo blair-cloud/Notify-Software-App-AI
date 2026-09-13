@@ -3,7 +3,7 @@ import { Menu, X, ArrowRight, Building, Sparkles, Building2, User, LogOut } from
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { LanguageSelector } from './LanguageSelector';
-import notifyLogo from '../assets/images/logo.png';
+import { BRAND_IMAGES, BrandPicture } from '../constants/brandImages';
 
 interface NavbarProps {
   onOpenGetStarted: (source?: string, mode?: 'LOGIN' | 'SIGNUP') => void;
@@ -86,12 +86,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             aria-label="Notify — Official Rental & Property Management System Rwanda"
             title="Notify — Official Rental & Property Management System Rwanda"
           >
-            <img
-              src={notifyLogo}
+            <BrandPicture
+              webp={BRAND_IMAGES.logo}
+              png={BRAND_IMAGES.logoPng}
               alt="Notify"
               className="h-14 sm:h-16 w-auto object-contain transition-transform duration-150 group-hover:scale-105"
               loading="eager"
-              decoding="async"
+              fetchPriority="high"
             />
 
           </a>

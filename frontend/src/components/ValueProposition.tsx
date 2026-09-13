@@ -2,8 +2,7 @@ import React from 'react';
 import { FeatureCard } from './FeatureCard';
 import { FeatureItem } from '../types';
 import { useLanguage } from '../context/LanguageContext';
-import cyberLogo from '../assets/images/cyber.png';
-import rdbLogo from '../assets/images/RDB.png';
+import { BRAND_IMAGES, BrandPicture } from '../constants/brandImages';
 
 interface ValuePropositionProps {
   onSelectFeature?: (featureKey: string) => void;
@@ -72,19 +71,26 @@ export const ValueProposition: React.FC<ValuePropositionProps> = ({ onSelectFeat
           {t.certifiedBy}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-10 sm:gap-16">
-          <img
-            src={cyberLogo}
+          <BrandPicture
+            webp={BRAND_IMAGES.cyber}
+            png={BRAND_IMAGES.cyberPng}
             alt="Cyber security certification"
             className="h-24 sm:h-28 w-auto object-contain"
             loading="lazy"
-            decoding="async"
           />
-          <img
-            src={rdbLogo}
+          <BrandPicture
+            webp={BRAND_IMAGES.rwandadpo}
+            png={BRAND_IMAGES.rwandadpoPng}
+            alt="Rwanda Data Protection Office certification"
+            className="h-24 sm:h-28 w-auto object-contain"
+            loading="lazy"
+          />
+          <BrandPicture
+            webp={BRAND_IMAGES.rdb}
+            png={BRAND_IMAGES.rdbPng}
             alt="Rwanda Development Board (RDB)"
             className="h-24 sm:h-28 w-auto object-contain"
             loading="lazy"
-            decoding="async"
           />
         </div>
       </div>

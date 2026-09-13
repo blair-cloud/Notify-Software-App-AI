@@ -29,6 +29,16 @@ import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 import { Property, Unit, NotificationPreference } from '../types';
 
+/** Extends the backend preference shape with UI-only per-day reminder toggles. */
+type LandlordNotifPrefs = NotificationPreference & {
+  reminder_30d: boolean;
+  reminder_14d: boolean;
+  reminder_7d: boolean;
+  reminder_3d: boolean;
+  reminder_1d: boolean;
+  reminder_0d: boolean;
+};
+
 interface LandlordAccountTabProps {
   properties: Property[];
   units: Unit[];
@@ -72,7 +82,7 @@ export const LandlordAccountTab: React.FC<LandlordAccountTabProps> = ({
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
   // Notifications state
-  const [notifPrefs, setNotifPrefs] = useState<NotificationPreference>({
+  const [notifPrefs, setNotifPrefs] = useState<LandlordNotifPrefs>({
     lease_expiry_in_app: true,
     lease_expiry_email: true,
     lease_expiry_sms: false,
@@ -85,6 +95,14 @@ export const LandlordAccountTab: React.FC<LandlordAccountTabProps> = ({
     maintenance_email: true,
     maintenance_sms: false,
     maintenance_whatsapp: false,
+    complaints_in_app: true,
+    complaints_email: true,
+    complaints_sms: false,
+    complaints_whatsapp: false,
+    system_in_app: true,
+    system_email: false,
+    system_sms: false,
+    system_whatsapp: false,
     reminder_30d: true,
     reminder_14d: true,
     reminder_7d: true,

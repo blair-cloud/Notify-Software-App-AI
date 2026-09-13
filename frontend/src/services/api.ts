@@ -235,6 +235,12 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
+
+    forgotPassword: (email: string) =>
+      request<{ message: string }>('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      }),
   },
 
   // Landlord Dashboard Stats

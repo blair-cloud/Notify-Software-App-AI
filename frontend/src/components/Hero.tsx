@@ -1,15 +1,13 @@
 import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import notifyLandingImage from '../assets/images/Notify landing (2).png';
-import playstoreImage from '../assets/images/Playstore.png';
-import appStoreImage from '../assets/images/App store.png';
+import { BRAND_IMAGES, BrandPicture } from '../constants/brandImages';
 
 interface HeroProps {
   onOpenGetStarted: (source?: string) => void;
   onExploreNotify: () => void;
 }
 
-export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted, onExploreNotify }) => {
+export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted }) => {
   const { t } = useLanguage();
 
   return (
@@ -18,26 +16,19 @@ export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted, onExploreNotify })
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
           {/* Left Column */}
           <div className="lg:col-span-5 text-left">
-            {/* Large Hero Headline */}
             <h1 className="text-4xl sm:text-6xl lg:text-[58px] leading-[1.05] font-black text-black tracking-tight mb-6">
               {t.heroTitle1}<span className="text-[#331A6F]">{t.heroTitle2}</span>
             </h1>
 
-            {/* Supporting Copy */}
             <p className="text-base sm:text-xl text-black font-normal leading-relaxed mb-6 max-w-xl">
               {t.heroSubtitle}
             </p>
 
-            {/* Direct Hero CTA buttons */}
-
-
-            {/* Download Notify App Area */}
             <div className="pt-2">
               <div className="text-xs font-black uppercase tracking-wider text-[#331A6F] mb-4">
                 {t.downloadApp}
               </div>
               <div className="flex flex-wrap items-center gap-5 sm:gap-6">
-                {/* Microsoft Web */}
                 <a
                   href="#"
                   onClick={(e) => {
@@ -56,7 +47,6 @@ export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted, onExploreNotify })
                   </svg>
                 </a>
 
-                {/* Google Play Store */}
                 <a
                   href="#"
                   onClick={(e) => {
@@ -66,10 +56,15 @@ export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted, onExploreNotify })
                   className="cursor-pointer inline-block"
                   aria-label="Get it on Google Play"
                 >
-                  <img src={playstoreImage} alt="Get it on Google Play" className="h-14 w-auto object-contain" loading="lazy" decoding="async" />
+                  <BrandPicture
+                    webp={BRAND_IMAGES.playstore}
+                    png={BRAND_IMAGES.playstorePng}
+                    alt="Get it on Google Play"
+                    className="h-14 w-auto object-contain"
+                    loading="lazy"
+                  />
                 </a>
 
-                {/* Apple App Store */}
                 <a
                   href="#"
                   onClick={(e) => {
@@ -79,21 +74,27 @@ export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted, onExploreNotify })
                   className="cursor-pointer inline-block"
                   aria-label="Download on the App Store"
                 >
-                  <img src={appStoreImage} alt="Download on the App Store" className="h-14 w-auto object-contain" loading="lazy" decoding="async" />
+                  <BrandPicture
+                    webp={BRAND_IMAGES.appStore}
+                    png={BRAND_IMAGES.appStorePng}
+                    alt="Download on the App Store"
+                    className="h-14 w-auto object-contain"
+                    loading="lazy"
+                  />
                 </a>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Notify Landing Mockup */}
           <div className="lg:col-span-7 relative flex items-center justify-center">
             <div className="relative w-full transition-all duration-300 hover:scale-[1.02] lg:scale-110 xl:scale-115 transform-gpu origin-center">
-              <img
-                src={notifyLandingImage}
+              <BrandPicture
+                webp={BRAND_IMAGES.landing}
+                png={BRAND_IMAGES.landingPng}
                 alt="Notify — Commercial Rental & Property Management Software Rwanda"
                 className="w-full h-auto object-contain filter drop-shadow-[0_25px_45px_rgba(51,26,111,0.22)]"
                 loading="eager"
-                decoding="async"
+                fetchPriority="high"
               />
             </div>
           </div>
@@ -102,4 +103,3 @@ export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted, onExploreNotify })
     </section>
   );
 };
-

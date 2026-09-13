@@ -156,7 +156,7 @@ function ProtectedRoute({
   // Wait for the session to restore before deciding - otherwise a refresh on a
   // dashboard URL would bounce the user to sign-in every time.
   if (isLoading) {
-    return <TriangularPreloader variant="fullscreen" />;
+    return <TriangularPreloader />;
   }
 
   if (!user) {

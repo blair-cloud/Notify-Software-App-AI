@@ -59,7 +59,7 @@ export const LandlordPaymentsTab: React.FC<LandlordPaymentsTabProps> = ({
     (p) => p.status === 'AWAITING_VERIFICATION' || p.status === 'PENDING'
   );
   const verifiedPayments = payments.filter((p) => p.status === 'COMPLETED');
-  const rejectedPayments = payments.filter((p) => p.status === 'FAILED' || p.status === 'REJECTED');
+  const rejectedPayments = payments.filter((p) => p.status === 'FAILED' || p.status === 'CANCELLED');
 
   const totalCollected = verifiedPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
   const totalPendingAmount = pendingPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
