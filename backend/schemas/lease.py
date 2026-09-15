@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, AliasChoices
 from typing import Optional, List
 from datetime import datetime, date
 import uuid
@@ -61,7 +61,7 @@ class LeaseDocumentVersionResponse(BaseModel):
     file_type: str
     file_size: int
     storage_path: str
-    file_data: Optional[str] = None
+    file_data: Optional[str] = Field(default=None, validation_alias=AliasChoices("safe_file_data", "file_data"))
     uploaded_by: Optional[str] = None
     uploaded_by_role: Optional[str] = None
     uploaded_at: datetime

@@ -39,3 +39,10 @@ class LeaseDocument(Base):
     @property
     def history(self):
         return list(self.lease.documents) if self.lease else [self]
+
+    @property
+    def safe_file_data(self) -> str | None:
+        from sqlalchemy.orm.attributes import instance_state
+        if 'file_data' in instance_state(self).unloaded:
+            return None
+        return self.file_data
