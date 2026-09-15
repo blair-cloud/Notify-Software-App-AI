@@ -16,7 +16,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenGetStarted }) => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
           {/* Left Column */}
           <div className="lg:col-span-5 text-left">
-            <h1 className="text-4xl sm:text-6xl lg:text-[58px] leading-[1.05] font-black text-black tracking-tight mb-6">
+            <h1 className="text-3xl sm:text-5xl lg:text-[50px] leading-[1.08] font-black text-black tracking-tight mb-6">
               {t.heroTitle1}<span className="text-[#331A6F]">{t.heroTitle2}</span>
             </h1>
 

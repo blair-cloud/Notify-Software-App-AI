@@ -123,7 +123,7 @@ export const CollectRentPage: React.FC<CollectRentPageProps> = () => {
   };
 
   return (
-    <div className="min-h-screen bg-notify-grid text-black pb-24 font-sans">
+    <div className="min-h-screen bg-notify-grid text-black pb-24 font-roboto">
       <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-36 sm:pt-40 space-y-8">
         {/* Title */}
         <div>

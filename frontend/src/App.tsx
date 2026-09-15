@@ -193,7 +193,7 @@ function ProtectedRoute({
 /** The public marketing shell (landing page and the informational pages). */
 function PublicLayout({ children }: { children?: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-notify-grid text-black font-sans selection:bg-[#331A6F] selection:text-white flex flex-col justify-between">
+    <div className="min-h-screen bg-notify-grid text-black font-roboto selection:bg-[#331A6F] selection:text-white flex flex-col justify-between">
       <div className="flex-1">{children}</div>
       <Footer />
     </div>
