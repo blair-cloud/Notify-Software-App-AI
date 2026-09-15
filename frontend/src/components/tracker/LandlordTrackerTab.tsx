@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Upload,
+  Upload, Moon, Sun,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -51,6 +51,7 @@ import {
   Invoice
 } from '../../types';
 import { api } from '../../services/api';
+import StatementPDFViewer from './StatementPDFViewer';
 
 interface LandlordTrackerTabProps {
   properties: Property[];
@@ -121,7 +122,9 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
   });
 
   // Statement Upload State
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | Blob | null>(null);
+  const [isDarkDocumentMode, setIsDarkDocumentMode] = useState<boolean>(true);
+  const [isLoadingDocument, setIsLoadingDocument] = useState<boolean>(false);
   const [statementFileName, setStatementFileName] = useState<string>('');
   const [statementContent, setStatementContent] = useState<string>('');
   const [statementAnalysisResult, setStatementAnalysisResult] = useState<any | null>(null);
@@ -136,6 +139,7 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [reportStatusFilter, setReportStatusFilter] = useState<string>('ALL');
   const [reportSearchQuery, setReportSearchQuery] = useState<string>('');
+  const [bankSearchQuery, setBankSearchQuery] = useState<string>('');
   const [reviewTab, setReviewTab] = useState<'AUTO' | 'REVIEW' | 'UNMATCHED' | 'ALL'>('REVIEW');
   const [selectedCandidateOverrides, setSelectedCandidateOverrides] = useState<Record<string, string>>({});
 
@@ -520,6 +524,25 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
   };
 
   // Restart / Reset Tracker
+
+  // Auto-fetch the file blob if we are in REPORT step, have a statement result, but no local file
+  useEffect(() => {
+    if (currentStep === 'STEP_REPORT' && statementAnalysisResult?.statement_id && !selectedFile && !isLoadingDocument) {
+      const fetchFile = async () => {
+        setIsLoadingDocument(true);
+        try {
+          const blob = await api.tracker.downloadStatement(statementAnalysisResult.statement_id);
+          setSelectedFile(blob);
+        } catch (err) {
+          console.error("Could not download original statement:", err);
+        } finally {
+          setIsLoadingDocument(false);
+        }
+      };
+      fetchFile();
+    }
+  }, [currentStep, statementAnalysisResult, selectedFile, isLoadingDocument]);
+
   const handleStartNewTracking = () => {
     setSelectedFile(null);
     setStatementFileName('');
@@ -790,6 +813,20 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
       return true;
     });
   }, [reportData, reportStatusFilter, reportSearchQuery]);
+
+  // Derived: Bank Transactions Search for the Document Viewer Overlay
+  const displayedBankTransactions = useMemo(() => {
+    const rows = statementAnalysisResult?.transactions || [];
+    if (!bankSearchQuery.trim()) return rows;
+    const q = bankSearchQuery.toLowerCase();
+    return rows.filter((r: any) =>
+      r.description?.toLowerCase().includes(q) ||
+      r.payer_name?.toLowerCase().includes(q) ||
+      r.transaction_reference?.toLowerCase().includes(q) ||
+      String(r.amount).includes(q)
+    );
+  }, [statementAnalysisResult, bankSearchQuery]);
+
 
   // Render Status Badge
   const renderStatusBadge = (status: TrackerPaymentStatus) => {
@@ -1429,1026 +1466,211 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
           SCREEN 5: PAYMENT TRACKING REPORT
       ========================================================================= */}
       {currentStep === 'STEP_REPORT' && (
-        <div className="space-y-6">
-          {/* Top Report Header Banner */}
-          <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
-            <div className="space-y-1">
-              <span className="text-xs font-bold text-[#331a6f] uppercase tracking-wider">
-                Payment Tracking Report
-              </span>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                {selectedProperty.name}
-              </h1>
-              <p className="text-sm text-slate-500 font-medium">{dateRangeDisplay.range}</p>
+        <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col h-screen overflow-hidden">
+          {/* TOP BANNER */}
+          <div className="bg-white border-b border-slate-200 p-4 shrink-0 flex items-center justify-between shadow-xs z-10">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-[#331a6f] text-white flex items-center justify-center">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h1 className="text-base font-black text-slate-900 tracking-tight">AI Document Understanding & Reconciler</h1>
+                <div className="text-[10px] font-medium text-slate-500 flex items-center gap-2 mt-0.5">
+                  <span className="text-[#331a6f] font-bold">AI found {statementAnalysisResult?.total_transactions || 0} transactions</span>
+                  <span>•</span>
+                  <span>Deterministic Validation • Human in the Loop</span>
+                </div>
+              </div>
             </div>
-
-            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-              {/* Download CSV Action */}
-              <button
-                onClick={handleDownloadCsv}
-                className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
-                title="Export tracking results as a CSV spreadsheet"
-              >
-                <Download className="w-4 h-4 text-slate-600" />
-                <span>Download CSV</span>
-              </button>
-
-              {/* Remind Unpaid Tenants Bulk Action */}
-              {unpaidTenantsList.length > 0 && (
-                <button
-                  onClick={() => setIsBulkRemindModalOpen(true)}
-                  className="px-4 py-2.5 rounded-xl bg-[#331a6f] hover:bg-[#251352] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
-                  title="Send rent reminders to all unpaid tenants"
-                >
-                  <Bell className="w-4 h-4 text-white" />
-                  <span>Remind Unpaid Tenants ({unpaidTenantsList.length})</span>
-                </button>
-              )}
-
-              {/* Start New Tracking */}
+            
+            <div className="flex items-center gap-3">
               <button
                 onClick={handleStartNewTracking}
-                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
-                title="Reset wizard and start a new tracking cycle"
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
               >
-                <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                <RefreshCw className="w-3.5 h-3.5" />
                 <span>Start New Tracking</span>
               </button>
             </div>
           </div>
 
-          {/* Key Summary Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Total Expected */}
-            <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs space-y-1">
-              <span className="text-xs font-bold text-slate-500 uppercase">Total Expected</span>
-              <div className="text-xl font-black text-slate-900">
-                {reportData?.summary?.total_expected_amount != null
-                  ? `RWF ${reportData.summary.total_expected_amount.toLocaleString()}`
-                  : 'Not available'}
-              </div>
-              <p className="text-xs text-slate-500">
-                {reportData?.summary?.total_expected_tenants != null
-                  ? `${reportData.summary.total_expected_tenants} tenants scheduled`
-                  : 'Not available'}
-              </p>
-            </div>
-
-            {/* Total Received */}
-            <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs space-y-1">
-              <span className="text-xs font-bold text-emerald-700 uppercase">Total Received</span>
-              <div className="text-xl font-black text-emerald-700">
-                {statementAnalysisResult?.total_incoming_amount != null
-                  ? `RWF ${statementAnalysisResult.total_incoming_amount.toLocaleString()}`
-                  : reportData?.summary?.total_received_amount != null
-                  ? `RWF ${reportData.summary.total_received_amount.toLocaleString()}`
-                  : 'Not available'}
-              </div>
-              <p className="text-xs text-slate-500">
-                {statementAnalysisResult
-                  ? `${statementAnalysisResult.total_transactions} bank transactions analyzed`
-                  : reportData?.summary?.total_paid_tenants != null
-                  ? `${reportData.summary.total_paid_tenants} tenant(s) fully paid`
-                  : 'Not available'}
-              </p>
-            </div>
-
-            {/* Total Outstanding */}
-            <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs space-y-1">
-              <span className="text-xs font-bold text-rose-700 uppercase">Total Outstanding</span>
-              <div className="text-xl font-black text-rose-700">
-                {reportData?.summary?.total_outstanding_amount != null
-                  ? `RWF ${reportData.summary.total_outstanding_amount.toLocaleString()}`
-                  : 'Not available'}
-              </div>
-              <p className="text-xs text-slate-500">
-                {reportData?.summary
-                  ? `${reportData.summary.total_unpaid_tenants || 0} unpaid • ${reportData.summary.total_partial_tenants || 0} partial`
-                  : 'Not available'}
-              </p>
-            </div>
-
-            {/* Collection Rate */}
-            <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs space-y-1">
-              <span className="text-xs font-bold text-[#331a6f] uppercase">Reconciliation Rate</span>
-              <div className="text-xl font-black text-[#331a6f]">
-                {matchingAnalysisRows.length > 0
-                  ? `${Math.round((autoMatchedRows.length / matchingAnalysisRows.length) * 100)}%`
-                  : reportData?.summary?.collection_rate_percent != null
-                  ? `${reportData.summary.collection_rate_percent}%`
-                  : 'Not available'}
-              </div>
-              <p className="text-xs text-slate-500">
-                {matchingAnalysisRows.length > 0
-                  ? `${autoMatchedRows.length} of ${matchingAnalysisRows.length} matched`
-                  : 'Auto-matched from bank'}
-              </p>
-            </div>
-          </div>
-
-          {/* Outstanding Balance Alert Banner (if unpaid tenants exist) */}
-          {unpaidTenantsList.length > 0 && (
-            <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-              <div className="flex items-start gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center shrink-0 mt-0.5">
-                  <Bell className="w-5 h-5 text-amber-800" />
-                </div>
+          {/* 50/50 SPLIT CONTENT */}
+          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
+            
+            {/* LEFT PANE: Tenants Expected to Pay */}
+            <div className="bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden">
+              <div className="p-4 border-b border-slate-100 shrink-0 flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-amber-900">
-                    {unpaidTenantsList.length} Unpaid Tenant{unpaidTenantsList.length > 1 ? 's' : ''} Identified
-                  </h3>
-                  <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-                    Total overdue balance of{' '}
-                    <span className="font-bold font-mono">
-                      RWF {totalOutstandingAmount.toLocaleString()}
-                    </span>{' '}
-                    requires attention. You can send immediate rent reminders to all unpaid tenants.
-                  </p>
+                  <h2 className="text-sm font-black text-slate-900">Tenants Expected to Pay</h2>
+                  <p className="text-[10px] text-slate-500 font-medium">Strictly due in selected period</p>
                 </div>
               </div>
-
-              <button
-                onClick={() => setIsBulkRemindModalOpen(true)}
-                className="px-4 py-2.5 rounded-xl bg-[#331a6f] hover:bg-[#251352] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 shrink-0 cursor-pointer"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Remind All Unpaid ({unpaidTenantsList.length})</span>
-              </button>
-            </div>
-          )}
-
-          {/* Detailed Tenant Payment Ledger Table */}
-          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden">
-            {/* Table Header & Controls */}
-            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-base font-black text-slate-900">Tenant Payment Results</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Reconciliation status for all leases in {selectedProperty.name}
-                </p>
-              </div>
-
-              {/* Status Filter & Search */}
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Search */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search tenant or unit..."
-                    value={reportSearchQuery}
-                    onChange={(e) => setReportSearchQuery(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#331a6f]/20"
-                  />
-                </div>
-
-                {/* Filter Pills */}
-                <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs">
-                  {(
-                    [
-                      { key: 'ALL', label: 'All' },
-                      { key: 'PAID', label: 'Paid' },
-                      { key: 'PARTIAL', label: 'Partial' },
-                      { key: 'UNPAID', label: 'Unpaid' },
-                    ] as const
-                  ).map((f) => (
-                    <button
-                      key={f.key}
-                      onClick={() => setReportStatusFilter(f.key)}
-                      className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${reportStatusFilter === f.key
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Results Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
-                    <th className="py-3.5 px-4">Tenant & Unit</th>
-                    <th className="py-3.5 px-4">Due Date</th>
-                    <th className="py-3.5 px-4">Expected</th>
-                    <th className="py-3.5 px-4">Received</th>
-                    <th className="py-3.5 px-4">Balance</th>
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4">Match Reference</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredReportRows.length > 0 ? (
-                    filteredReportRows.map((row) => {
-                      const isPaid = row.status === 'PAID' || row.status === 'PAID_LATE';
-                      const isUnpaid = row.status === 'NOT_PAID' || row.status === 'UPCOMING';
-                      const isPartial = row.status === 'PARTIAL';
-
-                      return (
+              
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase text-[9px] tracking-wider sticky top-0 z-10">
+                    <tr>
+                      <th className="py-2.5 px-4">Tenant</th>
+                      <th className="py-2.5 px-4">Invoice</th>
+                      <th className="py-2.5 px-4">Expected</th>
+                      <th className="py-2.5 px-4">Status</th>
+                      <th className="py-2.5 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredReportRows.length > 0 ? (
+                      filteredReportRows.map((row) => (
                         <tr key={row.lease_id} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="py-3.5 px-4">
-                            <div className="font-bold text-slate-900">{row.tenant_name}</div>
-                            <div className="text-[11px] text-slate-500 font-medium">
-                              {row.unit_number} • {row.property_name}
-                            </div>
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-900 truncate max-w-[120px]">{row.tenant_name}</div>
+                            <div className="text-[10px] text-slate-500 font-medium">Unit {row.unit_number}</div>
                           </td>
-                          <td className="py-3.5 px-4 font-medium text-slate-700">
-                            {row.due_date || 'Not available'}
+                          <td className="py-3 px-4">
+                            <span className="font-mono text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                              {row.invoice_number || 'No Inv'}
+                            </span>
+                            <div className="text-[9px] text-slate-400 mt-0.5">Due: {row.due_date}</div>
                           </td>
-                          <td className="py-3.5 px-4 font-bold text-slate-900">
+                          <td className="py-3 px-4 font-bold text-slate-900">
                             RWF {row.expected_amount.toLocaleString()}
                           </td>
-                          <td className="py-3.5 px-4 font-bold text-emerald-700">
-                            RWF {row.paid_amount.toLocaleString()}
-                          </td>
-                          <td className="py-3.5 px-4 font-bold text-rose-700">
-                            RWF {row.balance_due.toLocaleString()}
-                          </td>
-                          <td className="py-3.5 px-4">{renderStatusBadge(row.status)}</td>
-                          <td className="py-3.5 px-4">
-                            {row.payment_reference ? (
-                              <div>
-                                <span className="font-mono text-[11px] font-bold text-slate-800">
-                                  {row.payment_reference}
-                                </span>
-                                {row.paid_date && (
-                                  <div className="text-[10px] text-slate-400">Paid: {row.paid_date}</div>
-                                )}
+                          <td className="py-3 px-4">
+                            {renderStatusBadge(row.status)}
+                            {row.paid_amount > 0 && (
+                              <div className="text-[9px] font-bold text-emerald-600 mt-1">
+                                Matched: RWF {row.paid_amount.toLocaleString()}
                               </div>
-                            ) : (
-                              <span className="text-[11px] text-slate-400 italic">No statement match yet</span>
                             )}
                           </td>
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {/* Record Payment Button */}
-                              {row.balance_due > 0 && (
-                                <button
-                                  onClick={() => onOpenRecordPayment(row.tenant_id, row.invoice_id)}
-                                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold transition-colors cursor-pointer"
-                                  title="Record Manual Payment"
-                                >
-                                  Record Pay
-                                </button>
-                              )}
-
-                              {/* Send Reminder Button with Confirmation Modal */}
-                              {row.balance_due > 0 && (
-                                <button
-                                  onClick={() => {
-                                    setSelectedTenantForIndividualRemind(row);
-                                    setIndividualReminderCustomMsg(
-                                      `Dear ${row.tenant_name}, this is an official reminder regarding your outstanding rent balance of RWF ${row.balance_due.toLocaleString()} for Unit ${row.unit_number} at ${row.property_name}. Please settle your balance promptly via Bank Transfer or Mobile Money.`
-                                    );
-                                  }}
-                                  className="px-2.5 py-1 rounded-lg bg-[#331a6f]/10 hover:bg-[#331a6f]/20 text-[#331a6f] text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1"
-                                  title={`Send Rent Reminder to ${row.tenant_name}`}
-                                >
-                                  <Bell className="w-3 h-3 text-[#331a6f]" />
-                                  <span>Remind</span>
-                                </button>
-                              )}
-
-                              {/* View Receipt Button */}
-                              {row.paid_amount > 0 && (
-                                <button
-                                  onClick={() => {
-                                    if (onViewReceipt) {
-                                      onViewReceipt({
-                                        receipt_number: row.invoice_number ? `REC-${row.invoice_number}` : (row.invoice_id ? `REC-${row.invoice_id.slice(0, 8)}` : 'REC-UNASSIGNED'),
-                                        tenant_name: row.tenant_name,
-                                        unit_number: row.unit_number,
-                                        property_name: row.property_name,
-                                        amount_paid: row.paid_amount,
-                                        payment_method: 'BANK_TRANSFER',
-                                        payment_date: row.paid_date || 'Not available',
-                                        transaction_reference: row.payment_reference || 'Not available',
-                                      });
-                                    }
-                                  }}
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold transition-colors cursor-pointer"
-                                  title="View Receipt"
-                                >
-                                  Receipt
-                                </button>
-                              )}
-                            </div>
+                          <td className="py-3 px-4 text-right">
+                            {row.balance_due > 0 && (
+                              <button
+                                onClick={() => onOpenRecordPayment(row.tenant_id, row.invoice_id)}
+                                className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition-colors cursor-pointer"
+                              >
+                                Record Pay
+                              </button>
+                            )}
                           </td>
                         </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-slate-400 text-xs font-medium">
+                          No tenants match this criteria.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* RIGHT PANE: Document Viewer & Floating Search */}
+            <div className="relative bg-[#323639] flex flex-col h-full overflow-hidden">
+              {/* Viewer Header Toggle */}
+              <div className="absolute top-4 left-4 z-20">
+                <button
+                  onClick={() => setIsDarkDocumentMode(!isDarkDocumentMode)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-white shadow-lg text-xs font-bold hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  {isDarkDocumentMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                  {isDarkDocumentMode ? "Bright Mode" : "Dark Mode"}
+                </button>
+              </div>
+
+              {/* Document Viewer */}
+              <div className="flex-1 w-full h-full relative overflow-hidden">
+                {selectedFile ? (
+                  <StatementPDFViewer file={selectedFile} isDarkMode={isDarkDocumentMode} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-2 p-6 text-center">
+                    <FileText className="w-10 h-10 text-slate-500" />
+                    <span className="text-sm font-bold text-slate-300">{isLoadingDocument ? 'Loading Document...' : 'No Document Found'}</span>
+                    <p className="text-xs text-slate-500 max-w-xs">{isLoadingDocument ? 'Fetching original file...' : 'The uploaded file could not be retrieved.'}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Floating Extracted Transactions Panel */}
+              <div className="absolute top-4 right-4 w-80 max-h-[calc(100%-2rem)] flex flex-col bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-20">
+                {/* Floating Header & Search */}
+                <div className="p-3 border-b border-slate-100 shrink-0 space-y-3 bg-white">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      Extracted AI Matches
+                    </h3>
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                      {displayedBankTransactions.length}
+                    </span>
+                  </div>
+                  
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search extracted names, amts, refs..."
+                      value={bankSearchQuery}
+                      onChange={(e) => setBankSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#331a6f]/30 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Floating List */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50/50 custom-scrollbar">
+                  {displayedBankTransactions.length > 0 ? (
+                    displayedBankTransactions.map((txn: any, idx: number) => {
+                      const isMatched = (matchingAnalysisRows || []).some((r: any) => r.id === txn.id && (r.display_status === 'MATCHED' || r.matching_status === 'MATCHED'));
+                      return (
+                        <div 
+                          key={txn.id || idx} 
+                          className={`p-3 rounded-xl border transition-all ${isMatched ? 'bg-emerald-50/40 border-emerald-100 opacity-70' : 'bg-white border-slate-200 hover:border-[#331a6f]/30 hover:shadow-sm'}`}
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <div className="font-bold text-slate-900 text-xs truncate" title={txn.payer_name || txn.description}>
+                              {txn.payer_name || txn.description || 'Unknown'}
+                            </div>
+                            <div className="font-black text-slate-900 text-xs whitespace-nowrap">
+                              RWF {Number(txn.amount).toLocaleString()}
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-between mt-2">
+                            <div className="text-[9px] font-mono text-slate-400 truncate max-w-[120px]" title={txn.transaction_reference}>
+                              {txn.transaction_date} • Ref: {txn.transaction_reference || 'N/A'}
+                            </div>
+                            
+                            {isMatched ? (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">
+                                <Check className="w-2.5 h-2.5" />
+                                Matched
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setSelectedTxnForMatch(txn);
+                                  setIsManualMatchModalOpen(true);
+                                }}
+                                className="px-2 py-1.5 rounded-md bg-[#331a6f] hover:bg-[#251352] text-white text-[9px] font-bold transition-colors cursor-pointer shrink-0"
+                              >
+                                Record Match
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       );
                     })
                   ) : (
-                    <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400 text-xs font-medium">
-                        No tenant rows match your active filters.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* AI Interpretation & Matching Summary Banner */}
-          {matchingAnalysisRows.length > 0 && (
-            <div className="bg-gradient-to-r from-slate-900 via-[#251352] to-[#331a6f] text-white rounded-3xl p-6 sm:p-7 shadow-lg space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-xs flex items-center justify-center">
-                    <Sparkles className="w-5 h-5 text-amber-300" />
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase font-extrabold tracking-wider text-amber-300">
-                      AI Document Understanding & Reconciler
+                    <div className="py-6 text-center text-slate-400 text-xs font-medium">
+                      No transactions found.
                     </div>
-                    <h3 className="text-lg sm:text-xl font-black text-white">
-                      AI found {matchingAnalysisRows.length} transaction{matchingAnalysisRows.length === 1 ? '' : 's'}
-                    </h3>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-xs bg-white/10 px-3.5 py-1.5 rounded-xl text-slate-200 backdrop-blur-xs">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span className="font-semibold">Deterministic Validation • Human in the Loop</span>
-                </div>
-              </div>
-
-              {/* 4 Simple-Language Cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
-                <div className="bg-white/10 rounded-2xl p-4 border border-white/10 backdrop-blur-xs">
-                  <div className="text-xs text-slate-300 font-medium">Detected Transactions</div>
-                  <div className="text-2xl font-black text-white mt-1">{matchingAnalysisRows.length}</div>
-                  <div className="text-[11px] text-slate-300 mt-1 font-medium">
-                    AI found {matchingAnalysisRows.length} transaction{matchingAnalysisRows.length === 1 ? '' : 's'}
-                  </div>
-                </div>
-
-                <div
-                  onClick={() => setReviewTab('AUTO')}
-                  className={`rounded-2xl p-4 border backdrop-blur-xs cursor-pointer transition-all ${
-                    reviewTab === 'AUTO'
-                      ? 'bg-emerald-500/30 border-emerald-400 ring-2 ring-emerald-400/40'
-                      : 'bg-emerald-500/15 border-emerald-500/25 hover:bg-emerald-500/20'
-                  }`}
-                >
-                  <div className="text-xs text-emerald-200 font-medium">Automatically Matched</div>
-                  <div className="text-2xl font-black text-emerald-300 mt-1">{autoMatchedRows.length}</div>
-                  <div className="text-[11px] text-emerald-200 mt-1 font-medium">
-                    {autoMatchedRows.length} payment{autoMatchedRows.length === 1 ? '' : 's'} matched automatically
-                  </div>
-                </div>
-
-                <div
-                  onClick={() => setReviewTab('REVIEW')}
-                  className={`rounded-2xl p-4 border backdrop-blur-xs cursor-pointer transition-all ${
-                    reviewTab === 'REVIEW'
-                      ? 'bg-amber-500/30 border-amber-400 ring-2 ring-amber-400/40'
-                      : 'bg-amber-500/15 border-amber-500/25 hover:bg-amber-500/20'
-                  }`}
-                >
-                  <div className="text-xs text-amber-200 font-medium">Needs Your Review</div>
-                  <div className="text-2xl font-black text-amber-300 mt-1">{needsReviewRows.length}</div>
-                  <div className="text-[11px] text-amber-200 mt-1 font-medium">
-                    {needsReviewRows.length} payment{needsReviewRows.length === 1 ? '' : 's'} need your review
-                  </div>
-                </div>
-
-                <div
-                  onClick={() => setReviewTab('UNMATCHED')}
-                  className={`rounded-2xl p-4 border backdrop-blur-xs cursor-pointer transition-all ${
-                    reviewTab === 'UNMATCHED'
-                      ? 'bg-rose-500/30 border-rose-400 ring-2 ring-rose-400/40'
-                      : 'bg-rose-500/15 border-rose-500/25 hover:bg-rose-500/20'
-                  }`}
-                >
-                  <div className="text-xs text-rose-200 font-medium">Unmatched</div>
-                  <div className="text-2xl font-black text-rose-300 mt-1">{unmatchedRows.length}</div>
-                  <div className="text-[11px] text-rose-200 mt-1 font-medium">
-                    {unmatchedRows.length} transaction{unmatchedRows.length === 1 ? '' : 's'} could not be matched
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
-          )}
 
-          {/* Review Results Interface with 3 Dedicated Sections */}
-          {matchingAnalysisRows.length > 0 && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-5">
-              {/* Section Header & Sub-Tabs */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-                <div>
-                  <h3 className="text-base font-black text-slate-900">
-                    Reconciliation Review
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Multi-signal matching evaluated name similarity, reference tokens, expected amount, and dates.
-                  </p>
-                </div>
-
-                {/* 3 Clear Sections / Tabs */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => setReviewTab('AUTO')}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      reviewTab === 'AUTO'
-                        ? 'bg-emerald-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Automatically Matched ({autoMatchedRows.length})</span>
-                  </button>
-
-                  <button
-                    onClick={() => setReviewTab('REVIEW')}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      reviewTab === 'REVIEW'
-                        ? 'bg-amber-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>Needs Review ({needsReviewRows.length})</span>
-                  </button>
-
-                  <button
-                    onClick={() => setReviewTab('UNMATCHED')}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      reviewTab === 'UNMATCHED'
-                        ? 'bg-rose-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>Unmatched ({unmatchedRows.length})</span>
-                  </button>
-
-                  <button
-                    onClick={() => setReviewTab('ALL')}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      reviewTab === 'ALL'
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    <Layers className="w-3.5 h-3.5" />
-                    <span>All ({matchingAnalysisRows.length})</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* SECTION 1: AUTOMATICALLY MATCHED */}
-              {reviewTab === 'AUTO' && (
-                <div className="space-y-3">
-                  <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                    <div className="text-xs text-emerald-900 leading-relaxed">
-                      <span className="font-bold">High-Confidence Automatic Matches (95-100% Score):</span> These transactions
-                      satisfy all financial safety thresholds with exact amount matches and high name/reference fidelity.
-                    </div>
-                  </div>
-
-                  {autoMatchedRows.length === 0 ? (
-                    <div className="p-8 text-center text-slate-400 text-xs font-medium border border-dashed border-slate-200 rounded-2xl">
-                      No transactions met the 95%+ automatic match threshold in this statement.
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                      <table className="w-full text-left text-xs text-slate-600 min-w-[950px]">
-                        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-200">
-                          <tr>
-                            <th className="py-3 px-3">Matched Tenant</th>
-                            <th className="py-3 px-3">Property & Unit</th>
-                            <th className="py-3 px-3">Amount Paid</th>
-                            <th className="py-3 px-3">Date</th>
-                            <th className="py-3 px-3">Invoice</th>
-                            <th className="py-3 px-3">Confidence</th>
-                            <th className="py-3 px-3">Why it Matched</th>
-                            <th className="py-3 px-3 text-right">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {autoMatchedRows.map((row) => {
-                            const confPct = Math.round((row.confidence_score || 0) * 100);
-                            const signals = row.reasons?.length ? row.reasons : row.matching_signals || [];
-                            return (
-                              <tr key={row.id} className="hover:bg-slate-50/70 align-top">
-                                <td className="py-3.5 px-3">
-                                  <div className="font-bold text-slate-900">{row.matched_tenant_name}</div>
-                                  <div className="text-[11px] text-slate-500 mt-0.5">
-                                    Payer: {row.bank_statement_name || row.payer_name}
-                                  </div>
-                                </td>
-                                <td className="py-3.5 px-3">
-                                  <div className="font-semibold text-slate-800">{row.property_name || 'Not available'}</div>
-                                  <div className="text-[11px] text-slate-500">{row.unit_number ? `Unit ${row.unit_number}` : 'Not available'}</div>
-                                </td>
-                                <td className="py-3.5 px-3 font-bold text-emerald-700 whitespace-nowrap">
-                                  RWF {row.amount.toLocaleString()}
-                                </td>
-                                <td className="py-3.5 px-3 text-slate-600 whitespace-nowrap">{row.transaction_date}</td>
-                                <td className="py-3.5 px-3">
-                                  <span className="font-mono text-[11px] font-semibold text-slate-700">
-                                    {row.invoice_number || 'Needs review'}
-                                  </span>
-                                  {row.expected_amount != null && (
-                                    <div className="text-[10px] text-slate-400">
-                                      Expected: RWF {Number(row.expected_amount).toLocaleString()}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="py-3.5 px-3">
-                                  <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                    <Sparkles className="w-3 h-3" />
-                                    {confPct}% {row.confidence_level || 'AUTO_MATCH'}
-                                  </div>
-                                </td>
-                                <td className="py-3.5 px-3 max-w-[240px]">
-                                  <ul className="space-y-0.5">
-                                    {signals.slice(0, 3).map((sig, i) => (
-                                      <li key={i} className="text-[11px] text-emerald-800 font-medium leading-tight">
-                                        ✓ {sig}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </td>
-                                <td className="py-3.5 px-3 text-right">
-                                  {row.payment_id ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                      <Check className="w-3 h-3" /> Payment Posted
-                                    </span>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleConfirmRowMatch(row)}
-                                      disabled={isMatching}
-                                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition-all shadow-xs disabled:opacity-50"
-                                    >
-                                      Confirm Match
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* SECTION 2: NEEDS REVIEW */}
-              {reviewTab === 'REVIEW' && (
-                <div className="space-y-4">
-                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                    <div className="text-xs text-amber-900 leading-relaxed">
-                      <span className="font-bold">Payments Requiring Landlord Confirmation:</span> These transactions have
-                      a strong candidate or multiple possible candidates, but require your manual sign-off before any money is credited.
-                    </div>
-                  </div>
-
-                  {needsReviewRows.length === 0 ? (
-                    <div className="p-8 text-center text-slate-400 text-xs font-medium border border-dashed border-slate-200 rounded-2xl">
-                      No payments currently require review. All transactions are matched or accounted for!
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {needsReviewRows.map((row) => {
-                        const confPct = Math.round((row.confidence_score || 0) * 100);
-                        const candidates = row.possible_matches || [];
-                        const selectedInv = selectedCandidateOverrides[row.id] || row.suggested_invoice_id || '';
-                        const signals = row.reasons?.length ? row.reasons : row.matching_signals || [];
-                        const warnings = row.warnings || [];
-
-                        return (
-                          <div
-                            key={row.id}
-                            className="bg-slate-50/70 rounded-2xl border border-slate-200 p-5 space-y-4 transition-all hover:border-slate-300"
-                          >
-                            {/* Row Top Header */}
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/70 pb-3">
-                              <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-black text-xs">
-                                  {confPct}%
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="font-bold text-slate-900 text-sm">
-                                      {row.bank_statement_name || row.payer_name || 'Not available'}
-                                    </h4>
-                                    <span
-                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                        row.confidence_level === 'STRONG_MATCH'
-                                          ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                          : 'bg-amber-50 text-amber-800 border-amber-200'
-                                      }`}
-                                    >
-                                      {row.confidence_level || 'REVIEW_REQUIRED'}
-                                    </span>
-                                  </div>
-                                  <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                                    <span>Date: {row.transaction_date || 'Not available'}</span>
-                                    <span>•</span>
-                                    <span className="font-mono">Ref: {row.bank_reference_id || row.transaction_reference || 'Not available'}</span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="text-right">
-                                <div className="text-base font-black text-emerald-700">
-                                  +RWF {row.amount.toLocaleString()}
-                                </div>
-                                <div className="text-[11px] text-slate-500 mt-0.5 max-w-xs truncate" title={row.description}>
-                                  {row.description}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Candidate Selection if Multiple Candidates */}
-                            {candidates.length > 1 ? (
-                              <div className="space-y-2">
-                                <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                                  <Users className="w-3.5 h-3.5 text-amber-600" />
-                                  <span>Multiple Close Candidate Matches (Select correct tenant):</span>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                  {candidates.map((cand) => {
-                                    const isSelected = selectedInv === cand.invoice_id;
-                                    return (
-                                      <div
-                                        key={cand.invoice_id}
-                                        onClick={() =>
-                                          setSelectedCandidateOverrides((prev) => ({
-                                            ...prev,
-                                            [row.id]: cand.invoice_id,
-                                          }))
-                                        }
-                                        className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
-                                          isSelected
-                                            ? 'bg-white border-[#331a6f] ring-2 ring-[#331a6f]/20 shadow-xs'
-                                            : 'bg-white/60 border-slate-200 hover:bg-white'
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between">
-                                          <span className="font-bold text-slate-900">{cand.tenant_name}</span>
-                                          <span className="font-bold text-[#331a6f] font-mono">
-                                            {Math.round((cand.match_score || 0) * 100)}% Match
-                                          </span>
-                                        </div>
-                                        <div className="text-[11px] text-slate-500 mt-0.5">
-                                          Unit {cand.unit_number || 'Not available'} • {cand.property_name || 'Not available'}
-                                        </div>
-                                        <div className="text-[11px] text-slate-600 font-medium mt-1">
-                                          Expected: {cand.expected_amount != null ? `RWF ${Number(cand.expected_amount).toLocaleString()}` : 'Not available'}
-                                        </div>
-                                        {cand.reasons?.length > 0 && (
-                                          <div className="text-[10px] text-slate-400 mt-1 truncate">
-                                            {cand.reasons.join(' · ')}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ) : (
-                              /* Single Best Candidate View */
-                              <div className="bg-white rounded-xl border border-slate-200 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                                <div>
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                    Suggested Candidate
-                                  </span>
-                                  <div className="font-bold text-slate-900 text-sm mt-0.5">
-                                    {row.matched_tenant_name || 'Needs review'}
-                                  </div>
-                                  <div className="text-slate-500 text-[11px] mt-0.5">
-                                    {[row.property_name, row.unit_number ? `Unit ${row.unit_number}` : null]
-                                      .filter(Boolean)
-                                      .join(' · ') || 'Not available'}
-                                    {row.invoice_number && ` • ${row.invoice_number}`}
-                                  </div>
-                                </div>
-
-                                <div className="sm:text-right">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                    Expected Rent
-                                  </span>
-                                  <div className="font-bold text-slate-800 mt-0.5">
-                                    {row.expected_amount != null
-                                      ? `RWF ${Number(row.expected_amount).toLocaleString()}`
-                                      : 'Not available'}
-                                  </div>
-                                  <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border mt-0.5 ${amountStatusBadge(row.amount_kind)}`}>
-                                    {row.amount_status || 'Needs review'}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Reasons & Warnings */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                              {signals.length > 0 && (
-                                <div className="bg-white/70 rounded-xl p-3 border border-slate-200/70">
-                                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 mb-1">
-                                    Matching Reasons
-                                  </div>
-                                  <ul className="space-y-1">
-                                    {signals.map((sig, i) => (
-                                      <li key={i} className="text-slate-700 flex items-center gap-1.5">
-                                        <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-                                        <span>{sig}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-
-                              {warnings.length > 0 && (
-                                <div className="bg-amber-50/60 rounded-xl p-3 border border-amber-200/70">
-                                  <div className="text-[10px] font-bold uppercase tracking-wider text-amber-800 mb-1">
-                                    Warnings / Caution
-                                  </div>
-                                  <ul className="space-y-1">
-                                    {warnings.map((w, i) => (
-                                      <li key={i} className="text-amber-900 flex items-center gap-1.5">
-                                        <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
-                                        <span>{w}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Actions Bar */}
-                            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200/70">
-                              <button
-                                onClick={() => handleLeaveUnmatched(row)}
-                                disabled={isMatching}
-                                className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold cursor-pointer transition-all disabled:opacity-50 flex items-center gap-1.5"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                                <span>Reject Match</span>
-                              </button>
-
-                              <button
-                                onClick={() => openManualMatchForRow(row)}
-                                disabled={isMatching}
-                                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold cursor-pointer transition-all disabled:opacity-50"
-                              >
-                                Change / Search Tenant
-                              </button>
-
-                              <button
-                                onClick={() => handleConfirmRowMatch(row)}
-                                disabled={isMatching}
-                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition-all shadow-xs disabled:opacity-50 flex items-center gap-1.5"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>Confirm Match</span>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* SECTION 3: UNMATCHED */}
-              {reviewTab === 'UNMATCHED' && (
-                <div className="space-y-4">
-                  <div className="bg-rose-50/70 border border-rose-200/80 rounded-2xl p-4 flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-                    <div className="text-xs text-rose-900 leading-relaxed">
-                      <span className="font-bold">Unmatched Transactions (0-59% Score):</span> These deposits could not be
-                      safely correlated to an active tenant or lease. Use Manual Match to search and assign to any tenant invoice.
-                    </div>
-                  </div>
-
-                  {unmatchedRows.length === 0 ? (
-                    <div className="p-8 text-center text-slate-400 text-xs font-medium border border-dashed border-slate-200 rounded-2xl">
-                      No unmatched transactions in this statement. Every deposit is reconciled!
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                      <table className="w-full text-left text-xs text-slate-600 min-w-[900px]">
-                        <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-200">
-                          <tr>
-                            <th className="py-3 px-3">Date</th>
-                            <th className="py-3 px-3">Bank Payer Name</th>
-                            <th className="py-3 px-3">Amount</th>
-                            <th className="py-3 px-3">Narration / Description</th>
-                            <th className="py-3 px-3">Reference</th>
-                            <th className="py-3 px-3 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {unmatchedRows.map((row) => (
-                            <tr key={row.id} className="hover:bg-slate-50/70 align-top">
-                              <td className="py-3.5 px-3 whitespace-nowrap font-medium text-slate-700">
-                                {row.transaction_date}
-                              </td>
-                              <td className="py-3.5 px-3">
-                                <div className="font-bold text-slate-900">
-                                  {row.bank_statement_name || row.payer_name || 'Not available'}
-                                </div>
-                              </td>
-                              <td className="py-3.5 px-3 font-bold text-emerald-700 whitespace-nowrap">
-                                RWF {row.amount.toLocaleString()}
-                              </td>
-                              <td className="py-3.5 px-3 max-w-[280px]">
-                                <div className="text-slate-600 line-clamp-2">{row.description}</div>
-                              </td>
-                              <td className="py-3.5 px-3 font-mono text-[11px] text-slate-500">
-                                {row.bank_reference_id || row.transaction_reference || 'Not available'}
-                              </td>
-                              <td className="py-3.5 px-3 text-right">
-                                <button
-                                  onClick={() => openManualMatchForRow(row)}
-                                  disabled={isMatching}
-                                  className="px-3.5 py-1.5 rounded-xl bg-[#331a6f] hover:bg-[#251352] text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 ml-auto disabled:opacity-50"
-                                >
-                                  <Search className="w-3 h-3" />
-                                  <span>Manual Match</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* SECTION 4: ALL TRANSACTIONS */}
-              {reviewTab === 'ALL' && (
-                <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                  <table className="w-full text-left text-xs text-slate-600 min-w-[1100px]">
-                    <thead className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-200">
-                      <tr>
-                        <th className="py-3 px-3">Bank-statement name</th>
-                        <th className="py-3 px-3">Reference</th>
-                        <th className="py-3 px-3">Amount paid</th>
-                        <th className="py-3 px-3">Expected</th>
-                        <th className="py-3 px-3">Payment status</th>
-                        <th className="py-3 px-3">Suggested tenant</th>
-                        <th className="py-3 px-3">Confidence</th>
-                        <th className="py-3 px-3">Matching reasons</th>
-                        <th className="py-3 px-3">Match status</th>
-                        <th className="py-3 px-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {matchingAnalysisRows.map((row) => {
-                        const status = row.display_status || row.matching_status;
-                        const confPct = Math.round((row.confidence_score || 0) * 100);
-                        const canApprove =
-                          !!row.pending_approval &&
-                          !!row.suggested_invoice_id &&
-                          !row.payment_id &&
-                          (status === 'MATCHED' || status === 'PARTIAL');
-                        const canAct = !row.payment_id && status !== 'DUPLICATE';
-                        const bankName = row.bank_statement_name || row.payer_name || 'Not available';
-                        const amountLabel =
-                          row.amount_status || row.payment_amount_status || 'Needs review';
-
-                        return (
-                          <tr key={row.id} className="hover:bg-slate-50/70 align-top">
-                            <td className="py-3 px-3">
-                              <div className="font-bold text-slate-900 max-w-[180px]">{bankName}</div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">{row.transaction_date}</div>
-                              <div className="text-[11px] text-slate-500 mt-1 line-clamp-2 max-w-[200px]">
-                                {row.description}
-                              </div>
-                            </td>
-                            <td className="py-3 px-3 font-mono text-[11px] text-slate-500">
-                              {row.bank_reference_id || row.transaction_reference || 'Not available'}
-                            </td>
-                            <td className="py-3 px-3 font-bold text-emerald-700 whitespace-nowrap">
-                              RWF {row.amount.toLocaleString()}
-                            </td>
-                            <td className="py-3 px-3 whitespace-nowrap">
-                              {row.expected_amount != null
-                                ? `RWF ${Number(row.expected_amount).toLocaleString()}`
-                                : 'Not available'}
-                            </td>
-                            <td className="py-3 px-3">
-                              <span
-                                className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${amountStatusBadge(row.amount_kind)}`}
-                              >
-                                {amountLabel}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 max-w-[220px]">
-                              <div className="font-semibold text-slate-800">
-                                {row.matched_tenant_name || 'Not available'}
-                              </div>
-                              {(row.property_name || row.unit_number) && (
-                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                  {[row.property_name, row.unit_number ? `Unit ${row.unit_number}` : null]
-                                    .filter(Boolean)
-                                    .join(' · ')}
-                                </div>
-                              )}
-                              {row.invoice_number && (
-                                <div className="text-[10px] text-slate-400 mt-0.5">{row.invoice_number}</div>
-                              )}
-                            </td>
-                            <td className="py-3 px-3">
-                              <div className="font-bold text-slate-800">{confPct}%</div>
-                              <div className="text-[10px] text-slate-400">{row.confidence_label || 'Not available'}</div>
-                            </td>
-                            <td className="py-3 px-3">
-                              <ul className="space-y-0.5 max-w-[200px]">
-                                {(row.reasons?.length ? row.reasons : row.matching_signals || []).slice(0, 3).map((sig, i) => (
-                                  <li key={i} className="text-[10px] text-slate-500 leading-snug">
-                                    • {sig}
-                                  </li>
-                                ))}
-                              </ul>
-                            </td>
-                            <td className="py-3 px-3">
-                              <span
-                                className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${matchStatusBadge(status)}`}
-                              >
-                                {status.replace(/_/g, ' ')}
-                              </span>
-                              {row.pending_approval && !row.payment_id && (
-                                <div className="text-[10px] text-amber-700 mt-1 font-semibold">
-                                  Awaiting approval
-                                </div>
-                              )}
-                              {row.payment_id && (
-                                <div className="text-[10px] text-emerald-700 mt-1 font-semibold">
-                                  Payment posted
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-3 px-3">
-                              <div className="flex flex-col items-end gap-1.5 min-w-[120px]">
-                                {canApprove && (
-                                  <button
-                                    onClick={() => handleConfirmRowMatch(row)}
-                                    disabled={isMatching}
-                                    className="w-full px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                                  >
-                                    Confirm Match
-                                  </button>
-                                )}
-                                {canAct && (
-                                  <button
-                                    onClick={() => openManualMatchForRow(row)}
-                                    disabled={isMatching}
-                                    className="w-full px-2.5 py-1.5 rounded-lg bg-[#331a6f] hover:bg-[#251352] text-white text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                                  >
-                                    {row.matched_tenant_name ? 'Change / Reassign' : 'Manual Match'}
-                                  </button>
-                                )}
-                                {canAct && status !== 'UNMATCHED' && (
-                                  <button
-                                    onClick={() => handleLeaveUnmatched(row)}
-                                    disabled={isMatching}
-                                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                                  >
-                                    Leave Unmatched
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Bottom Action Footer */}
-          <div className="p-6 rounded-3xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">Finished reviewing this report?</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                You can run another statement reconciliation anytime.
-              </p>
-            </div>
-
-            <button
-              onClick={handleStartNewTracking}
-              className="px-6 py-2.5 rounded-xl bg-[#331a6f] hover:bg-[#251352] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Start New Tracking</span>
-            </button>
           </div>
         </div>
       )}

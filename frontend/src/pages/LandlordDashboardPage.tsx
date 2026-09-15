@@ -237,7 +237,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [unitStatusFilter, setUnitStatusFilter] = useState('ALL');
   const [tenantSearch, setTenantSearch] = useState('');
   const [leaseSearch, setLeaseSearch] = useState('');
-  const [leaseStatusFilter, setLeaseStatusFilter] = useState('ALL');
+  const [leaseStatusFilter, setLeaseStatusFilter] = useState('ACTIVE');
   const [leaseRemainingDaysFilter, setLeaseRemainingDaysFilter] = useState('');
   const [leasePage, setLeasePage] = useState(1);
   const LEASES_PER_PAGE = 5;
@@ -1145,11 +1145,11 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         )
       );
 
-      // 2. Update Units state in place - mark associated unit as VACANT
+      // 2. Update Units state in place - mark associated unit as VACANT and clear tenant details
       if (leaseToTerminate.unit_id) {
         setUnits((prev) =>
           prev.map((u) =>
-            u.id === leaseToTerminate.unit_id ? { ...u, status: 'VACANT' as any } : u
+            u.id === leaseToTerminate.unit_id ? { ...u, status: 'VACANT' as any, current_tenant_name: undefined, lease_end_date: undefined } : u
           )
         );
       }

@@ -905,6 +905,19 @@ export const api = {
       }
       return data;
     },
+        downloadStatement: async (statementId: string): Promise<Blob> => {
+      const token = await getAccessToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/tracker/statements/${statementId}/download`, {
+        method: 'GET',
+        headers,
+      });
+      if (!res.ok) {
+        throw new Error('Failed to download statement file');
+      }
+      return await res.blob();
+    },
     uploadStatement: async (formData: FormData) => {
       const token = await getAccessToken();
       const headers: Record<string, string> = {};

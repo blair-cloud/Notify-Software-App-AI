@@ -158,6 +158,9 @@ export const LandlordOverviewTab: React.FC<LandlordOverviewTabProps> = ({
   // 4. EXPIRING LEASES (Real data <= 5 days - "Soon Ending")
   const now = new Date();
   const expiringSoonLeases = filteredLeases.filter((l) => {
+    // Only ACTIVE or already marked EXPIRING_SOON leases can be "Expiring Leases"
+    if (l.status !== 'ACTIVE' && l.status !== 'EXPIRING_SOON') return false;
+    
     if (l.status === 'EXPIRING_SOON') return true;
     if (l.days_remaining !== undefined && l.days_remaining <= 5 && l.days_remaining >= 0) return true;
     if (l.end_date) {

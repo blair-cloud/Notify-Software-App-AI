@@ -1,5 +1,6 @@
 import uuid
 from typing import Any, Dict, List, Optional
+from fastapi.responses import FileResponse
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -506,3 +507,23 @@ async def create_bank_account(
         "currency": acc.currency,
         "is_primary": acc.is_primary
     }
+
+@router.get("/statements/{statement_id}/download")
+async def download_statement_file(
+    statement_id: uuid.UUID,
+    landlord: LandlordProfile = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    import os
+    stmt = await db.get(BankStatement, statement_id)
+    if not stmt or stmt.landlord_id != landlord.id:
+        raise HTTPException(status_code=404, detail="Bank statement not found")
+        
+    ext = ".pdf" if stmt.file_type == "PDF" else ".img" if stmt.file_type == "IMG" else ".csv" if stmt.file_type == "CSV" else ".xlsx"
+    file_path = os.path.join("data", "statements", f"{str(stmt.id)}{ext}")
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Original document file not found on server")
+        
+    media_type = "application/pdf" if stmt.file_type == "PDF" else "application/octet-stream"
+    return FileResponse(path=file_path, filename=stmt.file_name, media_type=media_type)
