@@ -47,6 +47,31 @@ async def _verify_schema() -> None:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Missing tables auto-created successfully.")
 
+    # Auto-ensure new columns on existing tracker tables exist in PostgreSQL
+    async with engine.begin() as conn:
+        from sqlalchemy import text
+        col_migrations = [
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS ai_provider VARCHAR(50);",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS ai_model VARCHAR(50);",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS extraction_status VARCHAR(50) DEFAULT 'COMPLETED';",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS raw_ai_response TEXT;",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS extraction_errors TEXT;",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS processing_duration_ms INTEGER DEFAULT 0;",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS bank_name VARCHAR(100);",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS account_name VARCHAR(150);",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS account_number_masked VARCHAR(50);",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS opening_balance NUMERIC(14, 2) DEFAULT 0.0;",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS closing_balance NUMERIC(14, 2) DEFAULT 0.0;",
+            "ALTER TABLE bank_statements ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'RWF';",
+            "ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS balance_after NUMERIC(14, 2);",
+            "ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS extraction_confidence FLOAT DEFAULT 1.0;",
+        ]
+        for c_stmt in col_migrations:
+            try:
+                await conn.execute(text(c_stmt))
+            except Exception as e:
+                logger.debug("Column migration notice: %s", e)
+
     logger.info("Schema verified: %d tables present.", len(expected))
 
 

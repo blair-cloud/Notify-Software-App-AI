@@ -239,3 +239,17 @@
   box-shadow: 3px 3px 0 #000000;
   font-weight: 700;
 }
+
+@keyframes moving-ring-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-moving-ring {
+  animation: moving-ring-spin 12s linear infinite;
+}
+

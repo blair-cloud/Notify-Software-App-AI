@@ -83,6 +83,22 @@ class BankStatement(Base):
     status: Mapped[str] = mapped_column(String(50), default="COMPLETED")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # AI Document Understanding & Extraction Audit Trail
+    ai_provider: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
+    ai_model: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
+    extraction_status: Mapped[str | None] = mapped_column(String(50), default="COMPLETED")
+    raw_ai_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extraction_errors: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processing_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+
+    # Statement-level metadata extracted by AI
+    bank_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    account_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    account_number_masked: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    opening_balance: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True, default=0.0)
+    closing_balance: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True, default=0.0)
+    currency: Mapped[str] = mapped_column(String(10), default="RWF")
+
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
@@ -125,6 +141,8 @@ class BankTransaction(Base):
 
     payer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     payer_account: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    balance_after: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    extraction_confidence: Mapped[float | None] = mapped_column(Float, default=1.0)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -221,3 +239,45 @@ class PaymentMatch(Base):
     )
 
     transaction = relationship("BankTransaction", back_populates="matches")
+
+
+class TrackerCorrection(Base):
+    """
+    Stores historical landlord confirmation and rejection decisions to learn
+    payer/narration patterns for future bank statement matching.
+    """
+    __tablename__ = "tracker_corrections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    landlord_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("landlord_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    payer_name_pattern: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    description_pattern: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+
+    matched_tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tenant_profiles.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
+    matched_invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("invoices.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+
+    action: Mapped[str] = mapped_column(String(30), default="CONFIRMED")  # CONFIRMED | REJECTED
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )

@@ -920,6 +920,19 @@ export interface TenantTrackerRow {
   last_transaction_desc?: string;
 }
 
+export interface PossibleMatchCandidate {
+  tenant_id: string;
+  tenant_name: string;
+  unit_number?: string;
+  property_name?: string;
+  invoice_id?: string;
+  invoice_number?: string;
+  expected_amount?: number;
+  match_score: number;
+  confidence_level: 'AUTO_MATCH' | 'STRONG_MATCH' | 'REVIEW_REQUIRED' | 'UNMATCHED';
+  reasons: string[];
+}
+
 export interface BankStatementItem {
   id: string;
   file_name: string;
@@ -936,6 +949,13 @@ export interface BankStatementItem {
   matched_amount: number;
   status: string;
   notes?: string;
+  ai_provider?: string;
+  ai_model?: string;
+  extraction_status?: string;
+  processing_duration_ms?: number;
+  bank_name?: string;
+  account_name?: string;
+  account_number_masked?: string;
 }
 
 export interface BankTransactionItem {
@@ -948,6 +968,13 @@ export interface BankTransactionItem {
   description: string;
   matching_status: string;
   confidence_score: number;
+  match_score?: number;
+  confidence_level?: 'AUTO_MATCH' | 'STRONG_MATCH' | 'REVIEW_REQUIRED' | 'UNMATCHED';
+  reasons?: string[];
+  warnings?: string[];
+  possible_matches?: PossibleMatchCandidate[];
+  balance_after?: number;
+  extraction_confidence?: number;
   suggested_tenant_id?: string;
   suggested_invoice_id?: string;
   match_method?: string;
@@ -997,6 +1024,11 @@ export interface MatchingAnalysisRow {
   match_summary?: string;
   confidence_score: number;
   confidence_label: TrackerMatchConfidence;
+  match_score?: number;
+  confidence_level?: 'AUTO_MATCH' | 'STRONG_MATCH' | 'REVIEW_REQUIRED' | 'UNMATCHED';
+  reasons?: string[];
+  warnings?: string[];
+  possible_matches?: PossibleMatchCandidate[];
   match_method?: string;
   matching_signals: string[];
   matching_status: string;

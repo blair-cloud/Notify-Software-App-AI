@@ -67,3 +67,7 @@ class TenancyRepository:
         self.db.add(tenancy)
         await self.db.flush()
         return tenancy
+
+    async def update(self, tenancy: Tenancy) -> Tenancy:
+        await self.db.flush()
+        return tenancy

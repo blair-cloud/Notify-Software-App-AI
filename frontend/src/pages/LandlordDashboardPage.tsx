@@ -58,6 +58,7 @@ import {
   Download,
   CheckCircle,
   Banknote,
+  Bot,
   FileSpreadsheet,
   FileCheck,
   UserCircle
@@ -210,9 +211,6 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [tenancies, setTenancies] = useState<Tenancy[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
-  const [leasesLoading, setLeasesLoading] = useState(false);
-  const [leasesError, setLeasesError] = useState<string | null>(null);
-  const hasLoadedLeasesRef = React.useRef(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -357,6 +355,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   // Per-row loading guards - Leases & Tenancies
   const [activatingLeaseId, setActivatingLeaseId] = useState<string | null>(null);
   const [endingTenancyId, setEndingTenancyId] = useState<string | null>(null);
+  const [leasePendingTerminate, setLeasePendingTerminate] = useState<Lease | null>(null);
+  const [isTerminatingLease, setIsTerminatingLease] = useState(false);
 
   // Submitting guards - Property / Unit / Invitation / Lease creation forms
   const [isCreatingProperty, setIsCreatingProperty] = useState(false);
@@ -408,121 +408,125 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     return [];
   };
 
-  const applyCoreResults = (results: PromiseSettledResult<any>[]) => {
-    const [
-      propsRes, unitsRes, invRes, tenantsRes, leasesRes, tenanciesRes, statsRes,
-      invoicesRes, paymentsRes, expensesRes, financialsRes,
-    ] = results;
 
-    if (propsRes.status === 'fulfilled') {
-      const list = asArray(propsRes.value, 'properties');
+  const fetchCorePortfolio = (gen: number) => {
+    // Fire all core requests simultaneously in parallel and hydrate each state slice
+    // the exact moment its individual response arrives, without waiting for the others.
+    const pProps = api.properties.list().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      const list = asArray(res, 'properties');
       setProperties(list);
       if (list.length > 0) {
-        if (!selectedPropIdForUnit) setSelectedPropIdForUnit(list[0].id);
-        if (!invitePropId) setInvitePropId(list[0].id);
-        if (!leasePropId) setLeasePropId(list[0].id);
-        if (!expPropId) setExpPropId(list[0].id);
+        setSelectedPropIdForUnit((prev) => prev || list[0].id);
+        setInvitePropId((prev) => prev || list[0].id);
+        setLeasePropId((prev) => prev || list[0].id);
+        setExpPropId((prev) => prev || list[0].id);
       }
-    } else {
-      console.warn('properties.list failed', propsRes.reason);
-    }
-    if (unitsRes.status === 'fulfilled') setUnits(asArray(unitsRes.value, 'units'));
-    else console.warn('units.list failed', unitsRes.reason);
-    if (invRes.status === 'fulfilled') setInvitations(asArray(invRes.value, 'invitations'));
-    if (tenantsRes.status === 'fulfilled') setTenants(asArray(tenantsRes.value, 'tenants'));
-    if (leasesRes.status === 'fulfilled') {
-      const list = asArray(leasesRes.value, 'leases');
-      setLeases(list);
-      if (list.length > 0 && !invLeaseId) {
-        setInvLeaseId(list[0].id);
-        setInvRentAmount(list[0].monthly_rent || 350000);
-      }
-    }
-    if (tenanciesRes.status === 'fulfilled') setTenancies(asArray(tenanciesRes.value, 'tenancies'));
-    if (statsRes.status === 'fulfilled') setStats(statsRes.value);
-    if (invoicesRes.status === 'fulfilled') setInvoices(asArray(invoicesRes.value, 'invoices'));
-    if (paymentsRes.status === 'fulfilled') setPayments(asArray(paymentsRes.value, 'payments'));
-    if (expensesRes.status === 'fulfilled') setExpenses(asArray(expensesRes.value, 'expenses'));
-    if (financialsRes.status === 'fulfilled') {
-      const fin = financialsRes.value;
-      setFinancials(fin && !(fin as any).detail ? fin : null);
-    }
-  };
+    }).catch((err) => console.warn('properties.list failed', err));
 
-  const applySecondaryResults = (results: PromiseSettledResult<any>[]) => {
-    const [receiptsRes, maintRes, complaintsRes, workersRes, notifRes, unreadRes, conversationsRes] = results;
-    if (receiptsRes.status === 'fulfilled') setReceipts(asArray(receiptsRes.value, 'receipts'));
-    if (maintRes.status === 'fulfilled') setMaintenanceRequests(asArray(maintRes.value));
-    if (complaintsRes.status === 'fulfilled') setComplaints(asArray(complaintsRes.value));
-    if (workersRes.status === 'fulfilled') setWorkers(asArray(workersRes.value));
-    if (notifRes.status === 'fulfilled') setNotifications(asArray(notifRes.value));
-    if (conversationsRes.status === 'fulfilled') setConversations(asArray(conversationsRes.value));
-    if (unreadRes.status === 'fulfilled') {
-      setUnreadCount(
-        unreadRes.value?.unread_count ??
-          (notifRes.status === 'fulfilled'
-            ? asArray(notifRes.value).filter((n: any) => !n.is_read).length
-            : 0)
-      );
-    } else if (notifRes.status === 'fulfilled') {
-      setUnreadCount(asArray(notifRes.value).filter((n: any) => !n.is_read).length);
-    }
-  };
+    const pUnits = api.units.list().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setUnits(asArray(res, 'units'));
+    }).catch((err) => console.warn('units.list failed', err));
 
-  const fetchCorePortfolio = () =>
-    Promise.allSettled([
-      api.properties.list(),
-      api.units.list(),
-      api.invitations.list(),
-      api.tenants.getLandlordTenants(),
-      api.leases.list(),
-      api.tenancies.list(),
-      api.landlord.getStats(),
-      api.invoices.list(),
-      api.payments.list(),
-      api.expenses.list(),
-      api.financials.getLandlordSummary(),
-    ]);
+    const pInv = api.invitations.list().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setInvitations(asArray(res, 'invitations'));
+    }).catch((err) => console.warn('invitations.list failed', err));
 
-  const fetchSecondaryPortfolio = () =>
-    Promise.allSettled([
-      api.receipts.list(),
-      api.maintenance.getLandlordRequests(),
-      api.complaints.getLandlordComplaints(),
-      api.maintenance.getWorkers(),
-      api.notifications.getUserNotifications(user?.id || 'mock-lp-001'),
-      api.notifications.getUnreadCount(),
-      api.messages.getConversations().catch(() => []),
-    ]);
+    const pTenants = api.tenants.getLandlordTenants().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setTenants(asArray(res, 'tenants'));
+    }).catch((err) => console.warn('tenants.list failed', err));
 
-  const fetchLeasesImmediate = React.useCallback(async (silent = false) => {
-    if (!silent) setLeasesLoading(true);
-    setLeasesError(null);
-    try {
-      const res = await api.leases.list();
+    const pLeases = api.leases.list().then((res) => {
+      if (gen !== fetchGenRef.current) return;
       const list = asArray(res, 'leases');
       setLeases(list);
-      hasLoadedLeasesRef.current = true;
-      if (list.length > 0 && !invLeaseId) {
-        setInvLeaseId(list[0].id);
-        setInvRentAmount(list[0].monthly_rent || 350000);
+      if (list.length > 0) {
+        setInvLeaseId((prev) => prev || list[0].id);
+        setInvRentAmount((prev) => prev || list[0].monthly_rent || 350000);
       }
-      return list;
-    } catch (err: any) {
-      console.error('Failed to load leases:', err);
-      const msg = err.message || 'Failed to load lease agreements';
-      setLeasesError(msg);
-      return [];
-    } finally {
-      if (!silent) setLeasesLoading(false);
-    }
-  }, [invLeaseId]);
+    }).catch((err) => console.warn('leases.list failed', err));
 
-  useEffect(() => {
-    if (activeTab === 'leases') {
-      fetchLeasesImmediate(leases.length > 0);
-    }
-  }, [activeTab, fetchLeasesImmediate, leases.length]);
+    const pTenancies = api.tenancies.list().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setTenancies(asArray(res, 'tenancies'));
+    }).catch((err) => console.warn('tenancies.list failed', err));
+
+    const pStats = api.landlord.getStats().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setStats(res);
+    }).catch((err) => console.warn('stats failed', err));
+
+    const pInvoices = api.invoices.list().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setInvoices(asArray(res, 'invoices'));
+    }).catch((err) => console.warn('invoices.list failed', err));
+
+    const pPayments = api.payments.list().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setPayments(asArray(res, 'payments'));
+    }).catch((err) => console.warn('payments.list failed', err));
+
+    const pExpenses = api.expenses.list().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setExpenses(asArray(res, 'expenses'));
+    }).catch((err) => console.warn('expenses.list failed', err));
+
+    const pFinancials = api.financials.getLandlordSummary().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setFinancials(res && !(res as any).detail ? res : null);
+    }).catch((err) => console.warn('financials failed', err));
+
+    return Promise.allSettled([
+      pProps, pUnits, pInv, pTenants, pLeases, pTenancies,
+      pStats, pInvoices, pPayments, pExpenses, pFinancials,
+    ]);
+  };
+
+  const fetchSecondaryPortfolio = (gen: number) => {
+    const pReceipts = api.receipts.list().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setReceipts(asArray(res, 'receipts'));
+    }).catch(() => []);
+
+    const pMaint = api.maintenance.getLandlordRequests().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setMaintenanceRequests(asArray(res));
+    }).catch(() => []);
+
+    const pComp = api.complaints.getLandlordComplaints().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setComplaints(asArray(res));
+    }).catch(() => []);
+
+    const pWorkers = api.maintenance.getWorkers().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setWorkers(asArray(res));
+    }).catch(() => []);
+
+    const pNotif = api.notifications.getUserNotifications(user?.id || 'mock-lp-001').then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      const list = asArray(res);
+      setNotifications(list);
+      setUnreadCount((prev) => prev || list.filter((n: any) => !n.is_read).length);
+    }).catch(() => []);
+
+    const pUnread = api.notifications.getUnreadCount().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      if (res?.unread_count !== undefined) setUnreadCount(res.unread_count);
+    }).catch(() => { });
+
+    const pConv = api.messages.getConversations().then((res) => {
+      if (gen !== fetchGenRef.current) return;
+      setConversations(asArray(res));
+    }).catch(() => []);
+
+    return Promise.allSettled([pReceipts, pMaint, pComp, pWorkers, pNotif, pUnread, pConv]);
+  };
+
+
 
   type FetchScope =
     | 'all'
@@ -547,7 +551,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
     try {
       if (scope === 'leases') {
-        await fetchLeasesImmediate(silent);
+        const res = await api.leases.list().catch(() => []);
+        if (gen !== fetchGenRef.current) return;
+        setLeases(asArray(res, 'leases'));
         return;
       }
       const needCore =
@@ -635,24 +641,22 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         return;
       }
 
-      // Core wave — overview can render as soon as this settles.
+      // Core wave — overview can render as soon as this settles, with individual slices streaming in real-time.
       if (needCore) {
-        // Eagerly fetch leases in parallel so the Leases tab never waits for unrelated endpoints
-        void fetchLeasesImmediate(silent);
-
-        const coreResults = await fetchCorePortfolio();
-        if (gen !== fetchGenRef.current) return;
-        applyCoreResults(coreResults);
+        const corePromise = fetchCorePortfolio(gen);
+        corePromise.then(() => {
+          if (gen !== fetchGenRef.current) return;
+          hasCoreDataRef.current = true;
+          if (showSpinner) setLoading(false);
+        });
+        await corePromise;
         hasCoreDataRef.current = true;
         if (showSpinner) setLoading(false);
       }
 
       // Secondary wave — deferred on first paint so UI is not blocked.
       if (needSecondary) {
-        const secondaryPromise = fetchSecondaryPortfolio().then((secondaryResults) => {
-          if (gen !== fetchGenRef.current) return;
-          applySecondaryResults(secondaryResults);
-        });
+        const secondaryPromise = fetchSecondaryPortfolio(gen);
         // First cold load: don't await secondary (paint core ASAP).
         // Silent / explicit secondary refresh: await so callers see fresh data.
         if (silent || scope === 'secondary') {
@@ -1028,12 +1032,16 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         } catch (docErr: any) {
           showError(
             docErr.message ||
-              'Lease was created, but the signed document could not be attached. Please upload it from the Documents tab.'
+            'Lease was created, but the signed document could not be attached. Please upload it from the Documents tab.'
           );
         }
       }
-      fetchData({ silent: true, scope: 'core' });
-      void fetchLeasesImmediate(true);
+      if (createdLease) {
+        setLeases((prev) => [createdLease, ...prev]);
+      }
+      if (newTenancy) {
+        setTenancies((prev) => [newTenancy, ...prev]);
+      }
     } catch (err: any) {
       setLeaseError(err.message || 'Failed to create lease.');
     } finally {
@@ -1043,14 +1051,15 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
   const handleUploadDocumentForLease = async (leaseId: string, docData: any) => {
     try {
-      await api.leases.uploadDocument(leaseId, {
+      const updatedLease = await api.leases.uploadDocument(leaseId, {
         ...docData,
         uploaded_by_role: 'LANDLORD',
         uploaded_by_id: user?.id || 'mock-lp-001',
       });
       showSuccess('Lease agreement document uploaded & version history updated!');
-      await fetchData({ silent: true, scope: 'core' });
-      void fetchLeasesImmediate(true);
+      if (updatedLease) {
+        setLeases((prev) => prev.map((l) => (l.id === leaseId ? updatedLease : l)));
+      }
     } catch (err: any) {
       showError(err.message || 'Failed to upload document version');
     }
@@ -1064,11 +1073,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const handleSaveLateFee = async (leaseId: string) => {
     setIsSavingLateFee(true);
     try {
-      await api.leases.update(leaseId, { late_fee: Number(lateFeeDraft) || 0 });
+      const updated = await api.leases.update(leaseId, { late_fee: Number(lateFeeDraft) || 0 });
       showSuccess('Late payment penalty updated.');
       setEditingLateFeeLeaseId(null);
-      await fetchData({ silent: true, scope: 'core' });
-      void fetchLeasesImmediate(true);
+      setLeases((prev) =>
+        prev.map((l) =>
+          l.id === leaseId ? (updated || { ...l, late_fee: Number(lateFeeDraft) || 0 }) : l
+        )
+      );
     } catch (err: any) {
       showError(err.message || 'Failed to update the late payment penalty.');
     } finally {
@@ -1085,10 +1097,11 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
     setActivatingLeaseId(lease.id);
     try {
-      await api.leases.activate(lease.id);
+      const activated = await api.leases.activate(lease.id);
       showSuccess('Lease activated successfully.');
-      fetchData({ silent: true, scope: 'core' });
-      void fetchLeasesImmediate(true);
+      setLeases((prev) =>
+        prev.map((l) => (l.id === lease.id ? (activated || { ...l, status: 'ACTIVE' }) : l))
+      );
     } catch (err: any) {
       showError(err.message || 'Failed to activate lease.');
     } finally {
@@ -1108,11 +1121,63 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       setUnits((prev) => prev.filter((u) => u.property_id !== deletedPropertyId));
       setPropertyPendingDelete(null);
       showSuccess('Property deleted successfully', 3000);
-      fetchData({ silent: true, scope: 'properties' });
     } catch (err: any) {
       showError(err.message || 'Failed to delete property');
     } finally {
       setIsDeletingProperty(false);
+    }
+  };
+
+  const handleConfirmTerminateLease = async () => {
+    if (!leasePendingTerminate) return;
+    const leaseToTerminate = leasePendingTerminate;
+    setIsTerminatingLease(true);
+    try {
+      const updatedLease = await api.leases.terminate(leaseToTerminate.id);
+      showSuccess('Lease terminated successfully. The unit is now vacant.', 4000);
+
+      // 1. Update Leases state in place - preserve terminated lease in history
+      setLeases((prev) =>
+        prev.map((l) =>
+          l.id === leaseToTerminate.id
+            ? { ...(updatedLease || l), status: 'TERMINATED' as any }
+            : l
+        )
+      );
+
+      // 2. Update Units state in place - mark associated unit as VACANT
+      if (leaseToTerminate.unit_id) {
+        setUnits((prev) =>
+          prev.map((u) =>
+            u.id === leaseToTerminate.unit_id ? { ...u, status: 'VACANT' as any } : u
+          )
+        );
+      }
+
+      // 3. Update Tenancies state in place
+      if (leaseToTerminate.tenancy_id) {
+        setTenancies((prev) =>
+          prev.map((t) =>
+            t.id === leaseToTerminate.tenancy_id
+              ? { ...t, status: 'TERMINATED' as any, end_date: new Date().toISOString().split('T')[0] }
+              : t
+          )
+        );
+      }
+
+      // 4. Update Tenants list active lease status
+      if (leaseToTerminate.tenant_id) {
+        setTenants((prev) =>
+          prev.map((t) =>
+            t.id === leaseToTerminate.tenant_id ? { ...t, lease_status: 'TERMINATED' as any } : t
+          )
+        );
+      }
+      setLeasePendingTerminate(null);
+    } catch (err: any) {
+      showError(err.message || 'Failed to terminate lease.');
+    } finally {
+      setIsTerminatingLease(false);
     }
   };
 
@@ -1124,8 +1189,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     try {
       await api.tenancies.end(tenancyId);
       showSuccess('Tenancy ended successfully. The unit is now vacant.', 3000);
-      fetchData({ silent: true, scope: 'core' });
-      void fetchLeasesImmediate(true);
+      setTenancies((prev) => prev.map((t) => (t.id === tenancyId ? { ...t, status: 'ENDED' as any } : t)));
+      setLeases((prev) => prev.map((l) => (l.tenancy_id === tenancyId ? { ...l, status: 'EXPIRED' as any } : l)));
     } catch (err: any) {
       showError(err.message || 'Failed to end tenancy.');
     } finally {
@@ -1202,13 +1267,13 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         setSelectedMaintenance((prev) =>
           prev
             ? {
-                ...prev,
-                status: 'SCHEDULED',
-                scheduled_date: data.scheduled_date,
-                scheduled_time: data.scheduled_time,
-                assigned_to: data.assigned_to,
-                estimated_cost: data.estimated_cost,
-              }
+              ...prev,
+              status: 'SCHEDULED',
+              scheduled_date: data.scheduled_date,
+              scheduled_time: data.scheduled_time,
+              assigned_to: data.assigned_to,
+              estimated_cost: data.estimated_cost,
+            }
             : null
         );
       }
@@ -1242,11 +1307,11 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         setSelectedMaintenance((prev) =>
           prev
             ? {
-                ...prev,
-                status: 'RESOLVED',
-                actual_cost: data.actual_cost,
-                landlord_notes: data.landlord_notes,
-              }
+              ...prev,
+              status: 'RESOLVED',
+              actual_cost: data.actual_cost,
+              landlord_notes: data.landlord_notes,
+            }
             : null
         );
       }
@@ -1282,9 +1347,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         setSelectedMaintenance((prev) =>
           prev
             ? {
-                ...prev,
-                comments: [...(prev.comments || []), newComment],
-              }
+              ...prev,
+              comments: [...(prev.comments || []), newComment],
+            }
             : null
         );
       }
@@ -1316,10 +1381,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         setSelectedComplaint((prev) =>
           prev
             ? {
-                ...prev,
-                status: 'UNDER_REVIEW',
-                landlord_response: data?.landlord_response || prev.landlord_response,
-              }
+              ...prev,
+              status: 'UNDER_REVIEW',
+              landlord_response: data?.landlord_response || prev.landlord_response,
+            }
             : null
         );
       }
@@ -1337,10 +1402,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         setSelectedComplaint((prev) =>
           prev
             ? {
-                ...prev,
-                status: 'RESOLVED',
-                landlord_response: data.landlord_response,
-              }
+              ...prev,
+              status: 'RESOLVED',
+              landlord_response: data.landlord_response,
+            }
             : null
         );
       }
@@ -1379,9 +1444,9 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         setSelectedComplaint((prev) =>
           prev
             ? {
-                ...prev,
-                comments: [...(prev.comments || []), newComment],
-              }
+              ...prev,
+              comments: [...(prev.comments || []), newComment],
+            }
             : null
         );
       }
@@ -1519,8 +1584,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       leaseStatusFilter === 'ALL'
         ? true
         : leaseStatusFilter === 'ACTIVE'
-        ? lifecycle === 'ACTIVE' || lifecycle === 'EXPIRING_SOON' || l.status === 'ACTIVE'
-        : lifecycle === leaseStatusFilter;
+          ? lifecycle === 'ACTIVE' || lifecycle === 'EXPIRING_SOON' || l.status === 'ACTIVE'
+          : lifecycle === leaseStatusFilter;
 
     const matchesSearch =
       !leaseSearch.trim() ||
@@ -1558,8 +1623,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
       invoiceStatusFilter === 'ALL'
         ? true
         : invoiceStatusFilter === 'UNPAID'
-        ? i.status === 'ISSUED' || i.status === 'OVERDUE' || i.status === 'PARTIALLY_PAID'
-        : i.status === invoiceStatusFilter;
+          ? i.status === 'ISSUED' || i.status === 'OVERDUE' || i.status === 'PARTIALLY_PAID'
+          : i.status === invoiceStatusFilter;
     const matchesSearch =
       i.invoice_number.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
       (i.tenant_name && i.tenant_name.toLowerCase().includes(invoiceSearch.toLowerCase())) ||
@@ -1719,36 +1784,56 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           {/* 1. Dashboard */}
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'dashboard'
+            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'dashboard'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <BarChart3 className="w-4 h-4" />
             <span>Dashboard</span>
           </button>
 
-          {/* TRACKER - Dedicated High-Priority Feature with Distinct Visual Treatment */}
-          <div className="pt-2 pb-1">
-            <button
-              onClick={() => setActiveTab('tracker')}
-              className={`w-full group relative flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition-all cursor-pointer overflow-hidden ${
-                activeTab === 'tracker'
-                  ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black shadow-md ring-2 ring-amber-300'
-                  : 'bg-gradient-to-r from-purple-950/90 to-[#251352] text-amber-300 hover:text-white hover:bg-purple-900/60 font-bold border border-amber-400/30 shadow-xs'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <FileSpreadsheet className={`w-4 h-4 ${activeTab === 'tracker' ? 'text-slate-950' : 'text-amber-300 group-hover:scale-110 transition-transform'}`} />
-                <span className="tracking-wide">Tracker</span>
+          {/* TRACKER - Elite AI Feature with Full-Button Animated Moving Ring */}
+          <div className="pt-1.5 pb-1">
+            {/* The outer wrapper for the animated border */}
+            <div className="relative p-[2px] rounded-[14px] group transition-all duration-300">
+              
+              {/* The spinning ring - hidden before hover */}
+              <div className="absolute inset-0 overflow-hidden rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+                <div
+                  className="absolute inset-[-150%] animate-moving-ring"
+                  style={{
+                    background: 'conic-gradient(from 0deg at 50% 50%, transparent 0%, #C084FC 25%, #38BDF8 50%, #EC4899 75%, transparent 100%)'
+                  }}
+                />
               </div>
-              <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                activeTab === 'tracker' ? 'bg-slate-950 text-amber-300' : 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
-              }`}>
-                Auto-Match
-              </span>
-            </button>
+
+              {/* Inner button surface */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('tracker')}
+                className={`w-full relative z-10 flex items-center justify-between px-[12px] py-[6px] rounded-[12px] text-xs transition-all cursor-pointer ${
+                  activeTab === 'tracker'
+                    ? 'bg-white text-[#331A6F] font-bold shadow-xs'
+                    : 'bg-transparent group-hover:bg-[#331A6F] text-purple-100/90 group-hover:text-white font-medium'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Bot className="w-4 h-4" />
+                  <span>Tracker</span>
+                </div>
+
+                <span
+                  className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 transition-all ${
+                    activeTab === 'tracker'
+                      ? 'bg-[#331A6F] text-white shadow-xs'
+                      : 'bg-white/10 text-purple-100/90 group-hover:bg-purple-500/20 group-hover:text-purple-200'
+                  }`}
+                >
+                  AI Match
+                </span>
+              </button>
+            </div>
           </div>
 
           {/* 2. Portfolio & Tenancies tabs */}
@@ -1758,11 +1843,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('properties')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'properties'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'properties'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <Building2 className="w-4 h-4" />
             <span>Properties</span>
@@ -1770,11 +1854,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('units')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'units'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'units'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <Home className="w-4 h-4" />
             <span>Units</span>
@@ -1782,11 +1865,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('tenants')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'tenants'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'tenants'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <Users className="w-4 h-4" />
             <span>Tenants</span>
@@ -1794,11 +1876,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('leases')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'leases'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'leases'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <FileText className="w-4 h-4" />
             <span>Leases</span>
@@ -1811,11 +1892,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('invitations')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'invitations'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'invitations'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <Send className="w-4 h-4" />
             <span>Invitations</span>
@@ -1828,11 +1908,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('financials')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'financials'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'financials'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <CreditCard className="w-4 h-4" />
             <span>Financial Overview</span>
@@ -1840,11 +1919,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('invoices')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'invoices'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'invoices'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <FileText className="w-4 h-4" />
             <span>Invoices</span>
@@ -1857,11 +1935,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('payments')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'payments'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'payments'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <ShieldCheck className="w-4 h-4" />
             <span>Payments & Verify</span>
@@ -1874,11 +1951,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('expenses')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'expenses'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'expenses'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <ReceiptIcon className="w-4 h-4" />
             <span>Expense Tracker</span>
@@ -1891,11 +1967,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('maintenance')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'maintenance'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'maintenance'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <Wrench className="w-4 h-4" />
             <span>Maintenance</span>
@@ -1908,11 +1983,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('messages')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'messages'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'messages'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <MessageSquare className="w-4 h-4" />
             <span>Messages</span>
@@ -1925,11 +1999,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('complaints')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'complaints'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'complaints'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <AlertTriangle className="w-4 h-4" />
             <span>Complaints</span>
@@ -1942,11 +2015,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('workers')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'workers'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'workers'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <Users className="w-4 h-4" />
             <span>Technicians</span>
@@ -1959,11 +2031,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
 
           <button
             onClick={() => setActiveTab('account')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
-              activeTab === 'account' || activeTab === 'profile'
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${activeTab === 'account' || activeTab === 'profile'
                 ? 'bg-white text-[#331A6F] font-bold shadow-xs'
                 : 'text-purple-100/90 hover:bg-white/10 hover:text-white font-medium'
-            }`}
+              }`}
           >
             <UserCircle className="w-4 h-4" />
             <span>Account & Profile</span>
@@ -2022,11 +2093,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           {/* User Account Avatar / Initial */}
           <button
             onClick={() => { setActiveTab('account'); setIsMoreOpen(false); }}
-            className={`w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center transition-all cursor-pointer ${
-              activeTab === 'account' || activeTab === 'profile'
+            className={`w-8 h-8 rounded-full font-bold text-xs flex items-center justify-center transition-all cursor-pointer ${activeTab === 'account' || activeTab === 'profile'
                 ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
                 : 'bg-white/15 text-white hover:bg-white/25'
-            }`}
+              }`}
             title="Account & Profile"
           >
             {user?.first_name ? user.first_name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
@@ -2045,11 +2115,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         <button
           type="button"
           onClick={() => { setActiveTab('dashboard'); setIsMoreOpen(false); }}
-          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
-            activeTab === 'dashboard'
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${activeTab === 'dashboard'
               ? 'text-[#331A6F] font-bold'
               : 'text-slate-400 hover:text-slate-600 font-medium'
-          }`}
+            }`}
         >
           <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''}`}>
             <BarChart3 className="w-5 h-5 stroke-[2.2]" />
@@ -2061,14 +2130,37 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         <button
           type="button"
           onClick={() => { setActiveTab('tracker'); setIsMoreOpen(false); }}
-          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer relative ${
-            activeTab === 'tracker'
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer relative ${activeTab === 'tracker'
               ? 'text-[#331A6F] font-bold'
               : 'text-slate-400 hover:text-slate-600 font-medium'
-          }`}
+            }`}
         >
           <div className={`p-1.5 rounded-xl transition-all relative ${activeTab === 'tracker' ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''}`}>
-            <FileSpreadsheet className="w-5 h-5 stroke-[2.2]" />
+            {/* Moving ring animation */}
+            <svg
+              className="absolute -inset-0.5 w-7 h-7 animate-spin pointer-events-none"
+              style={{ animationDuration: '6s' }}
+              viewBox="0 0 28 28"
+            >
+              <defs>
+                <linearGradient id="mobileTrackerRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#F59E0B" stopOpacity="1" />
+                  <stop offset="60%" stopColor="#8B5CF6" stopOpacity="0.8" />
+                  <stop offset="100%" stopColor="#F59E0B" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <circle
+                cx="14"
+                cy="14"
+                r="11"
+                fill="none"
+                stroke="url(#mobileTrackerRingGrad)"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeDasharray="40 25"
+              />
+            </svg>
+            <Bot className="w-5 h-5 stroke-[2.2] relative z-10" />
             <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-400 rounded-full" />
           </div>
           <span className="text-[10px] tracking-tight flex items-center gap-0.5">
@@ -2080,11 +2172,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         <button
           type="button"
           onClick={() => { setActiveTab('tenants'); setIsMoreOpen(false); }}
-          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
-            activeTab === 'tenants'
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${activeTab === 'tenants'
               ? 'text-[#331A6F] font-bold'
               : 'text-slate-400 hover:text-slate-600 font-medium'
-          }`}
+            }`}
         >
           <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'tenants' ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''}`}>
             <Users className="w-5 h-5 stroke-[2.2]" />
@@ -2096,11 +2187,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         <button
           type="button"
           onClick={() => { setActiveTab('payments'); setIsMoreOpen(false); }}
-          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
-            activeTab === 'payments'
+          className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${activeTab === 'payments'
               ? 'text-[#331A6F] font-bold'
               : 'text-slate-400 hover:text-slate-600 font-medium'
-          }`}
+            }`}
         >
           <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'payments' ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''}`}>
             <CreditCard className="w-5 h-5 stroke-[2.2]" />
@@ -2113,31 +2203,29 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
           const isMoreActive = !['dashboard', 'tracker', 'tenants', 'payments'].includes(activeTab);
           const activeLabel =
             activeTab === 'properties' ? 'Properties' :
-            activeTab === 'units' ? 'Units' :
-            activeTab === 'leases' ? 'Leases' :
-            activeTab === 'invitations' ? 'Invitations' :
-            activeTab === 'financials' ? 'Financials' :
-            activeTab === 'invoices' ? 'Invoices' :
-            activeTab === 'expenses' ? 'Expenses' :
-            activeTab === 'maintenance' ? 'Maintenance' :
-            activeTab === 'messages' ? 'Messages' :
-            activeTab === 'complaints' ? 'Complaints' :
-            activeTab === 'workers' ? 'Technicians' :
-            activeTab === 'account' ? 'Settings' : 'More';
+              activeTab === 'units' ? 'Units' :
+                activeTab === 'leases' ? 'Leases' :
+                  activeTab === 'invitations' ? 'Invitations' :
+                    activeTab === 'financials' ? 'Financials' :
+                      activeTab === 'invoices' ? 'Invoices' :
+                        activeTab === 'expenses' ? 'Expenses' :
+                          activeTab === 'maintenance' ? 'Maintenance' :
+                            activeTab === 'messages' ? 'Messages' :
+                              activeTab === 'complaints' ? 'Complaints' :
+                                activeTab === 'workers' ? 'Technicians' :
+                                  activeTab === 'account' ? 'Settings' : 'More';
 
           return (
             <button
               type="button"
               onClick={() => setIsMoreOpen(!isMoreOpen)}
-              className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer relative ${
-                isMoreActive || isMoreOpen
+              className={`flex-1 min-h-[48px] py-1 flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer relative ${isMoreActive || isMoreOpen
                   ? 'text-[#331A6F] font-bold'
                   : 'text-slate-400 hover:text-slate-600 font-medium'
-              }`}
+                }`}
             >
-              <div className={`p-1.5 rounded-xl transition-all relative ${
-                isMoreActive || isMoreOpen ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''
-              }`}>
+              <div className={`p-1.5 rounded-xl transition-all relative ${isMoreActive || isMoreOpen ? 'bg-[#331A6F]/10 text-[#331A6F]' : ''
+                }`}>
                 <MoreHorizontal className="w-5 h-5 stroke-[2.2]" />
                 {isMoreActive && (
                   <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#331A6F] rounded-full" />
@@ -2200,11 +2288,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('properties'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'properties'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'properties'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'properties' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <Building className="w-4 h-4" />
@@ -2218,11 +2305,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('units'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'units'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'units'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'units' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <Home className="w-4 h-4" />
@@ -2236,11 +2322,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('leases'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'leases'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'leases'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'leases' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <FileText className="w-4 h-4" />
@@ -2254,11 +2339,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('invitations'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'invitations'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'invitations'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'invitations' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <UserCheck className="w-4 h-4" />
@@ -2280,11 +2364,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('financials'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'financials'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'financials'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'financials' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <TrendingUp className="w-4 h-4" />
@@ -2298,11 +2381,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('invoices'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'invoices'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'invoices'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'invoices' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <ReceiptIcon className="w-4 h-4" />
@@ -2316,11 +2398,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('expenses'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'expenses'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'expenses'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'expenses' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <Wallet className="w-4 h-4" />
@@ -2334,14 +2415,13 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('tracker'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'tracker'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'tracker'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'tracker' ? 'bg-[#331A6F] text-white' : 'bg-amber-100 text-amber-800 border border-amber-300'}`}>
-                      <FileSpreadsheet className="w-4 h-4" />
+                      <Bot className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold truncate flex items-center gap-1">
@@ -2362,11 +2442,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('messages'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'messages'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'messages'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 relative ${activeTab === 'messages' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <MessageSquare className="w-4 h-4" />
@@ -2383,11 +2462,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('maintenance'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'maintenance'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'maintenance'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'maintenance' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <ToolIcon className="w-4 h-4" />
@@ -2401,11 +2479,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('complaints'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'complaints'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'complaints'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'complaints' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <AlertTriangle className="w-4 h-4" />
@@ -2419,11 +2496,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('workers'); setIsMoreOpen(false); }}
-                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
-                      activeTab === 'workers'
+                    className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${activeTab === 'workers'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'workers' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
                       <Wrench className="w-4 h-4" />
@@ -2445,11 +2521,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => { setActiveTab('account'); setIsMoreOpen(false); }}
-                    className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
-                      activeTab === 'account' || activeTab === 'profile'
+                    className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${activeTab === 'account' || activeTab === 'profile'
                         ? 'border-[#331A6F] bg-[#331A6F]/8 text-[#331A6F] font-bold shadow-xs'
                         : 'border-slate-200/80 bg-slate-50 hover:bg-slate-100/80 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className={`p-2 rounded-xl shrink-0 ${activeTab === 'account' || activeTab === 'profile' ? 'bg-[#331A6F] text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
@@ -2700,17 +2775,15 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     <button
                       key={st.key}
                       onClick={() => setMaintStatusFilter(st.key)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                        maintStatusFilter === st.key
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${maintStatusFilter === st.key
                           ? 'bg-[#331A6F] text-white shadow-sm'
                           : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
+                        }`}
                     >
                       <span>{st.label}</span>
                       <span
-                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                          maintStatusFilter === st.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                        }`}
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${maintStatusFilter === st.key ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                          }`}
                       >
                         {st.count}
                       </span>
@@ -2803,15 +2876,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             </td>
                             <td className="py-4 px-4">
                               <span
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                                  m.priority === 'URGENT'
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${m.priority === 'URGENT'
                                     ? 'bg-rose-100 text-rose-800'
                                     : m.priority === 'HIGH'
-                                    ? 'bg-orange-100 text-orange-800'
-                                    : m.priority === 'MEDIUM'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-slate-100 text-slate-700'
-                                }`}
+                                      ? 'bg-orange-100 text-orange-800'
+                                      : m.priority === 'MEDIUM'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-slate-100 text-slate-700'
+                                  }`}
                               >
                                 {m.priority}
                               </span>
@@ -2838,21 +2910,20 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             </td>
                             <td className="py-4 px-4">
                               <span
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                                  m.status === 'SUBMITTED'
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${m.status === 'SUBMITTED'
                                     ? 'bg-blue-100 text-blue-800'
                                     : m.status === 'ACKNOWLEDGED'
-                                    ? 'bg-purple-100 text-purple-800'
-                                    : m.status === 'SCHEDULED'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : m.status === 'IN_PROGRESS'
-                                    ? 'bg-indigo-100 text-indigo-800'
-                                    : m.status === 'RESOLVED'
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : m.status === 'CLOSED'
-                                    ? 'bg-slate-100 text-slate-700'
-                                    : 'bg-rose-100 text-rose-800'
-                                }`}
+                                      ? 'bg-purple-100 text-purple-800'
+                                      : m.status === 'SCHEDULED'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : m.status === 'IN_PROGRESS'
+                                          ? 'bg-indigo-100 text-indigo-800'
+                                          : m.status === 'RESOLVED'
+                                            ? 'bg-emerald-100 text-emerald-800'
+                                            : m.status === 'CLOSED'
+                                              ? 'bg-slate-100 text-slate-700'
+                                              : 'bg-rose-100 text-rose-800'
+                                  }`}
                               >
                                 {m.status}
                               </span>
@@ -3086,11 +3157,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                               <Building2 className="w-5 h-5" />
                             </div>
                             <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                                prop.status === 'ACTIVE'
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${prop.status === 'ACTIVE'
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : 'bg-slate-100 text-slate-600'
-                              }`}
+                                }`}
                             >
                               {prop.status}
                             </span>
@@ -3249,13 +3319,12 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                               </td>
                               <td className="py-4 px-4">
                                 <span
-                                  className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                                    unit.status === 'OCCUPIED'
+                                  className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${unit.status === 'OCCUPIED'
                                       ? 'bg-emerald-100 text-emerald-800'
                                       : unit.status === 'VACANT'
-                                      ? 'bg-amber-100 text-amber-800'
-                                      : 'bg-slate-100 text-slate-700'
-                                  }`}
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-slate-100 text-slate-700'
+                                    }`}
                                 >
                                   {unit.status}
                                 </span>
@@ -3412,15 +3481,14 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             </td>
                             <td className="py-4 px-4">
                               <span
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                                  t.is_pending
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${t.is_pending
                                     ? 'bg-amber-100 text-amber-800'
                                     : t.lease_status === 'ACTIVE'
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : t.lease_status === 'EXPIRING_SOON'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-rose-100 text-rose-800'
-                                }`}
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : t.lease_status === 'EXPIRING_SOON'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-rose-100 text-rose-800'
+                                  }`}
                               >
                                 {t.is_pending ? 'Awaiting sign-up' : (t.lease_status || 'ACTIVE')}
                               </span>
@@ -3597,8 +3665,10 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     </div>
                   </div>
 
-                  <div className="text-xs text-slate-500 font-medium">
-                    Showing <span className="font-bold text-slate-800">{filteredLeases.length}</span> leases
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs text-slate-500 font-medium">
+                      Showing <span className="font-bold text-slate-800">{filteredLeases.length}</span> leases
+                    </div>
                   </div>
                 </div>
 
@@ -3620,75 +3690,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {leasesLoading && leases.length === 0 ? (
-                          <tr>
-                            <td colSpan={9} className="py-14 text-center">
-                              <div className="flex flex-col items-center justify-center gap-3">
-                                <RefreshCw className="w-6 h-6 text-[#331A6F] animate-spin" />
-                                <span className="text-xs font-semibold text-slate-600">
-                                  Loading lease agreements from database...
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : leasesError && leases.length === 0 ? (
-                          <tr>
-                            <td colSpan={9} className="py-12 text-center">
-                              <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto px-4">
-                                <AlertCircle className="w-6 h-6 text-rose-600" />
-                                <span className="text-xs font-semibold text-rose-700">{leasesError}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => fetchLeasesImmediate(false)}
-                                  className="mt-2 px-3 py-1.5 rounded-lg bg-[#331A6F] text-white text-xs font-semibold hover:bg-[#251352] cursor-pointer"
-                                >
-                                  Retry Fetching Leases
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : filteredLeases.length === 0 ? (
-                          <tr>
-                            <td colSpan={9} className="py-16 text-center">
-                              {leases.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center max-w-md mx-auto text-center px-4">
-                                  <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center mb-3">
-                                    <FileText className="w-6 h-6 text-[#331A6F]" />
-                                  </div>
-                                  <h3 className="text-base font-bold text-slate-900 mb-1">No Lease Agreements Found</h3>
-                                  <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-                                    You don't have any lease agreements registered in your portfolio yet. Create your first agreement to track terms, automated reminders, and documents.
-                                  </p>
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowCreateLeaseModal(true)}
-                                    className="bg-[#331A6F] hover:bg-[#251352] text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                    <span>Create First Lease Agreement</span>
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex flex-col items-center justify-center max-w-sm mx-auto px-4">
-                                  <Filter className="w-6 h-6 text-slate-400 mb-2" />
-                                  <p className="text-sm font-semibold text-slate-700">No leases match your active filters</p>
-                                  <p className="text-xs text-slate-400 mt-1 mb-3">Try adjusting your search query or status filter.</p>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setLeaseSearch('');
-                                      setLeaseStatusFilter('ALL');
-                                      setLeaseRemainingDaysFilter('');
-                                    }}
-                                    className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                                  >
-                                    Clear Filters
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        ) : (
+                        {/* INSTANT RENDER: Always show lease rows first when available — no spinner gate */}
+                        {paginatedLeases.length > 0 ? (
                           paginatedLeases.map((l) => {
                             const timing = getLeaseTiming(l);
                             const lifecycle = getLeaseLifecycle(l);
@@ -3763,9 +3766,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                                     </span>
                                   ) : (
                                     <span
-                                      className={`text-[11px] font-bold ${
-                                        daysRemaining <= SOON_ENDING_DAYS ? 'text-amber-700' : 'text-slate-800'
-                                      }`}
+                                      className={`text-[11px] font-bold ${daysRemaining <= SOON_ENDING_DAYS ? 'text-amber-700' : 'text-slate-800'
+                                        }`}
                                     >
                                       {daysRemaining} day{daysRemaining === 1 ? '' : 's'} remaining
                                     </span>
@@ -3792,17 +3794,16 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                                 </td>
                                 <td className="py-4 px-4">
                                   <span
-                                    className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                                      lifecycle === 'ACTIVE'
+                                    className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${lifecycle === 'ACTIVE'
                                         ? 'bg-emerald-100 text-emerald-800'
                                         : lifecycle === 'EXPIRING_SOON'
-                                        ? 'bg-amber-100 text-amber-800'
-                                        : lifecycle === 'DRAFT'
-                                        ? 'bg-blue-100 text-blue-800'
-                                        : lifecycle === 'PENDING'
-                                        ? 'bg-indigo-100 text-indigo-800'
-                                        : 'bg-rose-100 text-rose-800'
-                                    }`}
+                                          ? 'bg-amber-100 text-amber-800'
+                                          : lifecycle === 'DRAFT'
+                                            ? 'bg-blue-100 text-blue-800'
+                                            : lifecycle === 'PENDING'
+                                              ? 'bg-indigo-100 text-indigo-800'
+                                              : 'bg-rose-100 text-rose-800'
+                                      }`}
                                   >
                                     {leaseLifecycleLabel(lifecycle)}
                                   </span>
@@ -3833,18 +3834,73 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                                         {activatingLeaseId === l.id ? 'Activating...' : 'Activate'}
                                       </button>
                                     )}
-                                    <button
-                                      onClick={() => handleEndTenancy(l.tenancy_id)}
-                                      disabled={endingTenancyId === l.tenancy_id}
-                                      className="px-2.5 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-700 text-[11px] font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                      {endingTenancyId === l.tenancy_id ? 'Ending...' : 'Terminate'}
-                                    </button>
+                                    {l.status === 'TERMINATED' ? (
+                                      <span
+                                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-400 text-[11px] font-semibold select-none cursor-not-allowed"
+                                        title="This lease agreement has already been terminated."
+                                      >
+                                        Terminated
+                                      </span>
+                                    ) : (
+                                      <button
+                                        onClick={() => setLeasePendingTerminate(l)}
+                                        disabled={isTerminatingLease && leasePendingTerminate?.id === l.id}
+                                        className="px-2.5 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-700 text-[11px] font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Terminate this lease agreement and release unit"
+                                      >
+                                        {isTerminatingLease && leasePendingTerminate?.id === l.id ? 'Terminating...' : 'Terminate'}
+                                      </button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
                             );
                           })
+                        ) : leases.length === 0 ? (
+                          /* Genuine empty portfolio: no leases exist */
+                          <tr>
+                            <td colSpan={9} className="py-16 text-center">
+                              <div className="flex flex-col items-center justify-center max-w-md mx-auto text-center px-4">
+                                <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center mb-3">
+                                  <FileText className="w-6 h-6 text-[#331A6F]" />
+                                </div>
+                                <h3 className="text-base font-bold text-slate-900 mb-1">No Lease Agreements Found</h3>
+                                <p className="text-xs text-slate-500 mb-5 leading-relaxed">
+                                  You don't have any lease agreements registered in your portfolio yet. Create your first agreement to track terms, automated reminders, and documents.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCreateLeaseModal(true)}
+                                  className="bg-[#331A6F] hover:bg-[#251352] text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer shadow-sm"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                  <span>Create First Lease Agreement</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          /* Filter mismatch: leases exist, but none match current filters */
+                          <tr>
+                            <td colSpan={9} className="py-16 text-center">
+                              <div className="flex flex-col items-center justify-center max-w-sm mx-auto px-4">
+                                <Filter className="w-6 h-6 text-slate-400 mb-2" />
+                                <p className="text-sm font-semibold text-slate-700">No leases match your active filters</p>
+                                <p className="text-xs text-slate-400 mt-1 mb-3">Try adjusting your search query or status filter.</p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLeaseSearch('');
+                                    setLeaseStatusFilter('ALL');
+                                    setLeaseRemainingDaysFilter('');
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                                >
+                                  Reset Filters
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
                         )}
                       </tbody>
                     </table>
@@ -3934,13 +3990,12 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             <td className="py-4 px-4 font-mono text-[11px] text-slate-500">{inv.token}</td>
                             <td className="py-4 px-4">
                               <span
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${
-                                  inv.status === 'ACCEPTED'
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold ${inv.status === 'ACCEPTED'
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : inv.status === 'PENDING'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-slate-100 text-slate-700'
-                                }`}
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
                               >
                                 {inv.status}
                               </span>
@@ -4510,13 +4565,12 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     return (
                       <div
                         key={key}
-                        className={`flex-1 min-w-[130px] p-3 rounded-lg border flex items-start gap-2 ${
-                          !attempted
+                        className={`flex-1 min-w-[130px] p-3 rounded-lg border flex items-start gap-2 ${!attempted
                             ? 'bg-slate-50 border-slate-200 text-slate-500'
                             : ok
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                            : 'bg-rose-50 border-rose-200 text-rose-800'
-                        }`}
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                              : 'bg-rose-50 border-rose-200 text-rose-800'
+                          }`}
                       >
                         {!attempted ? (
                           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -4531,8 +4585,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                             {!attempted
                               ? 'Not sent (no address on file)'
                               : ok
-                              ? 'Delivered successfully'
-                              : result?.detail || 'Delivery failed'}
+                                ? 'Delivered successfully'
+                                : result?.detail || 'Delivery failed'}
                           </div>
                         </div>
                       </div>
@@ -4753,22 +4807,20 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   <button
                     type="button"
                     onClick={() => setLeaseIsDraft(false)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      !leaseIsDraft
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${!leaseIsDraft
                         ? 'bg-[#331A6F] text-white shadow-xs'
                         : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     Active Lease
                   </button>
                   <button
                     type="button"
                     onClick={() => setLeaseIsDraft(true)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      leaseIsDraft
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${leaseIsDraft
                         ? 'bg-amber-600 text-white shadow-xs'
                         : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     Save as Draft
                   </button>
@@ -4948,8 +5000,8 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     {isCreatingLease
                       ? 'Creating Lease...'
                       : leaseIsDraft
-                      ? 'Save as Draft'
-                      : 'Create & Activate Lease'}
+                        ? 'Save as Draft'
+                        : 'Create & Activate Lease'}
                   </span>
                 </button>
               </div>
@@ -5286,6 +5338,29 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         isLoading={isDeletingUnit}
         onConfirm={handleConfirmDeleteUnit}
         onCancel={() => setUnitPendingDelete(null)}
+      />
+
+      {/* Terminate Lease Confirmation */}
+      <ConfirmDialog
+        open={!!leasePendingTerminate}
+        title="Terminate this lease agreement?"
+        message={
+          <>
+            You are about to terminate the lease agreement for{' '}
+            <strong className="text-slate-900">
+              {leasePendingTerminate?.tenant_name || 'the tenant'}
+            </strong>{' '}
+            at{' '}
+            <strong className="text-slate-900">
+              {leasePendingTerminate?.property_name || 'Property'} {leasePendingTerminate?.unit_number ? `(${leasePendingTerminate.unit_number})` : ''}
+            </strong>
+            . The lease status will be updated to <strong className="text-rose-700">TERMINATED</strong>, the associated unit will immediately become <strong className="text-emerald-700">VACANT</strong>, and active occupancy will end. The lease record is preserved in your history.
+          </>
+        }
+        confirmLabel="Terminate Lease"
+        isLoading={isTerminatingLease}
+        onConfirm={handleConfirmTerminateLease}
+        onCancel={() => !isTerminatingLease && setLeasePendingTerminate(null)}
       />
     </div>
   );

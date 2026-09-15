@@ -74,6 +74,7 @@ from backend.models.tracker import (
     BankStatement,
     BankTransaction,
     PaymentMatch,
+    TrackerCorrection,
 )
 
 __all__ = [
@@ -144,5 +145,6 @@ __all__ = [
     "BankStatement",
     "BankTransaction",
     "PaymentMatch",
+    "TrackerCorrection",
 ]
 

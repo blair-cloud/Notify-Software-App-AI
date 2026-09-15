@@ -83,7 +83,7 @@ class Lease(Base):
     # so none of these ever trigger a lazy load outside of an async context.
     @_property
     def tenant_name(self):
-        t = (self.tenancy.tenant if self.tenancy else None) or self.tenant
+        t = self.tenant or (self.tenancy.tenant if self.tenancy else None)
         u = t.user if t else None
         if u and (u.first_name or u.last_name):
             name = f"{u.first_name or ''} {u.last_name or ''}".strip()
@@ -99,72 +99,72 @@ class Lease(Base):
 
     @_property
     def tenant_email(self):
-        t = (self.tenancy.tenant if self.tenancy else None) or self.tenant
+        t = self.tenant or (self.tenancy.tenant if self.tenancy else None)
         if t and t.user and t.user.email:
             return t.user.email
         return t.pending_email if t else None
 
     @_property
     def tenant_phone(self):
-        t = (self.tenancy.tenant if self.tenancy else None) or self.tenant
+        t = self.tenant or (self.tenancy.tenant if self.tenancy else None)
         if t and t.user and t.user.phone:
             return t.user.phone
         return t.pending_phone if t else None
 
     @_property
     def tenant_national_id(self):
-        t = (self.tenancy.tenant if self.tenancy else None) or self.tenant
+        t = self.tenant or (self.tenancy.tenant if self.tenancy else None)
         return t.national_id if t else None
 
     @_property
     def property_name(self):
-        p = (self.tenancy.property if self.tenancy else None) or self.property
+        p = self.property or (self.tenancy.property if self.tenancy else None)
         return p.name if p else None
 
     @_property
     def property_address(self):
-        p = (self.tenancy.property if self.tenancy else None) or self.property
+        p = self.property or (self.tenancy.property if self.tenancy else None)
         return p.address if p else None
 
     @_property
     def property_district(self):
-        p = (self.tenancy.property if self.tenancy else None) or self.property
+        p = self.property or (self.tenancy.property if self.tenancy else None)
         return p.district if p else None
 
     @_property
     def unit_number(self):
-        u = (self.tenancy.unit if self.tenancy else None) or self.unit
+        u = self.unit or (self.tenancy.unit if self.tenancy else None)
         return u.unit_number if u else None
 
     @_property
     def unit_floor(self):
-        u = (self.tenancy.unit if self.tenancy else None) or self.unit
+        u = self.unit or (self.tenancy.unit if self.tenancy else None)
         return u.floor if u else None
 
     @_property
     def landlord_name(self):
-        lp = (self.tenancy.landlord if self.tenancy else None) or self.landlord
+        lp = self.landlord or (self.tenancy.landlord if self.tenancy else None)
         u = lp.user if lp else None
         return f"{u.first_name} {u.last_name}".strip() if u else None
 
     @_property
     def landlord_business_name(self):
-        lp = (self.tenancy.landlord if self.tenancy else None) or self.landlord
+        lp = self.landlord or (self.tenancy.landlord if self.tenancy else None)
         return lp.business_name if lp else None
 
     @_property
     def landlord_phone(self):
-        lp = (self.tenancy.landlord if self.tenancy else None) or self.landlord
+        lp = self.landlord or (self.tenancy.landlord if self.tenancy else None)
         return lp.user.phone if lp and lp.user else None
 
     @_property
     def landlord_email(self):
-        lp = (self.tenancy.landlord if self.tenancy else None) or self.landlord
+        lp = self.landlord or (self.tenancy.landlord if self.tenancy else None)
         return lp.user.email if lp and lp.user else None
 
     @_property
     def landlord_address(self):
-        lp = (self.tenancy.landlord if self.tenancy else None) or self.landlord
+        lp = self.landlord or (self.tenancy.landlord if self.tenancy else None)
         return lp.address if lp else None
 
     @_property

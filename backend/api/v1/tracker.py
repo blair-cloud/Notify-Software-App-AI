@@ -116,20 +116,16 @@ async def upload_statement_file(
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload a bank statement file for parsing and multi-signal matching."""
+    """Upload a bank statement file (PDF, Excel, CSV, Image) for AI interpretation and multi-signal matching."""
     content_bytes = await file.read()
-    try:
-        content_str = content_bytes.decode('utf-8')
-    except UnicodeDecodeError:
-        content_str = content_bytes.decode('latin-1', errors='ignore')
-
     prop_uuid = uuid.UUID(property_id) if property_id and property_id != "ALL" else None
 
     stmt = await TrackerService.process_bank_statement(
         session=db,
         landlord_id=landlord.id,
-        file_name=file.filename or "bank_statement.csv",
-        content_str=content_str,
+        file_name=file.filename or "bank_statement.pdf",
+        file_bytes=content_bytes,
+        content_type=file.content_type,
         property_id=prop_uuid,
         auto_confirm_high_confidence=auto_confirm
     )
@@ -140,6 +136,8 @@ async def upload_statement_file(
         "status": "success",
         "statement_id": str(stmt.id),
         "file_name": stmt.file_name,
+        "ai_provider": stmt.ai_provider,
+        "ai_model": stmt.ai_model,
         "total_transactions": stmt.total_transactions_count,
         "matched_count": stmt.matched_count,
         "unmatched_count": stmt.unmatched_count,
@@ -150,6 +148,160 @@ async def upload_statement_file(
         "period_end": str(stmt.period_end) if stmt.period_end else None,
         "matching_analysis_report": analysis,
     }
+
+
+# ---------------------------------------------------------------------------
+# RESTful Endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/statements/upload")
+async def upload_statement(
+    file: UploadFile = File(...),
+    property_id: Optional[str] = Form(None),
+    bank_account_id: Optional[str] = Form(None),
+    auto_confirm: bool = Form(False),
+    landlord: LandlordProfile = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    POST /tracker/statements/upload
+    Accepts PDF, Excel, CSV, or Image bank statement files.
+    Runs AI document understanding, normalization, and deterministic matching.
+    """
+    content_bytes = await file.read()
+    prop_uuid = uuid.UUID(property_id) if property_id and property_id != "ALL" else None
+    acc_uuid = uuid.UUID(bank_account_id) if bank_account_id else None
+
+    stmt = await TrackerService.process_bank_statement(
+        session=db,
+        landlord_id=landlord.id,
+        file_name=file.filename or "bank_statement.pdf",
+        file_bytes=content_bytes,
+        content_type=file.content_type,
+        property_id=prop_uuid,
+        bank_account_id=acc_uuid,
+        auto_confirm_high_confidence=auto_confirm,
+    )
+    analysis = await TrackerService.get_statement_analysis(db, landlord.id, statement_id=stmt.id)
+    return {
+        "status": "success",
+        "statement_id": str(stmt.id),
+        "file_name": stmt.file_name,
+        "file_type": stmt.file_type,
+        "ai_provider": stmt.ai_provider,
+        "ai_model": stmt.ai_model,
+        "extraction_status": stmt.extraction_status,
+        "total_transactions": stmt.total_transactions_count,
+        "matched_count": stmt.matched_count,
+        "unmatched_count": stmt.unmatched_count,
+        "duplicate_count": stmt.duplicate_count,
+        "total_incoming_amount": float(stmt.total_incoming_amount),
+        "matched_amount": float(stmt.matched_amount),
+        "period_start": str(stmt.period_start) if stmt.period_start else None,
+        "period_end": str(stmt.period_end) if stmt.period_end else None,
+        "matching_analysis_report": analysis,
+    }
+
+
+@router.post("/statements/{statement_id}/analyze")
+async def analyze_statement(
+    statement_id: uuid.UUID,
+    landlord: LandlordProfile = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    POST /tracker/statements/{id}/analyze
+    Returns Matching Analysis Report and categorized match buckets.
+    """
+    analysis = await TrackerService.get_statement_analysis(db, landlord.id, statement_id=statement_id)
+    matches = await TrackerService.get_statement_matches(db, landlord.id, statement_id=statement_id)
+    return {
+        "status": "success",
+        "statement_id": str(statement_id),
+        "matching_analysis_report": analysis,
+        "matches": matches,
+    }
+
+
+@router.get("/statements/{statement_id}/transactions")
+async def get_statement_transactions(
+    statement_id: uuid.UUID,
+    landlord: LandlordProfile = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    GET /tracker/statements/{id}/transactions
+    Returns the normalized structured transactions extracted from the statement.
+    """
+    txns = await TrackerService.get_statement_transactions(db, landlord.id, statement_id=statement_id)
+    return {
+        "status": "success",
+        "statement_id": str(statement_id),
+        "transactions": txns,
+        "total": len(txns),
+    }
+
+
+@router.get("/statements/{statement_id}/matches")
+async def get_statement_matches(
+    statement_id: uuid.UUID,
+    landlord: LandlordProfile = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    GET /tracker/statements/{id}/matches
+    Categorized matching report: auto_matched, needs_review, unmatched, duplicates, possible_matches.
+    """
+    matches_data = await TrackerService.get_statement_matches(db, landlord.id, statement_id=statement_id)
+    return {
+        "status": "success",
+        **matches_data,
+    }
+
+
+@router.post("/matches/{match_id}/confirm")
+async def confirm_match(
+    match_id: uuid.UUID,
+    notes: Optional[str] = None,
+    landlord: LandlordProfile = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    POST /tracker/matches/{id}/confirm
+    Landlord confirms a proposed match. Posts payment, updates invoice, and records learning feedback.
+    """
+    try:
+        match_obj = await TrackerService.confirm_match_by_id(
+            session=db, match_id=match_id, landlord_id=landlord.id, notes=notes
+        )
+        return {
+            "status": "success",
+            "match_id": str(match_obj.id),
+            "matched_amount": float(match_obj.matched_amount),
+            "payment_id": str(match_obj.payment_id) if match_obj.payment_id else None,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/matches/{match_id}/reject")
+async def reject_match_endpoint(
+    match_id: uuid.UUID,
+    reason: Optional[str] = None,
+    landlord: LandlordProfile = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    POST /tracker/matches/{id}/reject
+    Landlord rejects a proposed match. Transaction remains unmatched and rejection is recorded for learning.
+    """
+    try:
+        res = await TrackerService.reject_match_by_id(
+            session=db, match_id=match_id, landlord_id=landlord.id, reason=reason
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/statements/{statement_id}/analysis")

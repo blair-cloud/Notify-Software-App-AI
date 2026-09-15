@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.exceptions import NotFoundException, ForbiddenException, ConflictException
 from backend.core.permissions import verify_landlord_ownership, verify_tenant_ownership
-from backend.models import Lease, LeaseDocument, Tenancy, LandlordProfile, TenantProfile, LeaseStatus, TenancyStatus
+from backend.models import Lease, LeaseDocument, Tenancy, LandlordProfile, TenantProfile, LeaseStatus, TenancyStatus, UnitStatus
 from backend.repositories.lease_repository import LeaseRepository
 from backend.repositories.tenancy_repository import TenancyRepository
 from backend.repositories.property_repository import PropertyRepository
@@ -171,6 +171,39 @@ class LeaseService:
 
         lease.status = self.calculate_lease_status(lease.start_date, lease.end_date, LeaseStatus.ACTIVE)
         return lease
+
+    async def terminate_lease(self, landlord: LandlordProfile, lease_id: uuid.UUID) -> Lease:
+        lease = await self.lease_repo.get_by_id(lease_id)
+        if not lease:
+            raise NotFoundException("Lease not found")
+        verify_landlord_ownership(landlord, lease.landlord_id, "Lease")
+
+        if lease.status == LeaseStatus.TERMINATED:
+            raise ConflictException("This lease agreement is already terminated.")
+
+        # 1. Update lease status to TERMINATED
+        lease.status = LeaseStatus.TERMINATED
+
+        # 2. Make associated unit VACANT
+        if lease.unit_id:
+            unit = await self.unit_repo.get_by_id(lease.unit_id)
+            if unit:
+                unit.status = UnitStatus.VACANT
+                await self.unit_repo.update(unit)
+
+        # 3. Update associated tenancy if present
+        if lease.tenancy_id:
+            tenancy = await self.tenancy_repo.get_by_id(lease.tenancy_id)
+            if tenancy and tenancy.status != TenancyStatus.TERMINATED:
+                tenancy.status = TenancyStatus.TERMINATED
+                tenancy.end_date = date.today()
+                await self.tenancy_repo.update(tenancy)
+
+        # 4. Commit transaction
+        await self.db.commit()
+
+        # 5. Return freshly re-loaded lease with all relationships
+        return await self.lease_repo.get_by_id(lease.id)
 
     # ------------------------------------------------------------------
     # Tenant-facing operations - every entry point verifies the lease

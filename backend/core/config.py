@@ -88,6 +88,10 @@ class Settings(BaseSettings):
     STORAGE_AVATARS_BUCKET: str = "notify-avatars"
     STORAGE_PROPERTY_IMAGES_BUCKET: str = "notify-property-images"
 
+    # Google Gemini Document Understanding API for AI Statement Interpretation
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+
     # ------------------------------------------------------------------
     # Outbound communication channels.
     # Every channel falls back to SIMULATED delivery when its provider is not
@@ -186,6 +190,10 @@ class Settings(BaseSettings):
     TRANSLATION_PROVIDER: str = ""
     LIBRETRANSLATE_URL: str = "https://libretranslate.com/translate"
     LIBRETRANSLATE_API_KEY: Optional[str] = None
+
+    # Google Gemini AI Document Understanding for Bank Statements
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE) if ENV_FILE.exists() else None,

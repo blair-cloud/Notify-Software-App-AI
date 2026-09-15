@@ -312,6 +312,10 @@ export const api = {
       request<any>(`/leases/${id}/activate`, {
         method: 'POST',
       }),
+    terminate: (id: string) =>
+      request<any>(`/leases/${id}/terminate`, {
+        method: 'POST',
+      }),
     renew: (id: string, renewData: any) =>
       request<any>(`/leases/${id}/renew`, {
         method: 'POST',
@@ -901,6 +905,37 @@ export const api = {
       }
       return data;
     },
+    uploadStatement: async (formData: FormData) => {
+      const token = await getAccessToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/tracker/statements/upload`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.detail || 'Failed to upload bank statement');
+      }
+      return data;
+    },
+    analyzeStatement: (statementId: string) =>
+      request<any>(`/tracker/statements/${statementId}/analyze`, { method: 'POST' }),
+    getStatementTransactions: (statementId: string) =>
+      request<any>(`/tracker/statements/${statementId}/transactions`),
+    getStatementMatches: (statementId: string) =>
+      request<any>(`/tracker/statements/${statementId}/matches`),
+    confirmMatch: (matchId: string, data?: { notes?: string }) =>
+      request<any>(`/tracker/matches/${matchId}/confirm`, {
+        method: 'POST',
+        body: JSON.stringify(data || {}),
+      }),
+    rejectMatchById: (matchId: string, data?: { reason?: string }) =>
+      request<any>(`/tracker/matches/${matchId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify(data || {}),
+      }),
     approveMatch: (data: { transaction_id: string; notes?: string }) =>
       request<any>('/tracker/approve-match', {
         method: 'POST',

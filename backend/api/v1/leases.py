@@ -112,3 +112,12 @@ async def activate_lease(
 ):
     service = LeaseService(db)
     return await service.activate_lease(landlord, uuid.UUID(lease_id))
+
+@router.post("/{lease_id}/terminate", response_model=LeaseResponse)
+async def terminate_lease(
+    lease_id: str,
+    landlord: LandlordProfile = Depends(get_current_landlord),
+    db: AsyncSession = Depends(get_db)
+):
+    service = LeaseService(db)
+    return await service.terminate_lease(landlord, uuid.UUID(lease_id))
