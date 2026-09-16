@@ -93,4 +93,18 @@ async def reassign_property_landlord(
     service = AdminService(db)
     prop = await service.reassign_property_landlord(uuid.UUID(property_id), req.landlord_id)
     return {"message": "Property reassigned successfully", "property_id": str(prop.id), "landlord_id": str(prop.landlord_id)}
+@router.get("/landlords")
+async def list_landlords(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    service = AdminService(db)
+    return await service.list_landlords()
 
+@router.get("/tenants")
+async def list_tenants(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    service = AdminService(db)
+    return await service.list_tenants()

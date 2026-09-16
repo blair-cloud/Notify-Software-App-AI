@@ -87,16 +87,20 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
       api.payments.list(),
       api.expenses.list(),
       api.maintenance.getAllRequests(),
+      api.admin.getLandlords(),
+      api.admin.getTenants(),
     ]);
 
-    const [statsR, usersR, propsR, unitsR, leasesR, invoicesR, paymentsR, expensesR, maintR] = results;
+    const [statsR, usersR, propsR, unitsR, leasesR, invoicesR, paymentsR, expensesR, maintR, landlordsR, tenantsR] = results;
     const value = <T,>(r: PromiseSettledResult<T>, fallback: T): T =>
       r.status === 'fulfilled' ? r.value : fallback;
 
     const allUsers = value(usersR, [] as any[]);
     setUsersList(allUsers);
-    setLandlords(allUsers.filter((u: any) => u.role === 'LANDLORD'));
-    setTenants(allUsers.filter((u: any) => u.role === 'TENANT'));
+    const realLandlords = value(landlordsR, [] as any[]);
+    setLandlords(realLandlords.length > 0 ? realLandlords : allUsers.filter((u: any) => u.role === 'LANDLORD'));
+    const realTenants = value(tenantsR, [] as any[]);
+    setTenants(realTenants.length > 0 ? realTenants : allUsers.filter((u: any) => u.role === 'TENANT'));
     setProperties(value(propsR, [] as any[]));
     setUnits(value(unitsR, [] as any[]));
     setLeases(value(leasesR, [] as any[]));
@@ -224,6 +228,8 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
               {activeTab === 'landlords' && (
                 <AdminLandlordsTab
                   landlords={landlords}
+                  properties={properties}
+                  units={units}
                   onRefresh={refreshAllData}
                   onNavigateToProperty={() => handleNavigate('properties')}
                 />
@@ -246,6 +252,7 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
               {activeTab === 'properties' && (
                 <AdminPropertiesTab
                   properties={properties}
+                  units={units}
                   landlords={landlords}
                   onRefresh={refreshAllData}
                   onNavigateToUnits={() => handleNavigate('units')}
@@ -275,6 +282,10 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
                 <AdminInvoicesTab
                   invoices={invoices}
                   leases={leases}
+                  properties={properties}
+                  units={units}
+                  landlords={landlords}
+                  tenants={tenants}
                   onRefresh={refreshAllData}
                 />
               )}
@@ -283,6 +294,9 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
                 <AdminPaymentsTab
                   payments={payments}
                   invoices={invoices}
+                  properties={properties}
+                  units={units}
+                  tenants={tenants}
                   onRefresh={refreshAllData}
                 />
               )}

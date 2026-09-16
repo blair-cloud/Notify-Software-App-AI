@@ -255,7 +255,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-[#331A6F] selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-montserrat selection:bg-[#331A6F] selection:text-white">
       {/* 1. Header & Consistent Progress Bar */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4">

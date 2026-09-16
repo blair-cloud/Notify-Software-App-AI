@@ -63,6 +63,8 @@ class MaintenanceWorkerResponse(BaseModel):
 
 class MaintenanceRequestCreate(BaseModel):
     tenancy_id: Optional[uuid.UUID] = None
+    property_id: Optional[uuid.UUID] = None
+    unit_id: Optional[uuid.UUID] = None
     title: str
     description: str
     category: MaintenanceCategory = MaintenanceCategory.PLUMBING

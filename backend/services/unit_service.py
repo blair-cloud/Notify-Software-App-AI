@@ -16,14 +16,17 @@ class UnitService:
         self.unit_repo = UnitRepository(db)
         self.property_repo = PropertyRepository(db)
 
-    async def create_unit(self, landlord: LandlordProfile, req: UnitCreate) -> Unit:
+    async def create_unit(self, landlord: LandlordProfile | None, req: UnitCreate) -> Unit:
         prop = await self.property_repo.get_by_id(req.property_id)
-        if not prop or prop.landlord_id != landlord.id:
-            raise ForbiddenException("Property not found or does not belong to landlord")
+        if not prop:
+            raise NotFoundException("Property not found")
+        if landlord is not None and prop.landlord_id != landlord.id:
+            raise ForbiddenException("Property does not belong to landlord")
 
+        landlord_id = landlord.id if landlord else prop.landlord_id
         unit = Unit(
             property_id=req.property_id,
-            landlord_id=landlord.id,
+            landlord_id=landlord_id,
             unit_number=req.unit_number,
             floor=req.floor,
             unit_type=req.unit_type,
@@ -44,20 +47,21 @@ class UnitService:
         res = await self.db.execute(select(Unit).order_by(Unit.created_at.desc()))
         return list(res.scalars().all())
 
-    async def get_unit_by_id(self, landlord: LandlordProfile, unit_id: uuid.UUID) -> Unit:
+    async def get_unit_by_id(self, landlord: LandlordProfile | None, unit_id: uuid.UUID) -> Unit:
         unit = await self.unit_repo.get_by_id(unit_id)
         if not unit:
             raise NotFoundException("Unit not found")
-        verify_landlord_ownership(landlord, unit.landlord_id, "Unit")
+        if landlord is not None:
+            verify_landlord_ownership(landlord, unit.landlord_id, "Unit")
         return unit
 
-    async def update_unit(self, landlord: LandlordProfile, unit_id: uuid.UUID, req: UnitUpdate) -> Unit:
+    async def update_unit(self, landlord: LandlordProfile | None, unit_id: uuid.UUID, req: UnitUpdate) -> Unit:
         unit = await self.get_unit_by_id(landlord, unit_id)
         for field, value in req.model_dump(exclude_unset=True).items():
             setattr(unit, field, value)
         return await self.unit_repo.update(unit)
 
-    async def delete_unit(self, landlord: LandlordProfile, unit_id: uuid.UUID) -> None:
+    async def delete_unit(self, landlord: LandlordProfile | None, unit_id: uuid.UUID) -> None:
         unit = await self.get_unit_by_id(landlord, unit_id)
         if unit.status == UnitStatus.OCCUPIED:
             raise ConflictException("Cannot delete an occupied unit. End the tenancy first.")

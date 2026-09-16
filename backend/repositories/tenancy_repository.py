@@ -42,6 +42,15 @@ class TenancyRepository:
         res = await self.db.execute(stmt)
         return res.scalars().all()
 
+    async def list_all(self) -> Sequence[Tenancy]:
+        stmt = (
+            select(Tenancy)
+            .options(*_TENANT_LOAD_OPTIONS)
+            .order_by(Tenancy.created_at.desc())
+        )
+        res = await self.db.execute(stmt)
+        return res.scalars().all()
+
     async def list_by_tenant(self, tenant_id: uuid.UUID) -> Sequence[Tenancy]:
         stmt = (
             select(Tenancy)

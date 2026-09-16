@@ -155,7 +155,7 @@ export const ManageUnitsPage: React.FC<ManageUnitsPageProps> = () => {
   };
 
   return (
-    <div className="min-h-screen bg-notify-grid text-black pb-24">
+    <div className="min-h-screen bg-notify-grid text-black pb-24 font-montserrat">
       <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-36 sm:pt-40 space-y-8">
         {/* Title */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">

@@ -20,15 +20,19 @@ class TenancyService:
         self.property_repo = PropertyRepository(db)
         self.user_repo = UserRepository(db)
 
-    async def create_tenancy(self, landlord: LandlordProfile, req: TenancyCreate) -> Tenancy:
+    async def create_tenancy(self, landlord: LandlordProfile | None, req: TenancyCreate) -> Tenancy:
         # 1. Verify property ownership
         prop = await self.property_repo.get_by_id(req.property_id)
-        if not prop or prop.landlord_id != landlord.id:
+        if not prop:
+            raise NotFoundException("Property not found")
+        if landlord is not None and prop.landlord_id != landlord.id:
             raise ForbiddenException("Property does not exist or does not belong to landlord")
+
+        target_landlord_id = landlord.id if landlord else prop.landlord_id
 
         # 2. Verify unit belongs to property & landlord
         unit = await self.unit_repo.get_by_id(req.unit_id)
-        if not unit or unit.property_id != req.property_id or unit.landlord_id != landlord.id:
+        if not unit or unit.property_id != req.property_id or unit.landlord_id != target_landlord_id:
             raise ForbiddenException("Unit does not belong to this property or landlord")
 
         # 3. Check for double occupancy
@@ -47,11 +51,6 @@ class TenancyService:
             raise NotFoundException("Tenant profile not found")
 
         # 5. Reuse a tenancy already sitting on this exact tenant+unit pairing
-        # rather than creating a second one. This is what lets a landlord use
-        # "Create Lease" for a tenant who was invited but has not signed up yet
-        # (an INVITED tenancy, created the moment the invitation was sent) -
-        # without it, this would silently create a duplicate tenancy for the
-        # same assignment the moment the tenant later accepts.
         reuse_stmt = select(Tenancy).where(
             Tenancy.tenant_id == tenant_profile.id,
             Tenancy.unit_id == req.unit_id,
@@ -66,7 +65,7 @@ class TenancyService:
         else:
             tenancy = Tenancy(
                 tenant_id=tenant_profile.id,
-                landlord_id=landlord.id,
+                landlord_id=target_landlord_id,
                 property_id=req.property_id,
                 unit_id=req.unit_id,
                 status=TenancyStatus.ACTIVE,
@@ -79,10 +78,10 @@ class TenancyService:
         unit.status = UnitStatus.OCCUPIED
         await self.unit_repo.update(unit)
 
-        # Re-fetch with relationships eager-loaded so response serialization
-        # (TenancyResponse.tenant/property/unit) never triggers a lazy load
-        # outside of an async context.
         return await self.tenancy_repo.get_by_id(tenancy.id)
+
+    async def list_all_tenancies(self) -> Sequence[Tenancy]:
+        return await self.tenancy_repo.list_all()
 
     async def list_landlord_tenancies(self, landlord: LandlordProfile) -> Sequence[Tenancy]:
         return await self.tenancy_repo.list_by_landlord(landlord.id)

@@ -18,7 +18,7 @@ export const AccessDenied: React.FC<AccessDeniedProps> = ({
   const { user, logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-[#F4F4F0] text-black font-sans py-12 px-4 flex flex-col justify-center items-center relative">
+    <div className="min-h-screen bg-[#F4F4F0] text-black font-montserrat py-12 px-4 flex flex-col justify-center items-center relative">
       <div
         className="absolute inset-0 pointer-events-none opacity-20"
         style={{

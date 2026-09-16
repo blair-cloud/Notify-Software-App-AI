@@ -3,6 +3,7 @@
 @theme {
   --font-sans: "Poppins", system-ui, -apple-system, sans-serif;
   --font-roboto: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-montserrat: "Montserrat", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .font-roboto,
@@ -11,6 +12,14 @@
 .font-roboto select,
 .font-roboto textarea {
   font-family: var(--font-roboto), "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.font-montserrat,
+.font-montserrat input,
+.font-montserrat button,
+.font-montserrat select,
+.font-montserrat textarea {
+  font-family: var(--font-montserrat), "Montserrat", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 @layer base {

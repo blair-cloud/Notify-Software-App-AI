@@ -465,7 +465,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const isCheckEmail = mode === "CHECK_EMAIL";
 
   return (
-    <div className="min-h-screen bg-notify-grid text-black font-sans py-6 sm:py-10 px-4 sm:px-6 lg:px-8 relative flex flex-col justify-center items-center">
+    <div className="min-h-screen bg-notify-grid text-black font-montserrat py-6 sm:py-10 px-4 sm:px-6 lg:px-8 relative flex flex-col justify-center items-center">
       <div className={`w-full z-10 ${isCheckEmail ? "max-w-md" : "max-w-6xl"}`}>
         {/* Navigation Bar / Return to Site */}
         <div className="mb-6 flex items-center justify-between">

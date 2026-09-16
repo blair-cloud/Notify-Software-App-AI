@@ -14,11 +14,19 @@ router = APIRouter(prefix="/leases", tags=["Leases"])
 @router.post("", response_model=LeaseResponse, status_code=status.HTTP_201_CREATED)
 async def create_lease(
     req: LeaseCreate,
+    current_user: User = Depends(get_current_user),
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
+    from backend.core.exceptions import NotFoundException
     service = LeaseService(db)
-    return await service.create_lease(landlord, req)
+    target_landlord = landlord
+    if is_admin(current_user) and not target_landlord:
+        tenancy = await service.tenancy_repo.get_by_id(req.tenancy_id)
+        if not tenancy:
+            raise NotFoundException("Tenancy not found")
+        target_landlord = await db.get(LandlordProfile, tenancy.landlord_id)
+    return await service.create_lease(target_landlord, req)
 
 @router.get("", response_model=List[LeaseResponse])
 async def list_leases(
@@ -78,46 +86,56 @@ async def sign_my_lease(
 @router.get("/{lease_id}", response_model=LeaseResponse)
 async def get_lease(
     lease_id: str,
+    current_user: User = Depends(get_current_user),
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
     service = LeaseService(db)
-    return await service.get_lease_by_id(landlord, uuid.UUID(lease_id))
+    effective_landlord = None if is_admin(current_user) else landlord
+    return await service.get_lease_by_id(effective_landlord, uuid.UUID(lease_id))
 
 @router.patch("/{lease_id}", response_model=LeaseResponse)
 async def update_lease(
     lease_id: str,
     req: LeaseUpdate,
+    current_user: User = Depends(get_current_user),
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
     service = LeaseService(db)
-    return await service.update_lease(landlord, uuid.UUID(lease_id), req)
+    effective_landlord = None if is_admin(current_user) else landlord
+    return await service.update_lease(effective_landlord, uuid.UUID(lease_id), req)
 
 @router.post("/{lease_id}/document", response_model=LeaseResponse, status_code=status.HTTP_201_CREATED)
 async def upload_lease_document(
     lease_id: str,
     req: LeaseDocumentUpload,
+    current_user: User = Depends(get_current_user),
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
     service = LeaseService(db)
-    return await service.upload_document(landlord, uuid.UUID(lease_id), req)
+    effective_landlord = None if is_admin(current_user) else landlord
+    return await service.upload_document(effective_landlord, uuid.UUID(lease_id), req)
 
 @router.post("/{lease_id}/activate", response_model=LeaseResponse)
 async def activate_lease(
     lease_id: str,
+    current_user: User = Depends(get_current_user),
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
     service = LeaseService(db)
-    return await service.activate_lease(landlord, uuid.UUID(lease_id))
+    effective_landlord = None if is_admin(current_user) else landlord
+    return await service.activate_lease(effective_landlord, uuid.UUID(lease_id))
 
 @router.post("/{lease_id}/terminate", response_model=LeaseResponse)
 async def terminate_lease(
     lease_id: str,
+    current_user: User = Depends(get_current_user),
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
     service = LeaseService(db)
-    return await service.terminate_lease(landlord, uuid.UUID(lease_id))
+    effective_landlord = None if is_admin(current_user) else landlord
+    return await service.terminate_lease(effective_landlord, uuid.UUID(lease_id))

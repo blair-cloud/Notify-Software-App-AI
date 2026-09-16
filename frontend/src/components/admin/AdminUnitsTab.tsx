@@ -10,7 +10,7 @@ import {
   X,
   Edit,
 } from 'lucide-react';
-import { adminService } from '../../services/adminService';
+import { api } from '../../services/api';
 
 interface AdminUnitsTabProps {
   units: any[];
@@ -23,6 +23,14 @@ export const AdminUnitsTab: React.FC<AdminUnitsTabProps> = ({ units = [], proper
   const [propertyFilter, setPropertyFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'OCCUPIED' | 'VACANT'>('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Live computed metrics
+  const totalUnits = (units || []).length;
+  const occupiedUnits = (units || []).filter((u) => u.status === 'OCCUPIED').length;
+  const vacantUnits = (units || []).filter((u) => u.status === 'VACANT').length;
+  const totalRentRoll = (units || []).reduce((sum, u) => sum + (u.monthly_rent || 0), 0);
 
   // Form State
   const [selectedPropId, setSelectedPropId] = useState(properties?.[0]?.id || '');
@@ -31,10 +39,19 @@ export const AdminUnitsTab: React.FC<AdminUnitsTabProps> = ({ units = [], proper
   const [bedrooms, setBedrooms] = useState(2);
   const [bathrooms, setBathrooms] = useState(1);
 
-  const filtered = (units || []).filter((u) => {
+  const enrichedUnits = (units || []).map((u) => {
+    const prop = (properties || []).find((p) => p.id === u.property_id);
+    return {
+      ...u,
+      resolved_property_name: prop ? prop.name : (u.property_name || 'Property'),
+      resolved_district: prop ? prop.district : (u.district || 'Kigali'),
+    };
+  });
+
+  const filtered = enrichedUnits.filter((u) => {
     const matchesSearch =
       u.unit_number?.toLowerCase().includes(search.toLowerCase()) ||
-      u.property_name?.toLowerCase().includes(search.toLowerCase()) ||
+      u.resolved_property_name?.toLowerCase().includes(search.toLowerCase()) ||
       u.tenant_name?.toLowerCase().includes(search.toLowerCase()) ||
       u.landlord_name?.toLowerCase().includes(search.toLowerCase());
 
@@ -44,32 +61,80 @@ export const AdminUnitsTab: React.FC<AdminUnitsTabProps> = ({ units = [], proper
     return matchesSearch && matchesProp && matchesStatus;
   });
 
-  const handleCreateUnit = (e: React.FormEvent) => {
+  const handleCreateUnit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPropId || !unitNumber) return;
 
-    adminService.createUnit({
-      property_id: selectedPropId,
-      unit_number: unitNumber,
-      monthly_rent: Number(monthlyRent),
-      bedrooms: Number(bedrooms),
-      bathrooms: Number(bathrooms),
-    });
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      await api.units.create({
+        property_id: selectedPropId,
+        unit_number: unitNumber,
+        monthly_rent: Number(monthlyRent),
+        rooms: Number(bedrooms),
+        bathrooms: Number(bathrooms),
+      });
 
-    setUnitNumber('');
-    setShowAddModal(false);
-    onRefresh();
+      setUnitNumber('');
+      setShowAddModal(false);
+      onRefresh();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to create unit');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteUnit = (unitId: string) => {
+  const handleDeleteUnit = async (unitId: string) => {
     if (confirm('Are you sure you want to delete this unit?')) {
-      adminService.deleteUnit(unitId);
-      onRefresh();
+      setActionError(null);
+      try {
+        await api.units.delete(unitId);
+        onRefresh();
+      } catch (err: any) {
+        setActionError(err.message || 'Cannot delete unit. Check if there are active tenancies or leases.');
+      }
     }
   };
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <div className="p-3 bg-rose-50 border-2 border-rose-500 rounded-xl text-rose-800 text-xs font-bold flex items-center justify-between">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="cursor-pointer font-black text-sm">✕</button>
+        </div>
+      )}
+
+      {/* Metric Cards Banner */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Total Units</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{totalUnits}</div>
+          <div className="text-[11px] font-semibold text-slate-600 mt-0.5">Across {properties.length} properties</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Occupied Units</div>
+          <div className="text-2xl font-black text-emerald-600 mt-1">{occupiedUnits}</div>
+          <div className="text-[11px] font-semibold text-emerald-700 mt-0.5">
+            {totalUnits > 0 ? ((occupiedUnits / totalUnits) * 100).toFixed(1) : 0}% occupied
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Vacant Units</div>
+          <div className="text-2xl font-black text-amber-600 mt-1">{vacantUnits}</div>
+          <div className="text-[11px] font-semibold text-amber-700 mt-0.5">Available for lease</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Total Rent Capacity</div>
+          <div className="text-2xl font-black text-[#331A6F] mt-1">RWF {totalRentRoll.toLocaleString()}</div>
+          <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Sum of unit rents</div>
+        </div>
+      </div>
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>

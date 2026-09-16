@@ -63,6 +63,21 @@ class LeaseRepository:
         res = await self.db.execute(stmt)
         return res.unique().scalars().all()
 
+    async def list_all(self) -> Sequence[Lease]:
+        stmt = (
+            select(Lease)
+            .options(
+                joinedload(Lease.property),
+                joinedload(Lease.unit),
+                joinedload(Lease.tenant).joinedload(TenantProfile.user),
+                joinedload(Lease.landlord).joinedload(LandlordProfile.user),
+                selectinload(Lease.documents).defer(LeaseDocument.file_data),
+            )
+            .order_by(Lease.created_at.desc())
+        )
+        res = await self.db.execute(stmt)
+        return res.unique().scalars().all()
+
     async def create(self, lease: Lease) -> Lease:
         self.db.add(lease)
         await self.db.flush()

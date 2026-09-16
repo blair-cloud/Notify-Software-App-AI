@@ -12,8 +12,9 @@ import {
   CheckCircle,
   AlertTriangle,
   RefreshCw,
+  AlertCircle
 } from 'lucide-react';
-import { adminService } from '../../services/adminService';
+import { api } from '../../services/api';
 
 interface AdminUsersRolesTabProps {
   users?: any[];
@@ -27,6 +28,8 @@ export const AdminUsersRolesTab: React.FC<AdminUsersRolesTabProps> = ({ users = 
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [showChangeRoleModal, setShowChangeRoleModal] = useState(false);
   const [targetRole, setTargetRole] = useState<'SYSTEM_ADMIN' | 'LANDLORD' | 'TENANT'>('LANDLORD');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Form state
   const [newFirst, setNewFirst] = useState('');
@@ -47,38 +50,65 @@ export const AdminUsersRolesTab: React.FC<AdminUsersRolesTabProps> = ({ users = 
     return matchesSearch && matchesRole;
   });
 
-  const handleToggleStatus = (user: any) => {
-    const nextStatus = user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-    adminService.updateUserStatus(user.id, nextStatus);
-    onRefresh();
+  const handleToggleStatus = async (user: any) => {
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      if (user.status === 'ACTIVE' || user.is_active) {
+        await api.admin.suspendUser(user.id);
+      } else {
+        await api.admin.activateUser(user.id);
+      }
+      onRefresh();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to update user status');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFirst || !newLast || !newEmail) return;
 
-    adminService.createUser({
-      first_name: newFirst,
-      last_name: newLast,
-      email: newEmail,
-      phone: newPhone,
-      role: newRole,
-    });
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await api.admin.createUser({
+        first_name: newFirst,
+        last_name: newLast,
+        email: newEmail,
+        phone: newPhone,
+        role: newRole,
+      });
 
-    setNewFirst('');
-    setNewLast('');
-    setNewEmail('');
-    setNewPhone('+25078');
-    setShowAddModal(false);
-    onRefresh();
+      setNewFirst('');
+      setNewLast('');
+      setNewEmail('');
+      setNewPhone('+25078');
+      setShowAddModal(false);
+      onRefresh();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to create platform user');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleChangeRole = () => {
+  const handleChangeRole = async () => {
     if (!selectedUser) return;
-    adminService.updateUserRole(selectedUser.id, targetRole);
-    setShowChangeRoleModal(false);
-    setSelectedUser(null);
-    onRefresh();
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await api.admin.updateUserRole(selectedUser.id, targetRole);
+      setShowChangeRoleModal(false);
+      setSelectedUser(null);
+      onRefresh();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to reassign user role');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   return (
@@ -96,13 +126,23 @@ export const AdminUsersRolesTab: React.FC<AdminUsersRolesTabProps> = ({ users = 
         </div>
 
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setActionError(null);
+            setShowAddModal(true);
+          }}
           className="flex items-center gap-2 px-4 py-2.5 bg-[#331A6F] text-white text-xs font-extrabold rounded-xl border-2 border-black shadow-[0.5px_0.5px_0_#000] hover:shadow-[0.5px_0.5px_0_#000] hover:-translate-y-0.5 transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
           <span>Create Platform User</span>
         </button>
       </div>
+
+      {actionError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 font-bold flex items-center gap-2 text-xs">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
 
       {/* Role Distribution Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -238,18 +278,21 @@ export const AdminUsersRolesTab: React.FC<AdminUsersRolesTabProps> = ({ users = 
                     <td className="p-3.5 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
+                          disabled={actionLoading}
                           onClick={() => {
                             setSelectedUser(u);
                             setTargetRole(u.role);
+                            setActionError(null);
                             setShowChangeRoleModal(true);
                           }}
-                          className="px-2.5 py-1 bg-white hover:bg-slate-100 text-[#331A6F] font-extrabold text-[11px] rounded-lg border-2 border-black shadow-[0.5px_0.5px_0_#000] cursor-pointer"
+                          className="px-2.5 py-1 bg-white hover:bg-slate-100 text-[#331A6F] font-extrabold text-[11px] rounded-lg border-2 border-black shadow-[0.5px_0.5px_0_#000] cursor-pointer disabled:opacity-50"
                         >
                           Change Role
                         </button>
                         <button
+                          disabled={actionLoading}
                           onClick={() => handleToggleStatus(u)}
-                          className={`px-2 py-1 font-extrabold text-[11px] rounded-lg border-2 border-black shadow-[0.5px_0.5px_0_#000] cursor-pointer ${
+                          className={`px-2 py-1 font-extrabold text-[11px] rounded-lg border-2 border-black shadow-[0.5px_0.5px_0_#000] cursor-pointer disabled:opacity-50 ${
                             u.status === 'ACTIVE' || u.is_active
                               ? 'bg-rose-50 text-rose-700 hover:bg-rose-100'
                               : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
@@ -359,9 +402,10 @@ export const AdminUsersRolesTab: React.FC<AdminUsersRolesTabProps> = ({ users = 
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#331A6F] text-white font-extrabold rounded-xl border-2 border-black shadow-[0.5px_0.5px_0_#000] hover:shadow-[0.5px_0.5px_0_#000] cursor-pointer"
+                  disabled={actionLoading}
+                  className="px-4 py-2 bg-[#331A6F] text-white font-extrabold rounded-xl border-2 border-black shadow-[0.5px_0.5px_0_#000] hover:shadow-[0.5px_0.5px_0_#000] cursor-pointer disabled:opacity-50"
                 >
-                  Create Account
+                  {actionLoading ? 'Creating...' : 'Create Account'}
                 </button>
               </div>
             </form>
@@ -425,10 +469,11 @@ export const AdminUsersRolesTab: React.FC<AdminUsersRolesTabProps> = ({ users = 
                 </button>
                 <button
                   type="button"
+                  disabled={actionLoading}
                   onClick={handleChangeRole}
-                  className="px-4 py-2 bg-[#331A6F] text-white font-extrabold rounded-xl border-2 border-black shadow-[0.5px_0.5px_0_#000] hover:shadow-[0.5px_0.5px_0_#000] cursor-pointer"
+                  className="px-4 py-2 bg-[#331A6F] text-white font-extrabold rounded-xl border-2 border-black shadow-[0.5px_0.5px_0_#000] hover:shadow-[0.5px_0.5px_0_#000] cursor-pointer disabled:opacity-50"
                 >
-                  Save New Role
+                  {actionLoading ? 'Saving...' : 'Save New Role'}
                 </button>
               </div>
             </div>

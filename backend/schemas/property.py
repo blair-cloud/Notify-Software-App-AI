@@ -6,6 +6,7 @@ from backend.models.role import PropertyType, PropertyStatus
 
 class PropertyCreate(BaseModel):
     name: str
+    landlord_id: Optional[uuid.UUID] = None
     property_type: PropertyType = PropertyType.COMMERCIAL
     description: Optional[str] = None
     address: str

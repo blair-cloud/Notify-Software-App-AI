@@ -81,7 +81,7 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({ onGoToSignIn, 
   };
 
   return (
-    <div className="min-h-screen bg-notify-grid text-black font-sans flex flex-col items-center justify-center px-4 py-10">
+    <div className="min-h-screen bg-notify-grid text-black font-montserrat flex flex-col items-center justify-center px-4 py-10">
       <button onClick={onGoHome} className="mb-6 cursor-pointer" aria-label="Notify home">
         <BrandPicture
           webp={BRAND_IMAGES.logo}

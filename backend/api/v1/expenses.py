@@ -90,12 +90,21 @@ async def get_my_expenses(
 async def create_expense(
     req: ExpenseCreateRequest,
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """The landlord comes from the token, never from the request body."""
+    target_landlord_id = landlord.id if landlord else None
+    if not target_landlord_id and is_admin(current_user):
+        from backend.models import Property
+        prop = await db.get(Property, req.property_id)
+        if not prop:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Property not found")
+        target_landlord_id = prop.landlord_id
+
     expense = await ExpenseService.create_expense(
         session=db,
-        landlord_id=landlord.id,
+        landlord_id=target_landlord_id,
         property_id=req.property_id,
         category=req.category,
         description=req.description,
@@ -115,10 +124,12 @@ async def update_expense(
     expense_id: uuid.UUID,
     req: ExpenseUpdateRequest,
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    target_landlord_id = None if is_admin(current_user) else (landlord.id if landlord else None)
     expense = await ExpenseService.update_expense(
-        db, landlord.id, expense_id, req.model_dump(exclude_unset=True)
+        db, target_landlord_id, expense_id, req.model_dump(exclude_unset=True)
     )
     return (await ExpenseService.serialize(db, [expense]))[0]
 
@@ -127,9 +138,11 @@ async def update_expense(
 async def delete_expense(
     expense_id: uuid.UUID,
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await ExpenseService.delete_expense(db, landlord.id, expense_id)
+    target_landlord_id = None if is_admin(current_user) else (landlord.id if landlord else None)
+    await ExpenseService.delete_expense(db, target_landlord_id, expense_id)
     return {"status": "success", "message": "Expense removed"}
 
 

@@ -70,21 +70,7 @@ class LeaseService:
 
     async def list_all_leases(self) -> Sequence[Lease]:
         """Every lease on the platform. System-admin views only."""
-        from sqlalchemy.orm import selectinload
-        stmt = (
-            select(Lease)
-            .options(
-                selectinload(Lease.documents),
-                selectinload(Lease.tenancy),
-                selectinload(Lease.property),
-                selectinload(Lease.unit),
-                selectinload(Lease.tenant),
-                selectinload(Lease.landlord),
-            )
-            .order_by(Lease.created_at.desc())
-        )
-        res = await self.db.execute(stmt)
-        leases = list(res.scalars().all())
+        leases = await self.lease_repo.list_all()
         for lease in leases:
             new_status = self.calculate_lease_status(lease.start_date, lease.end_date, lease.status)
             if new_status != lease.status:
@@ -100,15 +86,16 @@ class LeaseService:
                 lease.status = new_status
         return leases
 
-    async def get_lease_by_id(self, landlord: LandlordProfile, lease_id: uuid.UUID) -> Lease:
+    async def get_lease_by_id(self, landlord: LandlordProfile | None, lease_id: uuid.UUID) -> Lease:
         lease = await self.lease_repo.get_by_id(lease_id)
         if not lease:
             raise NotFoundException("Lease not found")
-        verify_landlord_ownership(landlord, lease.landlord_id, "Lease")
+        if landlord is not None:
+            verify_landlord_ownership(landlord, lease.landlord_id, "Lease")
         lease.status = self.calculate_lease_status(lease.start_date, lease.end_date, lease.status)
         return lease
 
-    async def update_lease(self, landlord: LandlordProfile, lease_id: uuid.UUID, req: LeaseUpdate) -> Lease:
+    async def update_lease(self, landlord: LandlordProfile | None, lease_id: uuid.UUID, req: LeaseUpdate) -> Lease:
         lease = await self.get_lease_by_id(landlord, lease_id)
         for field, value in req.model_dump(exclude_unset=True).items():
             setattr(lease, field, value)
@@ -156,11 +143,11 @@ class LeaseService:
 
         return lease
 
-    async def upload_document(self, landlord: LandlordProfile, lease_id: uuid.UUID, req: LeaseDocumentUpload) -> Lease:
+    async def upload_document(self, landlord: LandlordProfile | None, lease_id: uuid.UUID, req: LeaseDocumentUpload) -> Lease:
         lease = await self.get_lease_by_id(landlord, lease_id)
         return await self._add_document_version(lease, req, default_role="LANDLORD")
 
-    async def activate_lease(self, landlord: LandlordProfile, lease_id: uuid.UUID) -> Lease:
+    async def activate_lease(self, landlord: LandlordProfile | None, lease_id: uuid.UUID) -> Lease:
         lease = await self.get_lease_by_id(landlord, lease_id)
 
         if lease.status != LeaseStatus.DRAFT:
@@ -172,11 +159,12 @@ class LeaseService:
         lease.status = self.calculate_lease_status(lease.start_date, lease.end_date, LeaseStatus.ACTIVE)
         return lease
 
-    async def terminate_lease(self, landlord: LandlordProfile, lease_id: uuid.UUID) -> Lease:
+    async def terminate_lease(self, landlord: LandlordProfile | None, lease_id: uuid.UUID) -> Lease:
         lease = await self.lease_repo.get_by_id(lease_id)
         if not lease:
             raise NotFoundException("Lease not found")
-        verify_landlord_ownership(landlord, lease.landlord_id, "Lease")
+        if landlord is not None:
+            verify_landlord_ownership(landlord, lease.landlord_id, "Lease")
 
         if lease.status == LeaseStatus.TERMINATED:
             raise ConflictException("This lease agreement is already terminated.")

@@ -17,6 +17,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
+import { api } from '../../services/api';
 
 interface AdminTenantsTabProps {
   tenants?: any[];
@@ -33,6 +34,15 @@ export const AdminTenantsTab: React.FC<AdminTenantsTabProps> = ({
   const [leaseFilter, setLeaseFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' | 'DRAFT'>('ALL');
   const [selectedTenant, setSelectedTenant] = useState<any | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Live computed metrics from database
+  const totalTenants = (tenants || []).length;
+  const activeTenants = (tenants || []).filter((t) => t.status === 'ACTIVE').length;
+  const activeLeases = (tenants || []).filter((t) => t.lease_status === 'ACTIVE').length;
+  const totalMonthlyRent = (tenants || []).reduce((sum, t) => sum + (t.monthly_rent || 0), 0);
+  const totalBalanceDue = (tenants || []).reduce((sum, t) => sum + (t.outstanding_balance || 0), 0);
 
   // New Tenant form state
   const [newFirst, setNewFirst] = useState('');
@@ -59,37 +69,92 @@ export const AdminTenantsTab: React.FC<AdminTenantsTabProps> = ({
     return matchesSearch && matchesLease;
   });
 
-  const handleCreateTenant = (e: React.FormEvent) => {
+  const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFirst || !newLast || !newEmail) return;
 
-    adminService.createUser({
-      first_name: newFirst,
-      last_name: newLast,
-      email: newEmail,
-      phone: newPhone,
-      role: 'TENANT',
-    });
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      await api.admin.createUser({
+        first_name: newFirst,
+        last_name: newLast,
+        email: newEmail,
+        phone: newPhone,
+        role: 'TENANT',
+      });
 
-    setNewFirst('');
-    setNewLast('');
-    setNewEmail('');
-    setNewPhone('+25078');
-    setShowAddModal(false);
-    onRefresh();
+      setNewFirst('');
+      setNewLast('');
+      setNewEmail('');
+      setNewPhone('+25078');
+      setShowAddModal(false);
+      onRefresh();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to create tenant');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleToggleStatus = (tenant: any) => {
+  const handleToggleStatus = async (tenant: any) => {
+    const targetUserId = tenant.user_id || tenant.id;
+    if (!targetUserId) {
+      setActionError('Cannot change status: Tenant has not created an account yet (pending invitation).');
+      return;
+    }
     const nextStatus = tenant.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-    adminService.updateUserStatus(tenant.id, nextStatus);
-    onRefresh();
-    if (selectedTenant && selectedTenant.id === tenant.id) {
-      setSelectedTenant({ ...selectedTenant, status: nextStatus });
+    setActionError(null);
+    try {
+      if (nextStatus === 'SUSPENDED') {
+        await api.admin.suspendUser(targetUserId);
+      } else {
+        await api.admin.activateUser(targetUserId);
+      }
+      onRefresh();
+      if (selectedTenant && (selectedTenant.id === tenant.id || selectedTenant.user_id === targetUserId)) {
+        setSelectedTenant({ ...selectedTenant, status: nextStatus });
+      }
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to update tenant status');
     }
   };
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <div className="p-3 bg-rose-50 border-2 border-rose-500 rounded-xl text-rose-800 text-xs font-bold flex items-center justify-between">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="cursor-pointer font-black text-sm">✕</button>
+        </div>
+      )}
+
+      {/* Metric Cards Banner */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Total Registered Tenants</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{totalTenants}</div>
+          <div className="text-[11px] font-semibold text-emerald-600 mt-0.5">{activeTenants} active profiles</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Active Leases</div>
+          <div className="text-2xl font-black text-amber-600 mt-1">{activeLeases}</div>
+          <div className="text-[11px] font-semibold text-slate-600 mt-0.5">Current occupied tenancies</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Monthly Rent Obligation</div>
+          <div className="text-2xl font-black text-[#331A6F] mt-1">RWF {totalMonthlyRent.toLocaleString()}</div>
+          <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Total contracted rent</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Total Outstanding Balance</div>
+          <div className="text-2xl font-black text-rose-600 mt-1">RWF {totalBalanceDue.toLocaleString()}</div>
+          <div className="text-[11px] font-semibold text-slate-500 mt-0.5">Unpaid tenant balances</div>
+        </div>
+      </div>
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>

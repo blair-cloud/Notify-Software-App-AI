@@ -222,7 +222,10 @@ class NotificationService:
         action_label: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         language: str = "en",
-    ) -> Notification:
+    ) -> Optional[Notification]:
+        if not user_id:
+            logger.warning("create_notification skipped: user_id is None")
+            return None
         metadata_json = json.dumps(metadata) if metadata else None
 
         notification = Notification(

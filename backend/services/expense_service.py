@@ -52,12 +52,12 @@ class ExpenseService:
         return unit
 
     @staticmethod
-    async def _get_owned(session: AsyncSession, landlord_id: uuid.UUID, expense_id: uuid.UUID) -> Expense:
+    async def _get_owned(session: AsyncSession, landlord_id: Optional[uuid.UUID], expense_id: uuid.UUID) -> Expense:
         res = await session.execute(select(Expense).where(Expense.id == expense_id))
         expense = res.scalar_one_or_none()
         if not expense:
             raise NotFoundException("Expense not found")
-        if expense.landlord_id != landlord_id:
+        if landlord_id is not None and expense.landlord_id != landlord_id:
             raise ForbiddenException("Expense does not belong to this landlord")
         return expense
 

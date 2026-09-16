@@ -60,7 +60,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onOpenGetStarted }) =>
   };
 
   return (
-    <div className="min-h-screen bg-notify-grid text-black pb-24">
+    <div className="min-h-screen bg-notify-grid text-black pb-24 font-montserrat">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-36 sm:pt-40 space-y-12 sm:space-y-16">
         {/* Page Heading */}
         <div className="text-center max-w-3xl mx-auto">

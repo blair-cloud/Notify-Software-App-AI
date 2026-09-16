@@ -30,14 +30,22 @@ router = APIRouter(prefix="/maintenance", tags=["Maintenance"])
 async def create_maintenance_request(
     data: MaintenanceRequestCreate,
     user: User = Depends(get_current_user),
-    tenant: TenantProfile = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
     try:
+        from sqlalchemy import select
+        from backend.core.scoping import is_admin
+        tenant_id = None
+        if user.role == UserRole.TENANT:
+            row = await db.execute(select(TenantProfile.id).where(TenantProfile.user_id == user.id))
+            tenant_id = row.scalar_one_or_none()
+            if not tenant_id:
+                raise HTTPException(status_code=403, detail="Tenant profile not found")
+
         req = await MaintenanceService.create_maintenance_request(
             session=db,
             user_id=user.id,
-            tenant_id=tenant.id,
+            tenant_id=tenant_id,
             data=data,
         )
         augmented = await MaintenanceService.get_augmented_request(db, req.id)
@@ -64,6 +72,7 @@ async def get_landlord_maintenance_requests(
     return await MaintenanceService.get_requests_for_landlord(db, landlord.id)
 
 
+@router.get("", response_model=List[MaintenanceRequestResponse])
 @router.get("/all", response_model=List[MaintenanceRequestResponse])
 async def get_all_maintenance_requests(
     admin: User = Depends(require_admin),
@@ -123,10 +132,12 @@ async def get_maintenance_request_details(
 async def acknowledge_maintenance(
     request_id: str,
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        req = await MaintenanceService.acknowledge_request(db, uuid.UUID(request_id), landlord.id)
+        landlord_id = None if current_user.role == UserRole.SYSTEM_ADMIN else (landlord.id if landlord else None)
+        req = await MaintenanceService.acknowledge_request(db, uuid.UUID(request_id), landlord_id)
         return await MaintenanceService.get_augmented_request(db, req.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -137,10 +148,12 @@ async def schedule_maintenance(
     request_id: str,
     data: MaintenanceScheduleRequest,
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        req = await MaintenanceService.schedule_maintenance(db, uuid.UUID(request_id), landlord.id, data)
+        landlord_id = None if current_user.role == UserRole.SYSTEM_ADMIN else (landlord.id if landlord else None)
+        req = await MaintenanceService.schedule_maintenance(db, uuid.UUID(request_id), landlord_id, data)
         return await MaintenanceService.get_augmented_request(db, req.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -151,10 +164,12 @@ async def assign_worker(
     request_id: str,
     data: MaintenanceAssignRequest,
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        req = await MaintenanceService.assign_worker(db, uuid.UUID(request_id), landlord.id, data)
+        landlord_id = None if current_user.role == UserRole.SYSTEM_ADMIN else (landlord.id if landlord else None)
+        req = await MaintenanceService.assign_worker(db, uuid.UUID(request_id), landlord_id, data)
         return await MaintenanceService.get_augmented_request(db, req.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -164,10 +179,12 @@ async def assign_worker(
 async def mark_in_progress(
     request_id: str,
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        req = await MaintenanceService.mark_in_progress(db, uuid.UUID(request_id), landlord.id)
+        landlord_id = None if current_user.role == UserRole.SYSTEM_ADMIN else (landlord.id if landlord else None)
+        req = await MaintenanceService.mark_in_progress(db, uuid.UUID(request_id), landlord_id)
         return await MaintenanceService.get_augmented_request(db, req.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -178,10 +195,12 @@ async def resolve_maintenance(
     request_id: str,
     data: MaintenanceResolveRequest,
     landlord: LandlordProfile = Depends(get_current_landlord),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        req = await MaintenanceService.resolve_request(db, uuid.UUID(request_id), landlord.id, data)
+        landlord_id = None if current_user.role == UserRole.SYSTEM_ADMIN else (landlord.id if landlord else None)
+        req = await MaintenanceService.resolve_request(db, uuid.UUID(request_id), landlord_id, data)
         return await MaintenanceService.get_augmented_request(db, req.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

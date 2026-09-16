@@ -59,25 +59,44 @@ class MaintenanceService:
         tenant_id: uuid.UUID,
         data: MaintenanceRequestCreate,
     ) -> MaintenanceRequest:
-        # Verify active tenancy belonging to tenant
-        tenancy_stmt = select(Tenancy).where(
-            Tenancy.tenant_id == tenant_id,
-            Tenancy.status == "ACTIVE"
-        )
+        tenancy = None
         if data.tenancy_id:
-            tenancy_stmt = tenancy_stmt.where(Tenancy.id == data.tenancy_id)
-        
-        tenancy_res = await session.execute(tenancy_stmt)
-        tenancy = tenancy_res.scalar_one_or_none()
+            tenancy_res = await session.execute(select(Tenancy).where(Tenancy.id == data.tenancy_id))
+            tenancy = tenancy_res.scalar_one_or_none()
+            if tenancy:
+                tenant_id = tenancy.tenant_id
+
+        if not tenancy and data.unit_id:
+            res = await session.execute(
+                select(Tenancy).where(Tenancy.unit_id == data.unit_id).order_by(Tenancy.created_at.desc())
+            )
+            tenancy = res.scalar_one_or_none()
+            if tenancy:
+                tenant_id = tenancy.tenant_id
+
+        if not tenancy and data.property_id:
+            res = await session.execute(
+                select(Tenancy).where(Tenancy.property_id == data.property_id).order_by(Tenancy.created_at.desc())
+            )
+            tenancy = res.scalar_one_or_none()
+            if tenancy:
+                tenant_id = tenancy.tenant_id
+
+        if not tenancy and tenant_id:
+            tenancy_stmt = select(Tenancy).where(
+                Tenancy.tenant_id == tenant_id,
+                Tenancy.status == "ACTIVE"
+            )
+            tenancy_res = await session.execute(tenancy_stmt)
+            tenancy = tenancy_res.scalar_one_or_none()
+
+            if not tenancy:
+                all_tenancy_stmt = select(Tenancy).where(Tenancy.tenant_id == tenant_id)
+                all_tenancy_res = await session.execute(all_tenancy_stmt)
+                tenancy = all_tenancy_res.scalar_one_or_none()
 
         if not tenancy:
-            # Fallback check any tenancy for this tenant
-            all_tenancy_stmt = select(Tenancy).where(Tenancy.tenant_id == tenant_id)
-            all_tenancy_res = await session.execute(all_tenancy_stmt)
-            tenancy = all_tenancy_res.scalar_one_or_none()
-
-        if not tenancy:
-            raise ValueError("No valid tenancy found for this tenant. Cannot submit maintenance request.")
+            raise ValueError("No valid tenancy found. Cannot submit maintenance request.")
 
         request_number = await cls.generate_request_number(session)
 
@@ -115,18 +134,19 @@ class MaintenanceService:
 
         # Notify Landlord
         try:
-            landlord_res = await session.execute(select(LandlordProfile).where(LandlordProfile.id == tenancy.landlord_id))
-            landlord = landlord_res.scalar_one_or_none()
-            if landlord:
-                await NotificationService.create_notification(
-                    session=session,
-                    user_id=landlord.user_id,
-                    type=NotificationType.MAINTENANCE_CREATED.value,
-                    title="New Maintenance Request",
-                    message=f"New {data.priority.value.lower()} priority maintenance request '{data.title}' submitted ({request_number}).",
-                    entity_type="MAINTENANCE",
-                    entity_id=req.id,
-                )
+            async with session.begin_nested():
+                landlord_res = await session.execute(select(LandlordProfile).where(LandlordProfile.id == tenancy.landlord_id))
+                landlord = landlord_res.scalar_one_or_none()
+                if landlord and landlord.user_id:
+                    await NotificationService.create_notification(
+                        session=session,
+                        user_id=landlord.user_id,
+                        type=NotificationType.MAINTENANCE_CREATED.value,
+                        title="New Maintenance Request",
+                        message=f"New {data.priority.value.lower()} priority maintenance request '{data.title}' submitted ({request_number}).",
+                        entity_type="MAINTENANCE",
+                        entity_id=req.id,
+                    )
         except Exception as e:
             logger.warning(f"Error creating notification on maintenance create: {e}")
 
@@ -656,18 +676,19 @@ class MaintenanceService:
         cls, session: AsyncSession, req: MaintenanceRequest, type: str, title: str, message: str
     ):
         try:
-            tenant_res = await session.execute(select(TenantProfile).where(TenantProfile.id == req.tenant_id))
-            tenant = tenant_res.scalar_one_or_none()
-            if tenant:
-                await NotificationService.create_notification(
-                    session=session,
-                    user_id=tenant.user_id,
-                    type=type,
-                    title=title,
-                    message=message,
-                    entity_type="MAINTENANCE",
-                    entity_id=req.id,
-                )
+            async with session.begin_nested():
+                tenant_res = await session.execute(select(TenantProfile).where(TenantProfile.id == req.tenant_id))
+                tenant = tenant_res.scalar_one_or_none()
+                if tenant and tenant.user_id:
+                    await NotificationService.create_notification(
+                        session=session,
+                        user_id=tenant.user_id,
+                        type=type,
+                        title=title,
+                        message=message,
+                        entity_type="MAINTENANCE",
+                        entity_id=req.id,
+                    )
         except Exception as e:
             logger.warning(f"Error notifying tenant: {e}")
 
@@ -676,17 +697,18 @@ class MaintenanceService:
         cls, session: AsyncSession, req: MaintenanceRequest, type: str, title: str, message: str
     ):
         try:
-            landlord_res = await session.execute(select(LandlordProfile).where(LandlordProfile.id == req.landlord_id))
-            landlord = landlord_res.scalar_one_or_none()
-            if landlord:
-                await NotificationService.create_notification(
-                    session=session,
-                    user_id=landlord.user_id,
-                    type=type,
-                    title=title,
-                    message=message,
-                    entity_type="MAINTENANCE",
-                    entity_id=req.id,
-                )
+            async with session.begin_nested():
+                landlord_res = await session.execute(select(LandlordProfile).where(LandlordProfile.id == req.landlord_id))
+                landlord = landlord_res.scalar_one_or_none()
+                if landlord and landlord.user_id:
+                    await NotificationService.create_notification(
+                        session=session,
+                        user_id=landlord.user_id,
+                        type=type,
+                        title=title,
+                        message=message,
+                        entity_type="MAINTENANCE",
+                        entity_id=req.id,
+                    )
         except Exception as e:
             logger.warning(f"Error notifying landlord: {e}")

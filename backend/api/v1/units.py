@@ -13,11 +13,13 @@ router = APIRouter(prefix="/units", tags=["Units"])
 @router.post("", response_model=UnitResponse, status_code=status.HTTP_201_CREATED)
 async def create_unit(
     req: UnitCreate,
+    current_user: User = Depends(get_current_user),
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
     service = UnitService(db)
-    return await service.create_unit(landlord, req)
+    effective_landlord = None if is_admin(current_user) else landlord
+    return await service.create_unit(effective_landlord, req)
 
 @router.get("", response_model=List[UnitResponse])
 async def list_units(
@@ -33,31 +35,37 @@ async def list_units(
 @router.get("/{unit_id}", response_model=UnitResponse)
 async def get_unit(
     unit_id: str,
+    current_user: User = Depends(get_current_user),
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
     import uuid
     service = UnitService(db)
-    return await service.get_unit_by_id(landlord, uuid.UUID(unit_id))
+    effective_landlord = None if is_admin(current_user) else landlord
+    return await service.get_unit_by_id(effective_landlord, uuid.UUID(unit_id))
 
 @router.patch("/{unit_id}", response_model=UnitResponse)
 async def update_unit(
     unit_id: str,
     req: UnitUpdate,
+    current_user: User = Depends(get_current_user),
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
     import uuid
     service = UnitService(db)
-    return await service.update_unit(landlord, uuid.UUID(unit_id), req)
+    effective_landlord = None if is_admin(current_user) else landlord
+    return await service.update_unit(effective_landlord, uuid.UUID(unit_id), req)
 
 @router.delete("/{unit_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_unit(
     unit_id: str,
+    current_user: User = Depends(get_current_user),
     landlord: LandlordProfile = Depends(get_current_landlord),
     db: AsyncSession = Depends(get_db)
 ):
     import uuid
     service = UnitService(db)
-    await service.delete_unit(landlord, uuid.UUID(unit_id))
+    effective_landlord = None if is_admin(current_user) else landlord
+    await service.delete_unit(effective_landlord, uuid.UUID(unit_id))
     return None

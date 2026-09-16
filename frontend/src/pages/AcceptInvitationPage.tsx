@@ -104,7 +104,7 @@ export const AcceptInvitationPage: React.FC<AcceptInvitationPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] text-black font-sans flex flex-col justify-center items-center p-4">
+    <div className="min-h-screen bg-[#F5F5F7] text-black font-montserrat flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-lg bg-white rounded-[24px] border-2 border-black shadow-[0.5px_0.5px_0_#000] p-6 sm:p-8">
         {/* Header Logo */}
         <div className="flex items-center gap-3 mb-6">

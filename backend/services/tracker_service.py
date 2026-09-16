@@ -1232,20 +1232,6 @@ class TrackerService:
             session.add(txn_obj)
             await session.flush()
 
-        # Save the file bytes to disk for later retrieval by the document viewer
-        if file_bytes:
-            # ensure directory exists
-            statements_dir = os.path.join("data", "statements")
-            os.makedirs(statements_dir, exist_ok=True)
-            
-            ext = ".pdf" if file_type == "PDF" else ".img" if file_type == "IMG" else ".csv" if file_type == "CSV" else ".xlsx"
-            file_path = os.path.join(statements_dir, f"{str(statement.id)}{ext}")
-            
-            # Since this is an async context but file IO is fast enough here for local disk, we can use simple sync open
-            with open(file_path, "wb") as bf:
-                bf.write(file_bytes)
-
-
             if not is_credit:
                 unmatched_count += 1
                 continue
@@ -1336,20 +1322,6 @@ class TrackerService:
                     session.add(match_record)
                     await session.flush()
 
-        # Save the file bytes to disk for later retrieval by the document viewer
-        if file_bytes:
-            # ensure directory exists
-            statements_dir = os.path.join("data", "statements")
-            os.makedirs(statements_dir, exist_ok=True)
-            
-            ext = ".pdf" if file_type == "PDF" else ".img" if file_type == "IMG" else ".csv" if file_type == "CSV" else ".xlsx"
-            file_path = os.path.join(statements_dir, f"{str(statement.id)}{ext}")
-            
-            # Since this is an async context but file IO is fast enough here for local disk, we can use simple sync open
-            with open(file_path, "wb") as bf:
-                bf.write(file_bytes)
-
-
                     # Legacy auto_confirm: only if explicitly requested AND AUTO_MATCH
                     if auto_confirm_high_confidence and status == "MATCHED" and confidence_level == "AUTO_MATCH":
                         try:
@@ -1376,6 +1348,15 @@ class TrackerService:
             else:
                 txn_obj.matching_status = "UNMATCHED"
                 unmatched_count += 1
+
+        # Save the file bytes to disk for later retrieval by the document viewer
+        if file_bytes:
+            statements_dir = os.path.join("data", "statements")
+            os.makedirs(statements_dir, exist_ok=True)
+            ext = ".pdf" if file_type == "PDF" else ".img" if file_type == "IMG" else ".csv" if file_type == "CSV" else ".xlsx"
+            file_path = os.path.join(statements_dir, f"{str(statement.id)}{ext}")
+            with open(file_path, "wb") as bf:
+                bf.write(file_bytes)
 
         statement.matched_count = matched_count
         statement.unmatched_count = unmatched_count

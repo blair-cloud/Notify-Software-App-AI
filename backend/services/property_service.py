@@ -40,11 +40,12 @@ class PropertyService:
         res = await self.db.execute(select(Property).order_by(Property.created_at.desc()))
         return list(res.scalars().all())
 
-    async def get_property_by_id(self, landlord: LandlordProfile, property_id: uuid.UUID) -> Property:
+    async def get_property_by_id(self, landlord: LandlordProfile | None, property_id: uuid.UUID) -> Property:
         prop = await self.property_repo.get_by_id(property_id)
         if not prop:
             raise NotFoundException("Property not found")
-        verify_landlord_ownership(landlord, prop.landlord_id, "Property")
+        if landlord is not None:
+            verify_landlord_ownership(landlord, prop.landlord_id, "Property")
         return prop
 
     async def update_property(self, landlord: LandlordProfile, property_id: uuid.UUID, req: PropertyUpdate) -> Property:

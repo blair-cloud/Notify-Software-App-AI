@@ -123,7 +123,8 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
 
   // Statement Upload State
   const [selectedFile, setSelectedFile] = useState<File | Blob | null>(null);
-  const [isDarkDocumentMode, setIsDarkDocumentMode] = useState<boolean>(true);
+  const [isDarkDocumentMode, setIsDarkDocumentMode] = useState<boolean>(false);
+  const [isBankPaneExpanded, setIsBankPaneExpanded] = useState<boolean>(false);
   const [isLoadingDocument, setIsLoadingDocument] = useState<boolean>(false);
   const [statementFileName, setStatementFileName] = useState<string>('');
   const [statementContent, setStatementContent] = useState<string>('');
@@ -1498,11 +1499,23 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
           <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
             
             {/* LEFT PANE: Tenants Expected to Pay */}
-            <div className="bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden">
-              <div className="p-4 border-b border-slate-100 shrink-0 flex items-center justify-between">
+            <div className={`bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden ${
+              isBankPaneExpanded ? 'hidden' : ''
+            }`}>
+              <div className="p-3.5 border-b border-slate-100 shrink-0 flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-black text-slate-900">Tenants Expected to Pay</h2>
                   <p className="text-[10px] text-slate-500 font-medium">Strictly due in selected period</p>
+                </div>
+                <div className="relative w-44">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Filter tenants..."
+                    value={reportSearchQuery}
+                    onChange={(e) => setReportSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-2.5 py-1 rounded-lg border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#331a6f]/30"
+                  />
                 </div>
               </div>
               
@@ -1543,14 +1556,14 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                             )}
                           </td>
                           <td className="py-3 px-4 text-right">
-                            {row.balance_due > 0 && (
-                              <button
-                                onClick={() => onOpenRecordPayment(row.tenant_id, row.invoice_id)}
-                                className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold transition-colors cursor-pointer"
-                              >
-                                Record Pay
-                              </button>
-                            )}
+                            <button
+                              onClick={() => onOpenRecordPayment(row.tenant_id, row.invoice_id)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#331a6f] hover:bg-[#251352] text-white text-[10px] font-bold shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+                              title={`Manual Record Payment for ${row.tenant_name}`}
+                            >
+                              <CreditCard className="w-3 h-3" />
+                              <span>Manual Record Payment</span>
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -1566,111 +1579,28 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
               </div>
             </div>
 
-            {/* RIGHT PANE: Document Viewer & Floating Search */}
-            <div className="relative bg-[#323639] flex flex-col h-full overflow-hidden">
-              {/* Viewer Header Toggle */}
-              <div className="absolute top-4 left-4 z-20">
-                <button
-                  onClick={() => setIsDarkDocumentMode(!isDarkDocumentMode)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-white shadow-lg text-xs font-bold hover:bg-slate-700 transition-colors cursor-pointer"
-                >
-                  {isDarkDocumentMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-                  {isDarkDocumentMode ? "Bright Mode" : "Dark Mode"}
-                </button>
-              </div>
-
-              {/* Document Viewer */}
-              <div className="flex-1 w-full h-full relative overflow-hidden">
-                {selectedFile ? (
-                  <StatementPDFViewer file={selectedFile} isDarkMode={isDarkDocumentMode} />
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-2 p-6 text-center">
-                    <FileText className="w-10 h-10 text-slate-500" />
-                    <span className="text-sm font-bold text-slate-300">{isLoadingDocument ? 'Loading Document...' : 'No Document Found'}</span>
-                    <p className="text-xs text-slate-500 max-w-xs">{isLoadingDocument ? 'Fetching original file...' : 'The uploaded file could not be retrieved.'}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Floating Extracted Transactions Panel */}
-              <div className="absolute top-4 right-4 w-80 max-h-[calc(100%-2rem)] flex flex-col bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-20">
-                {/* Floating Header & Search */}
-                <div className="p-3 border-b border-slate-100 shrink-0 space-y-3 bg-white">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                      Extracted AI Matches
-                    </h3>
-                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                      {displayedBankTransactions.length}
-                    </span>
-                  </div>
-                  
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Search extracted names, amts, refs..."
-                      value={bankSearchQuery}
-                      onChange={(e) => setBankSearchQuery(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#331a6f]/30 transition-all"
-                    />
-                  </div>
+            {/* RIGHT PANE: Document Viewer */}
+            <div className={`bg-[#181a20] flex flex-col h-full overflow-hidden ${
+              isBankPaneExpanded ? 'col-span-full' : ''
+            }`}>
+              {selectedFile ? (
+                <StatementPDFViewer 
+                  file={selectedFile} 
+                  fileName={statementFileName}
+                  isDarkMode={isDarkDocumentMode} 
+                  onToggleDarkMode={() => setIsDarkDocumentMode(!isDarkDocumentMode)}
+                  isExpanded={isBankPaneExpanded}
+                  onToggleExpand={() => setIsBankPaneExpanded(!isBankPaneExpanded)}
+                  extractedTransactions={statementAnalysisResult?.transactions || []}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-2 p-6 text-center">
+                  <FileText className="w-10 h-10 text-slate-500" />
+                  <span className="text-sm font-bold text-slate-300">{isLoadingDocument ? 'Loading Document...' : 'No Document Found'}</span>
+                  <p className="text-xs text-slate-500 max-w-xs">{isLoadingDocument ? 'Fetching original file...' : 'The uploaded file could not be retrieved.'}</p>
                 </div>
-
-                {/* Floating List */}
-                <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50/50 custom-scrollbar">
-                  {displayedBankTransactions.length > 0 ? (
-                    displayedBankTransactions.map((txn: any, idx: number) => {
-                      const isMatched = (matchingAnalysisRows || []).some((r: any) => r.id === txn.id && (r.display_status === 'MATCHED' || r.matching_status === 'MATCHED'));
-                      return (
-                        <div 
-                          key={txn.id || idx} 
-                          className={`p-3 rounded-xl border transition-all ${isMatched ? 'bg-emerald-50/40 border-emerald-100 opacity-70' : 'bg-white border-slate-200 hover:border-[#331a6f]/30 hover:shadow-sm'}`}
-                        >
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <div className="font-bold text-slate-900 text-xs truncate" title={txn.payer_name || txn.description}>
-                              {txn.payer_name || txn.description || 'Unknown'}
-                            </div>
-                            <div className="font-black text-slate-900 text-xs whitespace-nowrap">
-                              RWF {Number(txn.amount).toLocaleString()}
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center justify-between mt-2">
-                            <div className="text-[9px] font-mono text-slate-400 truncate max-w-[120px]" title={txn.transaction_reference}>
-                              {txn.transaction_date} • Ref: {txn.transaction_reference || 'N/A'}
-                            </div>
-                            
-                            {isMatched ? (
-                              <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">
-                                <Check className="w-2.5 h-2.5" />
-                                Matched
-                              </span>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setSelectedTxnForMatch(txn);
-                                  setIsManualMatchModalOpen(true);
-                                }}
-                                className="px-2 py-1.5 rounded-md bg-[#331a6f] hover:bg-[#251352] text-white text-[9px] font-bold transition-colors cursor-pointer shrink-0"
-                              >
-                                Record Match
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="py-6 text-center text-slate-400 text-xs font-medium">
-                      No transactions found.
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
-
           </div>
         </div>
       )}

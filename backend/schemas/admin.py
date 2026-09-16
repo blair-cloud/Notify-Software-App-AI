@@ -12,17 +12,28 @@ class AdminDashboardStats(BaseModel):
     total_units: int = 0
     occupied_units: int = 0
     vacant_units: int = 0
+    occupancy_rate: float = 0.0
     active_tenancies: int = 0
     active_leases: int = 0
     expiring_leases: int = 0
     expected_rent: float = 0.0
     collected_rent: float = 0.0
     outstanding_balance: float = 0.0
+    outstanding_rent: float = 0.0
+    total_expenses: float = 0.0
+    net_income: float = 0.0
     collection_rate: float = 0.0
     pending_payments: int = 0
     urgent_maintenance: int = 0
     missing_docs_count: int = 0
     compliance_score: float = 100.0
+    compliance_rate: float = 100.0
+    landlords_count: int = 0
+    tenants_count: int = 0
+    active_users: int = 0
+    suspended_users: int = 0
+    draft_leases: int = 0
+    expired_leases: int = 0
     currency: str = "RWF"
 
 class UserStatusUpdate(BaseModel):

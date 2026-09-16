@@ -41,6 +41,62 @@ class InvoiceSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class InvoiceCreateRequest(BaseModel):
+    lease_id: uuid.UUID
+    billing_period_start: Optional[date] = None
+    billing_period_end: Optional[date] = None
+    due_date: Optional[date] = None
+    amount: Optional[float] = None
+    notes: Optional[str] = None
+
+
+@router.post("", response_model=InvoiceSchema, status_code=status.HTTP_201_CREATED)
+async def create_invoice(
+    req: InvoiceCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    from datetime import timedelta
+    from backend.models import Lease
+    lease = await db.get(Lease, req.lease_id)
+    if not lease:
+        raise HTTPException(status_code=404, detail="Lease not found")
+
+    if not is_admin(current_user):
+        landlord_id, _ = await caller_profile_ids(db, current_user)
+        if not landlord_id or lease.landlord_id != landlord_id:
+            raise ForbiddenException("You are not authorized to issue invoices for this lease.")
+
+    today = date.today()
+    start_date = req.billing_period_start or date(today.year, today.month, 1)
+    if not req.billing_period_end:
+        if today.month == 12:
+            end_date = date(today.year, 12, 31)
+        else:
+            end_date = date(today.year, today.month + 1, 1) - timedelta(days=1)
+    else:
+        end_date = req.billing_period_end
+
+    inv = await InvoiceService.create_invoice_for_lease(
+        session=db,
+        lease=lease,
+        period_start=start_date,
+        period_end=end_date,
+        due_date=req.due_date
+    )
+    if not inv:
+        raise HTTPException(status_code=400, detail="Invoice could not be created")
+
+    if req.amount is not None and req.amount > 0:
+        inv.subtotal = float(req.amount)
+        inv.total_amount = float(req.amount)
+        inv.balance_due = float(req.amount) - float(inv.amount_paid)
+        await db.commit()
+        await db.refresh(inv)
+
+    return inv
+
+
 @router.get("", response_model=List[InvoiceSchema])
 @router.get("/", response_model=List[InvoiceSchema])
 async def get_all_invoices(

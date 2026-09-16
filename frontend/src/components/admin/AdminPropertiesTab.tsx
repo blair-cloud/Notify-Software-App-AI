@@ -13,9 +13,11 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
+import { api } from '../../services/api';
 
 interface AdminPropertiesTabProps {
   properties: any[];
+  units?: any[];
   landlords: any[];
   onRefresh: () => void;
   onNavigateToUnits?: (propertyId: string) => void;
@@ -23,6 +25,7 @@ interface AdminPropertiesTabProps {
 
 export const AdminPropertiesTab: React.FC<AdminPropertiesTabProps> = ({
   properties = [],
+  units = [],
   landlords = [],
   onRefresh,
   onNavigateToUnits,
@@ -30,55 +33,139 @@ export const AdminPropertiesTab: React.FC<AdminPropertiesTabProps> = ({
   const [search, setSearch] = useState('');
   const [selectedProperty, setSelectedProperty] = useState<any | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Live computed metrics from database
+  const totalProperties = (properties || []).length;
+  const totalUnits = (units || []).length;
+  const occupiedUnits = (units || []).filter((u) => u.status === 'OCCUPIED').length;
+  const vacantUnits = (units || []).filter((u) => u.status === 'VACANT').length;
 
   // Form State
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [district, setDistrict] = useState('Gasabo');
-  const [landlordId, setLandlordId] = useState(landlords?.[0]?.id || '');
+  const [landlordId, setLandlordId] = useState(landlords?.[0]?.id || landlords?.[0]?.landlord_id || '');
   const [numUnits, setNumUnits] = useState(4);
   const [baseRent, setBaseRent] = useState(250000);
 
-  const filtered = (properties || []).filter((p) => {
+  const filtered = (properties || []).map((p) => {
+    const propUnits = (units || []).filter((u) => u.property_id === p.id);
+    const totalU = propUnits.length > 0 ? propUnits.length : (p.total_units || 0);
+    const occU = propUnits.length > 0 ? propUnits.filter((u) => u.status === 'OCCUPIED').length : (p.occupied_units || 0);
+    const occRate = totalU > 0 ? ((occU / totalU) * 100).toFixed(0) : '0';
+    const expRent = propUnits.length > 0 ? propUnits.reduce((sum, u) => sum + (u.monthly_rent || 0), 0) : (p.expected_monthly_rent || 0);
+    const ll = (landlords || []).find((l) => l.id === p.landlord_id || l.landlord_id === p.landlord_id);
+    const landlordName = p.landlord_name || (ll ? (ll.business_name || `${ll.first_name} ${ll.last_name}`) : 'Managing Landlord');
+
+    return {
+      ...p,
+      calculated_total_units: totalU,
+      calculated_occupied_units: occU,
+      calculated_occupancy_rate: occRate,
+      calculated_expected_rent: expRent,
+      resolved_landlord_name: landlordName,
+    };
+  }).filter((p) => {
     const matchesSearch =
       p.name?.toLowerCase().includes(search.toLowerCase()) ||
       p.address?.toLowerCase().includes(search.toLowerCase()) ||
       p.district?.toLowerCase().includes(search.toLowerCase()) ||
-      p.landlord_name?.toLowerCase().includes(search.toLowerCase());
+      p.resolved_landlord_name?.toLowerCase().includes(search.toLowerCase());
     return matchesSearch;
   });
 
-  const handleCreateProperty = (e: React.FormEvent) => {
+  const handleCreateProperty = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !address || !landlordId) return;
 
-    adminService.createProperty({
-      name,
-      address,
-      district,
-      landlord_id: landlordId,
-      initial_units_count: Number(numUnits),
-      default_rent_per_unit: Number(baseRent),
-    });
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      const createdProp = await api.properties.create({
+        name,
+        address,
+        district,
+        landlord_id: landlordId,
+        property_type: 'COMMERCIAL',
+      });
 
-    setName('');
-    setAddress('');
-    setShowAddModal(false);
-    onRefresh();
+      if (Number(numUnits) > 0) {
+        for (let i = 1; i <= Number(numUnits); i++) {
+          await api.units.create({
+            property_id: createdProp.id,
+            unit_number: `Unit ${i}`,
+            monthly_rent: Number(baseRent),
+            rooms: 2,
+            bathrooms: 1,
+          });
+        }
+      }
+
+      setName('');
+      setAddress('');
+      setShowAddModal(false);
+      onRefresh();
+    } catch (err: any) {
+      setActionError(err.message || 'Failed to register property');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteProperty = (propertyId: string) => {
+  const handleDeleteProperty = async (propertyId: string) => {
     if (confirm('Are you sure you want to delete this property and its associated units?')) {
-      adminService.deleteProperty(propertyId);
-      if (selectedProperty && selectedProperty.id === propertyId) {
-        setSelectedProperty(null);
+      setActionError(null);
+      try {
+        await api.properties.delete(propertyId);
+        if (selectedProperty && selectedProperty.id === propertyId) {
+          setSelectedProperty(null);
+        }
+        onRefresh();
+      } catch (err: any) {
+        setActionError(err.message || 'Failed to delete property. Check if there are active tenancies or leases.');
       }
-      onRefresh();
     }
   };
 
   return (
     <div className="space-y-6">
+      {actionError && (
+        <div className="p-3 bg-rose-50 border-2 border-rose-500 rounded-xl text-rose-800 text-xs font-bold flex items-center justify-between">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="cursor-pointer font-black text-sm">✕</button>
+        </div>
+      )}
+
+      {/* Metric Cards Banner */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Registered Properties</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{totalProperties}</div>
+          <div className="text-[11px] font-semibold text-blue-600 mt-0.5">Commercial & residential</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Total Units</div>
+          <div className="text-2xl font-black text-[#331A6F] mt-1">{totalUnits}</div>
+          <div className="text-[11px] font-semibold text-slate-600 mt-0.5">Across all properties</div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Occupied Units</div>
+          <div className="text-2xl font-black text-emerald-600 mt-1">{occupiedUnits}</div>
+          <div className="text-[11px] font-semibold text-emerald-700 mt-0.5">
+            {totalUnits > 0 ? ((occupiedUnits / totalUnits) * 100).toFixed(1) : 0}% occupancy
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white border-2 border-black shadow-[0.5px_0.5px_0_#000]">
+          <div className="text-[11px] font-extrabold uppercase text-slate-500">Vacant Units</div>
+          <div className="text-2xl font-black text-amber-600 mt-1">{vacantUnits}</div>
+          <div className="text-[11px] font-semibold text-amber-700 mt-0.5">Ready for placement</div>
+        </div>
+      </div>
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -141,18 +228,18 @@ export const AdminPropertiesTab: React.FC<AdminPropertiesTabProps> = ({
               <div className="my-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
                 <div className="flex justify-between font-medium">
                   <span className="text-slate-500">Managing Landlord:</span>
-                  <span className="font-bold text-[#331A6F] truncate">{prop.landlord_name}</span>
+                  <span className="font-bold text-[#331A6F] truncate">{prop.resolved_landlord_name || prop.landlord_name}</span>
                 </div>
                 <div className="flex justify-between font-medium">
                   <span className="text-slate-500">Unit Occupancy:</span>
                   <span className="font-bold text-slate-900">
-                    {prop.occupied_units || 0} / {prop.total_units || 0} ({prop.occupancy_rate || 0}%)
+                    {prop.calculated_occupied_units} / {prop.calculated_total_units} ({prop.calculated_occupancy_rate}%)
                   </span>
                 </div>
                 <div className="flex justify-between font-medium">
                   <span className="text-slate-500">Expected Monthly:</span>
                   <span className="font-black text-emerald-700">
-                    RWF {(prop.expected_monthly_rent || 0).toLocaleString()}
+                    RWF {prop.calculated_expected_rent.toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -173,7 +260,7 @@ export const AdminPropertiesTab: React.FC<AdminPropertiesTabProps> = ({
                   className="flex-1 py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-900 text-xs font-extrabold rounded-xl border-2 border-black shadow-[0.5px_0.5px_0_#000] cursor-pointer flex items-center justify-center gap-1"
                 >
                   <Home className="w-3.5 h-3.5" />
-                  <span>Units ({prop.total_units || 0})</span>
+                  <span>Units ({prop.calculated_total_units})</span>
                 </button>
               )}
 

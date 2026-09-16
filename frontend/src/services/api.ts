@@ -386,7 +386,9 @@ export const api = {
   // System Admin
   admin: {
     getStats: () => request<any>('/admin/stats'),
-    getUsers: () => request<any[]>('/admin/users'),
+    getLandlords: () => request<any[]>('/admin/landlords'),
+    getTenants: () => request<any[]>('/admin/tenants'),
+    getUsers: (skip = 0, limit = 100) => request<any[]>(`/admin/users?skip=${skip}&limit=${limit}`),
     createUser: (data: any) =>
       request<any>('/admin/users', {
         method: 'POST',
@@ -404,11 +406,11 @@ export const api = {
       }),
     suspendUser: (userId: string) =>
       request<any>(`/admin/users/${userId}/suspend`, {
-        method: 'PATCH',
+        method: 'POST',
       }),
     activateUser: (userId: string) =>
       request<any>(`/admin/users/${userId}/activate`, {
-        method: 'PATCH',
+        method: 'POST',
       }),
     getProperties: () => request<any[]>('/admin/properties'),
     reassignProperty: (propertyId: string, landlordId: string) =>
@@ -417,7 +419,6 @@ export const api = {
         body: JSON.stringify({ landlord_id: landlordId }),
       }),
     getUnits: () => request<any[]>('/admin/units'),
-    getTenants: () => request<any[]>('/admin/tenants'),
     getTenancies: () => request<any[]>('/admin/tenancies'),
     getLeases: () => request<any[]>('/admin/leases'),
     getInvitations: () => request<any[]>('/admin/invitations'),
@@ -434,7 +435,7 @@ export const api = {
   invoices: {
     list: () => request<any[]>('/invoices'),
     create: (data: any) =>
-      request<any>('/invoices/generate', {
+      request<any>('/invoices', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
@@ -565,6 +566,8 @@ export const api = {
       category: string;
       priority?: string;
       tenancy_id?: string;
+      property_id?: string;
+      unit_id?: string;
     }) =>
       request<any>('/maintenance', {
         method: 'POST',
