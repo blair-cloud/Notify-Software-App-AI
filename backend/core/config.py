@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
 
+    # System Administrator Credentials
+    ADMIN_EMAIL: str = "blaircloudy@gmail.com"
+    ADMIN_PASSWORD: str = "college@UN2025"
+
     STORAGE_DOCUMENTS_BUCKET: str = "notify-documents"
     STORAGE_AVATARS_BUCKET: str = "notify-avatars"
     STORAGE_PROPERTY_IMAGES_BUCKET: str = "notify-property-images"

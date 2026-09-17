@@ -103,7 +103,7 @@ export function getPlatformSettings(): PlatformSettings {
   return DEFAULT_PLATFORM_SETTINGS;
 }
 
-export function savePlatformSettings(newSettings: Partial<PlatformSettings>, actorEmail = 'admin@notify.test'): PlatformSettings {
+export function savePlatformSettings(newSettings: Partial<PlatformSettings>, actorEmail = 'blaircloudy@gmail.com'): PlatformSettings {
   const current = getPlatformSettings();
   const updated = { ...current, ...newSettings };
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
@@ -117,7 +117,7 @@ export function recordAuditLog(
   entity_type: string,
   entity_id: string,
   details: string,
-  actor_email = 'admin@notify.test',
+  actor_email = 'blaircloudy@gmail.com',
   actor_role = 'SYSTEM_ADMIN'
 ) {
   const newLog = {

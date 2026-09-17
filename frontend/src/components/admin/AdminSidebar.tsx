@@ -82,7 +82,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   mobileOpen,
   setMobileOpen,
 }) => {
-  const effectiveEmail = currentUserEmail || userEmail || 'admin@notify.test';
+  const effectiveEmail = currentUserEmail || userEmail || (import.meta as any).env?.VITE_ADMIN_EMAIL || 'blaircloudy@gmail.com';
   const effectiveBadges = badgeCounts || badges || {};
 
   const handleTabClick = (tab: AdminTabKey) => {
@@ -242,9 +242,9 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   ];
 
   const sidebarContent = (
-    <div className="w-64 h-full bg-[#1A0B2E] text-slate-100 flex flex-col border-r border-purple-950/40 select-none shrink-0">
+    <div className="w-64 h-full bg-[#331A6F] text-slate-100 flex flex-col border-r-2 border-black select-none shrink-0">
       {/* Brand Header */}
-      <div className="p-4 sm:p-5 border-b border-purple-900/40 bg-[#140824] flex items-center justify-between shrink-0">
+      <div className="p-4 sm:p-5 border-b border-white/10 bg-[#281358] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <BrandPicture
             webp={BRAND_IMAGES.whiteLogo}
@@ -258,7 +258,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         {setMobileOpen && (
           <button
             onClick={() => setMobileOpen(false)}
-            className="md:hidden p-1.5 text-purple-300 hover:text-white rounded-lg cursor-pointer"
+            className="md:hidden p-1.5 text-purple-200 hover:text-white hover:bg-white/10 rounded-lg cursor-pointer transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -266,10 +266,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       </div>
 
       {/* Nav List */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-4 scrollbar-thin scrollbar-thumb-purple-900 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto p-3 space-y-4 scrollbar-thin scrollbar-thumb-purple-950/50 scrollbar-track-transparent">
         {sections.map((sec) => (
           <div key={sec.title} className="space-y-1">
-            <div className="px-3 py-1 text-[10px] font-extrabold text-purple-300/60 uppercase tracking-wider">
+            <div className="px-3 py-1 text-[10px] font-extrabold text-purple-200/70 uppercase tracking-wider">
               {sec.title}
             </div>
             <div className="space-y-0.5">
@@ -282,18 +282,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     onClick={() => handleTabClick(item.key)}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       isActive
-                        ? 'bg-white text-[#1A0B2E] border-2 border-black shadow-[0.5px_0.5px_0_#000]'
-                        : 'text-purple-100/90 hover:bg-white/10 hover:text-white border border-transparent'
+                        ? 'bg-white text-[#331A6F] border-2 border-black shadow-[0.5px_0.5px_0_#000]'
+                        : 'text-purple-100 hover:bg-white/10 hover:text-white border border-transparent'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#331A6F] stroke-[2.5]' : 'text-purple-300'}`} />
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#331A6F] stroke-[2.5]' : 'text-purple-200'}`} />
                       <span className="truncate">{item.label}</span>
                     </div>
                     {item.badge !== undefined && (
                       <span
                         className={`ml-2 px-1.5 py-0.5 text-[10px] font-black rounded-full border border-black ${
-                          item.badgeColor || (isActive ? 'bg-[#331A6F] text-white' : 'bg-purple-800 text-purple-200')
+                          item.badgeColor || (isActive ? 'bg-[#331A6F] text-white' : 'bg-white/20 text-white')
                         }`}
                       >
                         {item.badge}
@@ -308,11 +308,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       </div>
 
       {/* Footer Profile & Logout */}
-      <div className="p-3 border-t border-purple-900/40 bg-[#140824] shrink-0 space-y-2">
-        <div className="px-2 py-1 flex items-center justify-between text-[11px] text-purple-300">
+      <div className="p-3 border-t border-white/10 bg-[#281358] shrink-0 space-y-2">
+        <div className="px-2 py-1 flex items-center justify-between text-[11px] text-purple-200">
           <div className="truncate">
             <div className="font-bold text-white text-xs truncate">{effectiveEmail}</div>
-            <div className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+            <div className="text-[10px] text-emerald-300 font-semibold flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-ping" />
               <span>Full Admin Access</span>
             </div>
@@ -320,7 +320,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         </div>
         <button
           onClick={onLogout}
-          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-red-500/90 text-white font-extrabold text-xs border-2 border-black shadow-[0.5px_0.5px_0_#000] hover:bg-red-600 hover:shadow-[0.5px_0.5px_0_#000] transition-all cursor-pointer"
+          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-red-500 text-white font-extrabold text-xs border-2 border-black shadow-[0.5px_0.5px_0_#000] hover:bg-red-600 transition-all cursor-pointer"
         >
           <LogOut className="w-3.5 h-3.5" />
           <span>Log Out</span>

@@ -116,7 +116,7 @@ export const AdminAuditLogsTab: React.FC<AdminAuditLogsTabProps> = ({ logs = [],
                     <td className="p-3.5 font-bold text-[#331A6F]">
                       <div className="flex items-center gap-1.5">
                         <User className="w-3.5 h-3.5 text-purple-600" />
-                        <span>{log.performed_by || 'admin@notify.test'}</span>
+                        <span>{log.performed_by || (import.meta as any).env?.VITE_ADMIN_EMAIL || 'blaircloudy@gmail.com'}</span>
                       </div>
                     </td>
                     <td className="p-3.5">

@@ -3,7 +3,7 @@ import { UserProfile } from '../context/AuthContext';
 export const MOCK_USERS: Record<'SYSTEM_ADMIN' | 'LANDLORD' | 'TENANT', UserProfile> = {
   SYSTEM_ADMIN: {
     id: 'mock-admin-001',
-    email: 'admin@notify.test',
+    email: 'blaircloudy@gmail.com',
     phone: '+250780000001',
     first_name: 'Notify',
     last_name: 'Administrator',
@@ -98,7 +98,7 @@ export function getMockUserByToken(token: string): UserProfile | null {
 export function getMockUserByEmail(email: string): UserProfile | null {
   if (isMockAuthDisabled()) return null;
   const normalized = email.trim().toLowerCase();
-  if (normalized === 'admin@notify.test' || normalized === 'admin@notify.rw') {
+  if (normalized === 'blaircloudy@gmail.com' || normalized === 'admin@notify.test' || normalized === 'admin@notify.rw') {
     return MOCK_USERS.SYSTEM_ADMIN;
   }
   if (normalized === 'landlord@notify.test' || normalized === 'landlord@notify.rw') {
@@ -1164,7 +1164,7 @@ export const MOCK_ADMIN_USERS = [
     id: 'usr-001',
     first_name: 'Notify',
     last_name: 'Administrator',
-    email: 'admin@notify.test',
+    email: 'blaircloudy@gmail.com',
     role: 'SYSTEM_ADMIN',
     status: 'ACTIVE',
     phone: '+250780000001',

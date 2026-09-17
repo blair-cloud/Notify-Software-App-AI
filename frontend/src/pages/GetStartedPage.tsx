@@ -816,7 +816,7 @@ export const GetStartedPage: React.FC<GetStartedPageProps> = ({
                     >
                       <ShieldCheck className="w-4 h-4 text-red-400 group-hover:scale-110 transition-transform" />
                       <span>System Admin</span>
-                      <span className="text-[10px] text-slate-300 font-normal">admin@notify.test</span>
+                      <span className="text-[10px] text-slate-300 font-normal">blaircloudy@gmail.com</span>
                     </button>
 
                     <button

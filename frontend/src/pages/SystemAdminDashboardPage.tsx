@@ -188,7 +188,7 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
         activeTab={activeTab}
         setActiveTab={handleNavigate}
         badges={badges}
-        userEmail={user?.email || 'admin@notify.test'}
+        userEmail={user?.email || (import.meta as any).env?.VITE_ADMIN_EMAIL || 'blaircloudy@gmail.com'}
         onLogout={onLogout}
         mobileOpen={mobileMenuOpen}
         setMobileOpen={setMobileMenuOpen}
@@ -211,8 +211,18 @@ export const SystemAdminDashboardPage: React.FC<SystemAdminDashboardPageProps> =
           ) : (
             <div className="pb-12">
               {loadError && (
-                <div className="mb-5 p-3.5 rounded-[14px] bg-red-50 border-2 border-red-300 text-sm font-semibold text-red-800">
-                  {loadError}
+                <div className="mb-5 p-3.5 rounded-[14px] bg-yellow-50 border-2 border-yellow-300 text-sm font-semibold text-yellow-900 flex items-center justify-between gap-3 shadow-[0.5px_0.5px_0_#000]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 border border-yellow-600 shrink-0" />
+                    <span>{loadError}</span>
+                  </div>
+                  <button
+                    onClick={() => setLoadError(null)}
+                    className="text-xs font-bold text-yellow-800 hover:text-yellow-950 px-2 py-1 rounded-md hover:bg-yellow-100 transition-colors shrink-0 cursor-pointer"
+                    title="Dismiss"
+                  >
+                    ✕
+                  </button>
                 </div>
               )}
               {activeTab === 'overview' && (
