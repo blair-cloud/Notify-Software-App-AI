@@ -12,20 +12,18 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
  * without a session, because Row Level Security denies `anon` everything. The
  * service-role key must never reach this file.
  */
-const url = (import.meta as any).env?.VITE_SUPABASE_URL as string | undefined;
-const anonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+const DEFAULT_SUPABASE_URL = 'https://dxbciniopvkomnkqvdaw.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4YmNpbmlvcHZrb21ua3F2ZGF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjQwNzQsImV4cCI6MjEwNDEwMDA3NH0.v4J76a0UIdnmetGv9xnfIZV4AU6osdmqQiBg0-KdTXM';
+
+const url =
+  ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined) || DEFAULT_SUPABASE_URL;
+const anonKey =
+  ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined) || DEFAULT_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
-if (!isSupabaseConfigured) {
-  // Loud, because nothing involving sign-in can work without it.
-  console.error(
-    'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY ' +
-      'in frontend/.env, then restart the dev server.'
-  );
-}
-
-export const supabase: SupabaseClient = createClient(url ?? '', anonKey ?? '', {
+export const supabase: SupabaseClient = createClient(url, anonKey, {
   auth: {
     // Keep the session across reloads and refresh it in the background: this is
     // what makes "still signed in after F5" work without any code of our own.

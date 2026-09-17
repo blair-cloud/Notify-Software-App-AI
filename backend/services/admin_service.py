@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from backend.models import (
     User, LandlordProfile, TenantProfile, Property, Unit, Tenancy, Lease, 
-    Invoice, Payment, Expense, MaintenanceRequest, Notification, UserStatus, UserRole, UnitStatus, LeaseStatus
+    Invoice, Payment, Expense, MaintenanceRequest, Notification, UserStatus, UserRole, UnitStatus, LeaseStatus,
+    PaymentStatus, MaintenancePriority
 )
 from backend.schemas.admin import AdminDashboardStats, UserStatusUpdate, UserRoleUpdate, UserCreateAdmin
 from backend.repositories.user_repository import UserRepository
@@ -31,21 +32,27 @@ class AdminService:
         expiring_leases = (await self.db.execute(select(func.count(Lease.id)).where(Lease.status == LeaseStatus.EXPIRING_SOON))).scalar() or 0
         
         # Financial aggregates
-        total_expected = (await self.db.execute(select(func.sum(Invoice.total_amount)))).scalar() or 0.0
-        total_collected = (await self.db.execute(select(func.sum(Invoice.amount_paid)))).scalar() or 0.0
-        total_outstanding = (await self.db.execute(select(func.sum(Invoice.balance_due)))).scalar() or 0.0
-        total_expenses = (await self.db.execute(select(func.sum(Expense.amount)))).scalar() or 0.0
-        net_income = float(total_collected) - float(total_expenses)
+        raw_expected = (await self.db.execute(select(func.sum(Invoice.total_amount)))).scalar()
+        raw_collected = (await self.db.execute(select(func.sum(Invoice.amount_paid)))).scalar()
+        raw_outstanding = (await self.db.execute(select(func.sum(Invoice.balance_due)))).scalar()
+        raw_expenses = (await self.db.execute(select(func.sum(Expense.amount)))).scalar()
+
+        total_expected = float(raw_expected or 0.0)
+        total_collected = float(raw_collected or 0.0)
+        total_outstanding = float(raw_outstanding or 0.0)
+        total_expenses = float(raw_expenses or 0.0)
+
+        net_income = total_collected - total_expenses
         collection_rate = (total_collected / total_expected * 100.0) if total_expected > 0 else 0.0
 
         # Pending items
         pending_payments = (await self.db.execute(
             select(func.count(Payment.id)).where(
-                Payment.status.in_(['PENDING', 'PENDING_VERIFICATION', 'AWAITING_VERIFICATION'])
+                Payment.status.in_([PaymentStatus.PENDING, PaymentStatus.AWAITING_VERIFICATION])
             )
         )).scalar() or 0
         urgent_maint = (await self.db.execute(
-            select(func.count(MaintenanceRequest.id)).where(MaintenanceRequest.priority == 'URGENT')
+            select(func.count(MaintenanceRequest.id)).where(MaintenanceRequest.priority == MaintenancePriority.URGENT)
         )).scalar() or 0
 
         occupancy_rate = round(occupied_units / total_units * 100.0, 1) if total_units > 0 else 0.0

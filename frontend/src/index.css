@@ -23,6 +23,11 @@
 }
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     font-family:
       "Poppins",
@@ -37,6 +42,11 @@
       sans-serif;
     background-color: #f4f4f0;
     color: #000000;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
   }
 }
 
