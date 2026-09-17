@@ -48,6 +48,14 @@
     min-height: 100vh;
     min-height: -webkit-fill-available;
   }
+
+  #root {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
 }
 
 /* Subtle repeating staggered/offset grid of square dots (3px × 3px, #C3C3C0) with reduced row spacing on #F4F4F0 */
