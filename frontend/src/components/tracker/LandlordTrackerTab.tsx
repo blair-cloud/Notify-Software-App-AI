@@ -51,7 +51,7 @@ import {
   Invoice
 } from '../../types';
 import { api } from '../../services/api';
-import StatementPDFViewer from './StatementPDFViewer';
+const StatementPDFViewer = React.lazy(() => import('./StatementPDFViewer'));
 
 interface LandlordTrackerTabProps {
   properties: Property[];
@@ -1584,15 +1584,22 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
               isBankPaneExpanded ? 'col-span-full' : ''
             }`}>
               {selectedFile ? (
-                <StatementPDFViewer 
-                  file={selectedFile} 
-                  fileName={statementFileName}
-                  isDarkMode={isDarkDocumentMode} 
-                  onToggleDarkMode={() => setIsDarkDocumentMode(!isDarkDocumentMode)}
-                  isExpanded={isBankPaneExpanded}
-                  onToggleExpand={() => setIsBankPaneExpanded(!isBankPaneExpanded)}
-                  extractedTransactions={statementAnalysisResult?.transactions || []}
-                />
+                <React.Suspense fallback={
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-2 p-6 text-center">
+                    <FileText className="w-10 h-10 text-slate-500 animate-pulse" />
+                    <span className="text-sm font-bold text-slate-300">Loading Document Viewer...</span>
+                  </div>
+                }>
+                  <StatementPDFViewer 
+                    file={selectedFile} 
+                    fileName={statementFileName}
+                    isDarkMode={isDarkDocumentMode} 
+                    onToggleDarkMode={() => setIsDarkDocumentMode(!isDarkDocumentMode)}
+                    isExpanded={isBankPaneExpanded}
+                    onToggleExpand={() => setIsBankPaneExpanded(!isBankPaneExpanded)}
+                    extractedTransactions={statementAnalysisResult?.transactions || []}
+                  />
+                </React.Suspense>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-2 p-6 text-center">
                   <FileText className="w-10 h-10 text-slate-500" />

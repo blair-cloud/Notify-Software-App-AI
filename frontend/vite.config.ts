@@ -23,7 +23,8 @@ export default defineConfig(() => {
           entryFileNames: 'assets/[name]-[hash].js',
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('jspdf') || id.includes('html2canvas')) return 'pdf';
+              if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('pdfjs') || id.includes('react-pdf')) return 'pdf';
+              if (id.includes('xlsx')) return 'excel';
               if (id.includes('@supabase')) return 'supabase';
               if (id.includes('lucide-react')) return 'icons';
               return 'vendor';

@@ -7,6 +7,69 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="format-detection" content="telephone=no" />
+
+  <!-- Safari / iOS WebKit Polyfills & Global Safety Net -->
+  <script>
+    (function () {
+      if (typeof Promise.withResolvers === 'undefined') {
+        Promise.withResolvers = function () {
+          var resolve, reject;
+          var promise = new Promise(function (res, rej) {
+            resolve = res;
+            reject = rej;
+          });
+          return { promise: promise, resolve: resolve, reject: reject };
+        };
+      }
+      if (!Array.prototype.findLast) {
+        Array.prototype.findLast = function (predicate, thisArg) {
+          for (var i = this.length - 1; i >= 0; i--) {
+            if (predicate.call(thisArg, this[i], i, this)) return this[i];
+          }
+          return undefined;
+        };
+      }
+      if (!Array.prototype.findLastIndex) {
+        Array.prototype.findLastIndex = function (predicate, thisArg) {
+          for (var i = this.length - 1; i >= 0; i--) {
+            if (predicate.call(thisArg, this[i], i, this)) return i;
+          }
+          return -1;
+        };
+      }
+      if (!Array.prototype.toReversed) {
+        Array.prototype.toReversed = function () {
+          return this.slice().reverse();
+        };
+      }
+      if (!window.requestIdleCallback) {
+        window.requestIdleCallback = function (cb) {
+          return setTimeout(function () {
+            var start = Date.now();
+            cb({
+              didTimeout: false,
+              timeRemaining: function () {
+                return Math.max(0, 50 - (Date.now() - start));
+              }
+            });
+          }, 1);
+        };
+        window.cancelIdleCallback = function (id) {
+          clearTimeout(id);
+        };
+      }
+      window.addEventListener('error', function (e) {
+        console.error('Unhandled app error:', e);
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && (!root.innerHTML || root.innerHTML.trim() === '')) {
+            root.innerHTML = '<div style="padding:24px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#F4F4F0;"><div style="max-width:380px;width:100%;background:#ffffff;padding:24px;border-radius:16px;border:2px solid #000000;box-shadow:4px 4px 0 #000000;"><h2 style="font-size:20px;font-weight:900;color:#331A6F;margin-bottom:8px;">Notify App</h2><p style="font-size:13px;color:#4b5563;margin-bottom:16px;line-height:1.5;">Please reload the page to continue.</p><button onclick="window.location.reload()" style="padding:10px 22px;background:#331A6F;color:#ffffff;border:2px solid #000000;border-radius:10px;font-weight:800;cursor:pointer;font-size:13px;">Reload</button></div></div>';
+          }
+        }, 2000);
+      });
+    })();
+  </script>
+
   <title>Notify App – Rental & Property Management Software Rwanda </title>
   <meta name="description"
     content="Notify is the official rental management system and property management software in Kigali, Rwanda. Manage tenants, collect rent with MoMo, track leases, and automate payments with the Notify App." />

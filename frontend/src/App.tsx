@@ -21,10 +21,16 @@ import { PricingPage } from './pages/PricingPage';
 import { AuthPage, AuthMode, UserRoleType } from './pages/AuthPage';
 import { AccessDenied } from './components/AccessDenied';
 
-// Phase 1 Dashboard & Portal Pages
-import { LandlordDashboardPage } from './pages/LandlordDashboardPage';
-import { TenantDashboardPage } from './pages/TenantDashboardPage';
-import { SystemAdminDashboardPage } from './pages/SystemAdminDashboardPage';
+// Phase 1 Dashboard & Portal Pages (Lazy-loaded for mobile performance and stability)
+const LandlordDashboardPage = React.lazy(() =>
+  import('./pages/LandlordDashboardPage').then((m) => ({ default: m.LandlordDashboardPage }))
+);
+const TenantDashboardPage = React.lazy(() =>
+  import('./pages/TenantDashboardPage').then((m) => ({ default: m.TenantDashboardPage }))
+);
+const SystemAdminDashboardPage = React.lazy(() =>
+  import('./pages/SystemAdminDashboardPage').then((m) => ({ default: m.SystemAdminDashboardPage }))
+);
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage';
 import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { EmailVerificationBanner } from './components/EmailVerificationBanner';
@@ -185,7 +191,9 @@ function ProtectedRoute({
   return (
     <>
       <EmailVerificationBanner />
-      {children}
+      <React.Suspense fallback={<TriangularPreloader />}>
+        {children}
+      </React.Suspense>
     </>
   );
 }
