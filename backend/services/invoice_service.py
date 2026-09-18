@@ -3,7 +3,8 @@ from datetime import datetime, date, time, timezone, timedelta
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
-from backend.models import Invoice, Lease, RentSchedule, Tenancy, InvoiceType, InvoiceStatus, LeaseStatus
+from sqlalchemy.orm import selectinload
+from backend.models import Invoice, Lease, RentSchedule, Tenancy, InvoiceType, InvoiceStatus, LeaseStatus, Property, Unit, TenantProfile
 from backend.core.logging import logger
 
 
@@ -154,25 +155,86 @@ class InvoiceService:
         return updated_count
 
     @staticmethod
+    async def enrich_invoices(session: AsyncSession, invoices: List[Invoice]) -> List[Invoice]:
+        if not invoices:
+            return invoices
+
+        tenant_ids = {inv.tenant_id for inv in invoices if inv.tenant_id}
+        property_ids = {inv.property_id for inv in invoices if inv.property_id}
+        unit_ids = {inv.unit_id for inv in invoices if inv.unit_id}
+        lease_ids = {inv.lease_id for inv in invoices if inv.lease_id}
+
+        tenants_map = {}
+        if tenant_ids:
+            stmt = (
+                select(TenantProfile)
+                .options(selectinload(TenantProfile.user))
+                .where(TenantProfile.id.in_(list(tenant_ids)))
+            )
+            res = await session.execute(stmt)
+            for tp in res.scalars().all():
+                if tp.user:
+                    name = f"{tp.user.first_name or ''} {tp.user.last_name or ''}".strip()
+                else:
+                    name = f"{tp.pending_first_name or ''} {tp.pending_last_name or ''}".strip()
+                tenants_map[tp.id] = name or "Tenant"
+
+        leases_map = {}
+        if lease_ids:
+            stmt = select(Lease).where(Lease.id.in_(list(lease_ids)))
+            res = await session.execute(stmt)
+            for l in res.scalars().all():
+                if l.tenant_name:
+                    leases_map[l.id] = l.tenant_name
+
+        props_map = {}
+        if property_ids:
+            stmt = select(Property).where(Property.id.in_(list(property_ids)))
+            res = await session.execute(stmt)
+            for p in res.scalars().all():
+                props_map[p.id] = p.name
+
+        units_map = {}
+        if unit_ids:
+            stmt = select(Unit).where(Unit.id.in_(list(unit_ids)))
+            res = await session.execute(stmt)
+            for u in res.scalars().all():
+                units_map[u.id] = u.unit_number
+
+        for inv in invoices:
+            inv.tenant_name = tenants_map.get(inv.tenant_id) or leases_map.get(inv.lease_id) or "Tenant"
+            inv.property_name = props_map.get(inv.property_id) or ""
+            inv.unit_number = units_map.get(inv.unit_id) or ""
+
+        return invoices
+
+    @staticmethod
     async def get_all_invoices(session: AsyncSession) -> List[Invoice]:
         stmt = select(Invoice).order_by(Invoice.issue_date.desc())
         res = await session.execute(stmt)
-        return list(res.scalars().all())
+        invoices = list(res.scalars().all())
+        return await InvoiceService.enrich_invoices(session, invoices)
 
     @staticmethod
     async def get_invoices_for_landlord(session: AsyncSession, landlord_id: uuid.UUID) -> List[Invoice]:
         stmt = select(Invoice).where(Invoice.landlord_id == landlord_id).order_by(Invoice.issue_date.desc())
         res = await session.execute(stmt)
-        return list(res.scalars().all())
+        invoices = list(res.scalars().all())
+        return await InvoiceService.enrich_invoices(session, invoices)
 
     @staticmethod
     async def get_invoices_for_tenant(session: AsyncSession, tenant_id: uuid.UUID) -> List[Invoice]:
         stmt = select(Invoice).where(Invoice.tenant_id == tenant_id).order_by(Invoice.issue_date.desc())
         res = await session.execute(stmt)
-        return list(res.scalars().all())
+        invoices = list(res.scalars().all())
+        return await InvoiceService.enrich_invoices(session, invoices)
 
     @staticmethod
     async def get_invoice_by_id(session: AsyncSession, invoice_id: uuid.UUID) -> Optional[Invoice]:
         stmt = select(Invoice).where(Invoice.id == invoice_id)
         res = await session.execute(stmt)
-        return res.scalar_one_or_none()
+        inv = res.scalar_one_or_none()
+        if inv:
+            enriched = await InvoiceService.enrich_invoices(session, [inv])
+            return enriched[0]
+        return None

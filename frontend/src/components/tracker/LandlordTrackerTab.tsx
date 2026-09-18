@@ -1659,12 +1659,23 @@ export const LandlordTrackerTab: React.FC<LandlordTrackerTabProps> = ({
                 <option value="">-- Choose Tenant / Invoice --</option>
                 {invoices
                   .filter((i) => i.status !== 'PAID' && i.status !== 'CANCELLED')
-                  .map((inv) => (
-                    <option key={inv.id} value={inv.id}>
-                      [{inv.tenant_name || 'Unknown Tenant'}] Invoice {inv.invoice_number} (Due: {inv.due_date || 'N/A'}, Bal: RWF{' '}
-                      {(inv.balance_due || inv.total_amount).toLocaleString()})
-                    </option>
-                  ))}
+                  .map((inv) => {
+                    const matchedTenant = (tenants || []).find(
+                      (t) => inv.tenant_id && (t.id === inv.tenant_id || t.tenant_id === inv.tenant_id || t.user_id === inv.tenant_id)
+                    );
+                    const tenantName =
+                      (matchedTenant ? `${matchedTenant.first_name || ''} ${matchedTenant.last_name || ''}`.trim() : '') ||
+                      (leases || []).find((l) => l.id === inv.lease_id || l.tenant_id === inv.tenant_id)?.tenant_name ||
+                      (inv.tenant_name && inv.tenant_name.toLowerCase() !== 'tenant' ? inv.tenant_name : '') ||
+                      'Tenant';
+
+                    return (
+                      <option key={inv.id} value={inv.id}>
+                        [{tenantName}] Invoice {inv.invoice_number} (Due: {inv.due_date || 'N/A'}, Bal: RWF{' '}
+                        {(inv.balance_due || inv.total_amount).toLocaleString()})
+                      </option>
+                    );
+                  })}
               </select>
             </div>
 

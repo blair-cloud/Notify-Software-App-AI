@@ -5183,6 +5183,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
         onPaymentSuccess={handlePaymentRecorded}
         invoices={invoices}
         tenants={tenants}
+        leases={leases}
         properties={properties}
         units={units}
         initialInvoiceId={recordPaymentInvoiceId}

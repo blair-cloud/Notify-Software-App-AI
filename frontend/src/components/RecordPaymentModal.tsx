@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Invoice, PaymentMethod, PaymentChannel, Tenant, Property, Unit } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Invoice, PaymentMethod, PaymentChannel, Tenant, Property, Unit, Lease } from '../types';
 import { api } from '../services/api';
 import {
   X,
@@ -26,6 +26,7 @@ interface RecordPaymentModalProps {
   tenants: Tenant[];
   properties: Property[];
   units: Unit[];
+  leases?: Lease[];
   initialInvoiceId?: string;
   initialTenantId?: string;
 }
@@ -38,10 +39,74 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   tenants,
   properties,
   units,
+  leases,
   initialInvoiceId,
   initialTenantId,
 }) => {
   const invoiceList = invoices || [];
+
+  // Helper to reliably resolve tenant name, property name, and unit number
+  const resolveInvoiceDetails = (inv: Invoice) => {
+    // 1. Try to find matched tenant in tenants array
+    const matchedTenant = (tenants || []).find((t) => {
+      if (inv.tenant_id && (t.id === inv.tenant_id || t.tenant_id === inv.tenant_id || t.user_id === inv.tenant_id)) {
+        return true;
+      }
+      return false;
+    });
+
+    let tenantName = '';
+    if (matchedTenant) {
+      const fn = `${matchedTenant.first_name || ''} ${matchedTenant.last_name || ''}`.trim();
+      tenantName = fn || (matchedTenant as any).name || (matchedTenant as any).full_name || '';
+    }
+
+    // 2. Try to find in leases if not yet found
+    if (!tenantName && leases && leases.length > 0) {
+      const matchedLease = leases.find(
+        (l) => l.id === inv.lease_id || (inv.tenant_id && (l.tenant_id === inv.tenant_id || (l as any).user_id === inv.tenant_id))
+      );
+      if (matchedLease?.tenant_name) {
+        tenantName = matchedLease.tenant_name.trim();
+      }
+    }
+
+    // 3. Fallback to invoice's own tenant_name if valid and not the generic 'Tenant'
+    if (!tenantName && inv.tenant_name && inv.tenant_name.trim() && inv.tenant_name.trim().toLowerCase() !== 'tenant') {
+      tenantName = inv.tenant_name.trim();
+    }
+
+    // Final fallback
+    if (!tenantName) {
+      tenantName = 'Tenant';
+    }
+
+    // Resolve property name
+    let propertyName = inv.property_name?.trim() || '';
+    if (!propertyName && inv.property_id) {
+      const matchedProp = (properties || []).find((p) => p.id === inv.property_id);
+      if (matchedProp?.name) propertyName = matchedProp.name;
+    }
+    if (!propertyName && matchedTenant?.property_name) {
+      propertyName = matchedTenant.property_name;
+    }
+
+    // Resolve unit number
+    let unitNumber = inv.unit_number?.trim() || '';
+    if (!unitNumber && inv.unit_id) {
+      const matchedUnit = (units || []).find((u) => u.id === inv.unit_id);
+      if (matchedUnit?.unit_number) unitNumber = matchedUnit.unit_number;
+    }
+    if (!unitNumber && matchedTenant?.unit_number) {
+      unitNumber = matchedTenant.unit_number;
+    }
+
+    return {
+      tenantName,
+      propertyName,
+      unitNumber,
+    };
+  };
 
   // Selected Invoice or Tenant
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>(
@@ -71,17 +136,37 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
     }
   }, [selectedInvoiceId]);
 
-  // Set initial if provided
+  // Set initial if provided or modal opened
   useEffect(() => {
-    if (initialInvoiceId) {
+    if (!isOpen) {
+      setCompletedResult(null);
+      setErrorMessage(null);
+      return;
+    }
+
+    if (initialInvoiceId && invoiceList.some((i) => i.id === initialInvoiceId)) {
       setSelectedInvoiceId(initialInvoiceId);
     } else if (initialTenantId) {
-      const tenantInv = invoiceList.find((i) => (i.tenant_id === initialTenantId || i.tenant_name?.includes(initialTenantId)) && i.balance_due > 0);
+      const matchedTenantObj = (tenants || []).find(
+        (t) => t.id === initialTenantId || t.tenant_id === initialTenantId || t.user_id === initialTenantId
+      );
+      const tenantInv = invoiceList.find(
+        (i) =>
+          (i.tenant_id === initialTenantId ||
+            (matchedTenantObj && (i.tenant_id === matchedTenantObj.id || i.tenant_id === matchedTenantObj.tenant_id)) ||
+            i.tenant_name?.toLowerCase().includes(initialTenantId.toLowerCase())) &&
+          i.balance_due > 0
+      ) || invoiceList.find(
+        (i) =>
+          i.tenant_id === initialTenantId ||
+          (matchedTenantObj && (i.tenant_id === matchedTenantObj.id || i.tenant_id === matchedTenantObj.tenant_id))
+      );
+
       if (tenantInv) {
         setSelectedInvoiceId(tenantInv.id);
       }
     }
-  }, [initialInvoiceId, initialTenantId, invoices]);
+  }, [isOpen, initialInvoiceId, initialTenantId, invoices, tenants]);
 
   if (!isOpen) return null;
 
@@ -199,7 +284,12 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400 font-medium">Tenant / Unit:</span>
-                <span className="font-bold text-slate-900">{selectedInvoice?.tenant_name} ({selectedInvoice?.unit_number})</span>
+                <span className="font-bold text-slate-900">
+                  {selectedInvoice ? (() => {
+                    const d = resolveInvoiceDetails(selectedInvoice);
+                    return `${d.tenantName}${d.unitNumber ? ` (Unit ${d.unitNumber})` : ''}`;
+                  })() : 'N/A'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400 font-medium">Remaining Balance:</span>
@@ -254,33 +344,46 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
                 required
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-xl bg-white font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#331A6F]/30"
               >
-                {invoices.map((inv) => (
-                  <option key={inv.id} value={inv.id}>
-                    {inv.invoice_number} — {inv.tenant_name || 'Tenant'} ({inv.property_name} {inv.unit_number}) — Due: RWF {inv.balance_due.toLocaleString()} ({inv.status})
-                  </option>
-                ))}
+                {invoices.map((inv) => {
+                  const details = resolveInvoiceDetails(inv);
+                  const propUnit = [
+                    details.propertyName,
+                    details.unitNumber ? `Unit ${details.unitNumber}` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' • ');
+
+                  return (
+                    <option key={inv.id} value={inv.id}>
+                      {details.tenantName} — {inv.invoice_number} {propUnit ? `(${propUnit})` : ''} — Due: RWF {inv.balance_due.toLocaleString()} ({inv.status})
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
             {/* Selected Invoice Summary Banner */}
-            {selectedInvoice && (
-              <div className="p-3.5 bg-purple-50/70 border border-purple-100 rounded-xl flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-slate-900">
-                    {selectedInvoice.tenant_name} • Unit {selectedInvoice.unit_number}
+            {selectedInvoice && (() => {
+              const details = resolveInvoiceDetails(selectedInvoice);
+              return (
+                <div className="p-3.5 bg-purple-50/70 border border-purple-100 rounded-xl flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-slate-900">
+                      {details.tenantName} {details.unitNumber ? `• Unit ${details.unitNumber}` : ''}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      {details.propertyName ? `${details.propertyName} • ` : ''}Period: {selectedInvoice.billing_period_start} to {selectedInvoice.billing_period_end}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
-                    {selectedInvoice.property_name} • Period: {selectedInvoice.billing_period_start} to {selectedInvoice.billing_period_end}
+                  <div className="text-right">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Balance Due</div>
+                    <div className="text-base font-extrabold text-[#331A6F]">
+                      RWF {selectedInvoice.balance_due.toLocaleString()}
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Balance Due</div>
-                  <div className="text-base font-extrabold text-[#331A6F]">
-                    RWF {selectedInvoice.balance_due.toLocaleString()}
-                  </div>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Payment Method Selector */}
             <div>

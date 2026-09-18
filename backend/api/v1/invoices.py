@@ -37,6 +37,9 @@ class InvoiceSchema(BaseModel):
     balance_due: float
     currency: str
     status: InvoiceStatus
+    tenant_name: Optional[str] = None
+    property_name: Optional[str] = None
+    unit_number: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
