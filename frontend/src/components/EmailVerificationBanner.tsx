@@ -10,9 +10,13 @@ import { useAuth } from '../context/AuthContext';
  */
 export const EmailVerificationBanner: React.FC = () => {
   const { user, resendVerification } = useAuth();
-  const [dismissed, setDismissed] = useState(
-    () => sessionStorage.getItem('notify_hide_verify_banner') === 'true'
-  );
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem('notify_hide_verify_banner') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 

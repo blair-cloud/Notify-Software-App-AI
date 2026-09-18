@@ -22,6 +22,9 @@ export default defineConfig(() => {
           chunkFileNames: 'assets/[name]-[hash].js',
           entryFileNames: 'assets/[name]-[hash].js',
           manualChunks(id) {
+            if (id.includes('vite/preload-helper') || id.includes('commonjsHelpers') || id.includes('rollupPluginBabelHelpers')) {
+              return 'vendor';
+            }
             if (id.includes('node_modules')) {
               if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('pdfjs') || id.includes('react-pdf')) return 'pdf';
               if (id.includes('xlsx')) return 'excel';
