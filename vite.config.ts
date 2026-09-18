@@ -26,7 +26,7 @@ export default defineConfig(() => {
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
       proxy: {
         '/api': {
-          target: process.env.VITE_BACKEND_URL || 'https://notify-app-bz8q.onrender.com',
+          target: process.env.VITE_BACKEND_URL || 'https://notify-app-c46b.onrender.com',
           changeOrigin: true,
           secure: false,
           ws: true,

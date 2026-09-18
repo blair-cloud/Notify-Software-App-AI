@@ -9,7 +9,7 @@ import type {
 
 import { supabase, getAccessToken, clearAccessTokenCache } from './supabase';
 
-const DEFAULT_API_URL = 'https://notify-app-bz8q.onrender.com/api/v1';
+const DEFAULT_API_URL = 'https://notify-app-c46b.onrender.com/api/v1';
 const isLocalhost =
   typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' ||
