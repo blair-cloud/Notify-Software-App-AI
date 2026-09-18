@@ -9,7 +9,16 @@ import type {
 
 import { supabase, getAccessToken, clearAccessTokenCache } from './supabase';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/api/v1';
+const DEFAULT_API_URL = 'https://notify-app-bz8q.onrender.com/api/v1';
+const isLocalhost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '0.0.0.0');
+
+const API_BASE_URL =
+  ((import.meta as any).env?.VITE_API_URL as string | undefined) ||
+  (isLocalhost ? '/api/v1' : DEFAULT_API_URL);
 /** Abort hung requests so one slow endpoint cannot block a parallel batch forever. */
 const REQUEST_TIMEOUT_MS = 25000;
 
@@ -145,7 +154,8 @@ async function forceRefreshSession(): Promise<string | null> {
 
 async function request<T>(endpoint: string, options: RequestInit = {}, isRetry = false): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const token = await getAccessToken();
+  const customAuth = (options.headers as Record<string, string>)?.['Authorization'];
+  const token = customAuth ? null : await getAccessToken();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -219,7 +229,11 @@ export const api = {
   // Supabase Auth in the browser (see services/supabase.ts) - these are only
   // the application's own profile endpoints.
   auth: {
-    getMe: () => request<any>('/auth/me', { method: 'GET' }),
+    getMe: (token?: string) =>
+      request<any>('/auth/me', {
+        method: 'GET',
+        ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+      }),
 
     getSession: () => request<any>('/auth/session', { method: 'GET' }),
 

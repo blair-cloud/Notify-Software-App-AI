@@ -53,7 +53,9 @@ class Settings(BaseSettings):
     # break the API from the browser.
     KNOWN_FRONTEND_ORIGINS: str = (
         "https://notifyappo.web.app,"
+        "https://notifyappo.firebaseapp.com,"
         "https://notify-c2d43.web.app,"
+        "https://notify-c2d43.firebaseapp.com,"
         "http://localhost:3000,"
         "http://localhost:5173,"
         "http://127.0.0.1:3000,"

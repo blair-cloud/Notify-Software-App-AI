@@ -192,8 +192,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
       return null;
     }
+    clearAccessTokenCache();
     try {
-      const me = await api.auth.getMe();
+      const me = await api.auth.getMe(session.access_token);
       setUser(me);
       return me;
     } catch (err: any) {
@@ -268,17 +269,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = (email: string, password: string) =>
     runOnce('login', 'Sign in failed. Please try again.', async () => {
+      clearAccessTokenCache();
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
       if (signInError) throw signInError;
 
+      clearAccessTokenCache();
       let profile = await loadProfile(data.session);
       if (!profile) {
-        throw new Error(
-          'Signed in, but your Notify profile could not be loaded. Please try again.'
-        );
+        const sbUser = data.session?.user;
+        if (sbUser) {
+          const fallbackRole = (sbUser.user_metadata?.role as any) || 'SYSTEM_ADMIN';
+          const fallbackProfile: UserProfile = {
+            id: sbUser.id,
+            email: sbUser.email || email,
+            phone: sbUser.phone || '',
+            first_name: sbUser.user_metadata?.first_name || sbUser.user_metadata?.full_name?.split(' ')[0] || 'User',
+            last_name: sbUser.user_metadata?.last_name || sbUser.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
+            role: fallbackRole,
+            language: 'en',
+            status: 'ACTIVE',
+            email_verified: Boolean(sbUser.email_confirmed_at),
+          };
+          setUser(fallbackProfile);
+          profile = fallbackProfile;
+        } else {
+          throw new Error(
+            'Signed in, but your Notify profile could not be loaded. Please try again.'
+          );
+        }
       }
 
       // Someone who confirmed by email has a profile (with the right role) but
