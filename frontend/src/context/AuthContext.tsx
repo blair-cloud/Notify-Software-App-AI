@@ -196,11 +196,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const me = await api.auth.getMe(session.access_token);
       setUser(me);
-      return me;
     } catch (err: any) {
       const status = err instanceof ApiError ? err.status : null;
       if (status === 401 || status === 403) {
         setUser(null);
+        await supabase.auth.signOut().catch(() => {});
       } else {
         // A network blip must not look like a sign-out.
         console.warn('Could not load the Notify profile for this session.', err);

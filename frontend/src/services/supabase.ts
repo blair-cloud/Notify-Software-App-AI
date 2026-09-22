@@ -12,9 +12,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
  * without a session, because Row Level Security denies `anon` everything. The
  * service-role key must never reach this file.
  */
-const DEFAULT_SUPABASE_URL = 'https://dxbciniopvkomnkqvdaw.supabase.co';
+const DEFAULT_SUPABASE_URL = 'https://uhwmrmdolbhngmqvthkg.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4YmNpbmlvcHZrb21ua3F2ZGF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjQwNzQsImV4cCI6MjEwNDEwMDA3NH0.v4J76a0UIdnmetGv9xnfIZV4AU6osdmqQiBg0-KdTXM';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVod21ybWRvbGJobmdtcXZ0aGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5ODM2ODcsImV4cCI6MjEwNTU1OTY4N30.pWl0AhF0RtGJkbWRzb1g6_5wcXxY32PI6CmrR-3KGi0';
 
 const url =
   ((import.meta as any).env?.VITE_SUPABASE_URL as string | undefined) || DEFAULT_SUPABASE_URL;

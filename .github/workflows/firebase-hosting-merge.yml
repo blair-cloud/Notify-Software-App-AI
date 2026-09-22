@@ -18,8 +18,8 @@ jobs:
         working-directory: frontend
         env:
           VITE_API_URL: https://notify-app-c46b.onrender.com/api/v1
-          VITE_SUPABASE_URL: https://dxbciniopvkomnkqvdaw.supabase.co
-          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4YmNpbmlvcHZrb21ua3F2ZGF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjQwNzQsImV4cCI6MjEwNDEwMDA3NH0.v4J76a0UIdnmetGv9xnfIZV4AU6osdmqQiBg0-KdTXM
+          VITE_SUPABASE_URL: https://uhwmrmdolbhngmqvthkg.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVod21ybWRvbGJobmdtcXZ0aGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5ODM2ODcsImV4cCI6MjEwNTU1OTY4N30.pWl0AhF0RtGJkbWRzb1g6_5wcXxY32PI6CmrR-3KGi0
         run: npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:

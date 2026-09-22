@@ -339,35 +339,98 @@ ALTER TABLE public.payment_matches ALTER COLUMN updated_at SET DEFAULT now();
 CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
-    granted   text := NEW.raw_app_meta_data  ->> 'role';           -- service role only
-    requested text := NEW.raw_user_meta_data ->> 'requested_role';  -- client supplied
-    resolved  userrole := 'TENANT';
+    granted       text := NEW.raw_app_meta_data  ->> 'role';
+    requested     text := NEW.raw_user_meta_data ->> 'requested_role';
+    resolved_role userrole := 'TENANT';
+    raw_lang      text := UPPER(COALESCE(NEW.raw_user_meta_data ->> 'language', 'EN'));
+    resolved_lang userlanguage := 'EN';
+    desired_phone text;
+    final_phone   text;
+    clean_email   text := lower(trim(COALESCE(NEW.email, '')));
+    first_n       text;
+    last_n        text;
 BEGIN
     IF granted IN ('SYSTEM_ADMIN', 'LANDLORD', 'TENANT') THEN
-        resolved := granted::userrole;
+        resolved_role := granted::userrole;
     ELSIF requested IN ('LANDLORD', 'TENANT') THEN
-        resolved := requested::userrole;
+        resolved_role := requested::userrole;
     END IF;
 
-    INSERT INTO public.profiles (
-        id, email, phone, first_name, last_name, role, language, status,
-        email_verified, phone_verified
-    )
-    VALUES (
-        NEW.id,
-        COALESCE(NEW.email, ''),
-        COALESCE(NULLIF(NEW.phone, ''), NEW.raw_user_meta_data ->> 'phone',
-                 'pending-' || left(NEW.id::text, 8)),
-        COALESCE(NEW.raw_user_meta_data ->> 'first_name',
-                 split_part(COALESCE(NEW.email, 'New User'), '@', 1)),
-        COALESCE(NEW.raw_user_meta_data ->> 'last_name', ''),
-        resolved,
-        COALESCE((NEW.raw_user_meta_data ->> 'language')::userlanguage, 'EN'),
-        'ACTIVE',
-        NEW.email_confirmed_at IS NOT NULL,
-        NEW.phone_confirmed_at IS NOT NULL
-    )
-    ON CONFLICT (id) DO NOTHING;
+    IF raw_lang IN ('EN', 'RW', 'FR') THEN
+        resolved_lang := raw_lang::userlanguage;
+    END IF;
+
+    first_n := left(COALESCE(NULLIF(trim(NEW.raw_user_meta_data ->> 'first_name'), ''), split_part(clean_email, '@', 1), 'User'), 100);
+    last_n  := left(COALESCE(trim(NEW.raw_user_meta_data ->> 'last_name'), ''), 100);
+
+    desired_phone := NULLIF(trim(COALESCE(NEW.phone, NEW.raw_user_meta_data ->> 'phone', '')), '');
+    
+    IF desired_phone IS NOT NULL AND EXISTS (SELECT 1 FROM public.profiles WHERE phone = desired_phone AND id != NEW.id) THEN
+        final_phone := 'clash-' || left(NEW.id::text, 8);
+    ELSIF desired_phone IS NOT NULL THEN
+        final_phone := left(desired_phone, 50);
+    ELSE
+        final_phone := 'pending-' || left(NEW.id::text, 8);
+    END IF;
+
+    BEGIN
+        INSERT INTO public.profiles (
+            id, email, phone, first_name, last_name, role, language, status,
+            email_verified, phone_verified, created_at, updated_at
+        )
+        VALUES (
+            NEW.id,
+            clean_email,
+            final_phone,
+            first_n,
+            last_n,
+            resolved_role,
+            resolved_lang,
+            'ACTIVE',
+            NEW.email_confirmed_at IS NOT NULL,
+            NEW.phone_confirmed_at IS NOT NULL,
+            now(),
+            now()
+        )
+        ON CONFLICT (id) DO UPDATE
+            SET email = EXCLUDED.email,
+                phone = CASE 
+                            WHEN profiles.phone LIKE 'pending-%' OR profiles.phone LIKE 'clash-%' 
+                            THEN EXCLUDED.phone 
+                            ELSE profiles.phone 
+                        END,
+                first_name = CASE WHEN EXCLUDED.first_name <> '' THEN EXCLUDED.first_name ELSE profiles.first_name END,
+                last_name  = CASE WHEN EXCLUDED.last_name <> '' THEN EXCLUDED.last_name ELSE profiles.last_name END,
+                role       = EXCLUDED.role,
+                updated_at = now();
+    EXCEPTION 
+        WHEN unique_violation THEN
+            BEGIN
+                INSERT INTO public.profiles (
+                    id, email, phone, first_name, last_name, role, language, status,
+                    email_verified, phone_verified, created_at, updated_at
+                )
+                VALUES (
+                    NEW.id,
+                    clean_email,
+                    'clash-' || left(NEW.id::text, 12),
+                    first_n,
+                    last_n,
+                    resolved_role,
+                    resolved_lang,
+                    'ACTIVE',
+                    NEW.email_confirmed_at IS NOT NULL,
+                    NEW.phone_confirmed_at IS NOT NULL,
+                    now(),
+                    now()
+                )
+                ON CONFLICT (id) DO NOTHING;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE WARNING 'handle_new_auth_user fallback warning for %: %', NEW.id, SQLERRM;
+            END;
+        WHEN OTHERS THEN
+            RAISE WARNING 'handle_new_auth_user warning for %: %', NEW.id, SQLERRM;
+    END;
 
     RETURN NEW;
 END $$;
