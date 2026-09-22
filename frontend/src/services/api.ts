@@ -19,8 +19,8 @@ const isLocalhost =
 const API_BASE_URL =
   ((import.meta as any).env?.VITE_API_URL as string | undefined) ||
   (isLocalhost ? '/api/v1' : DEFAULT_API_URL);
-/** Abort hung requests so one slow endpoint cannot block a parallel batch forever. */
-const REQUEST_TIMEOUT_MS = 25000;
+/** Abort hung requests - set to 60s to accommodate Render free tier cold starts. */
+const REQUEST_TIMEOUT_MS = 60000;
 
 export class ApiError extends Error {
   status: number;
