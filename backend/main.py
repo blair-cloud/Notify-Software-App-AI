@@ -267,7 +267,15 @@ async def health_check():
     return {
         "status": "online",
         "app_name": settings.APP_NAME,
-        "environment": settings.ENVIRONMENT
+        "environment": settings.ENVIRONMENT,
+        "email_delivery": {
+            "is_configured": settings.email_is_configured,
+            "provider": "smtp" if settings.email_is_configured else "simulated",
+            "host": settings.SMTP_HOST or "(not set)",
+            "port": settings.SMTP_PORT,
+            "username": settings.smtp_username or "(not set)",
+            "from": f"{settings.EMAIL_FROM_NAME} <{settings.EMAIL_FROM}>" if settings.EMAIL_FROM else "(not set)",
+        },
     }
 
 

@@ -64,5 +64,5 @@ export function authRedirectTo(path: string): string {
       return `${origin}${path}`;
     }
   }
-  return `https://notify-c2d43.web.app${path}`;
+  return `https://notifyappo.web.app${path}`;
 }

@@ -7,6 +7,7 @@ import { BRAND_IMAGES, BrandPicture } from '../constants/brandImages';
 type State = 'CHECKING' | 'CONFIRMED' | 'FAILED';
 
 interface VerifyEmailPageProps {
+  onGoToDashboard: (role?: string) => void;
   onGoToSignIn: () => void;
   onGoHome: () => void;
 }
@@ -14,25 +15,30 @@ interface VerifyEmailPageProps {
 /**
  * Where the confirmation link in the sign-up email lands.
  *
- * Supabase does the confirming: the link carries the result back in the URL,
- * and the client turns it into a session (detectSessionInUrl). So this page
- * does not verify a token itself - it reports what happened and offers a new
- * link if the old one had expired.
+ * Confirms the session via Supabase URL fragment or OTP tokens, then navigates
+ * the authenticated user directly to their respective role dashboard.
  */
-export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({ onGoToSignIn, onGoHome }) => {
+export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({ onGoToDashboard, onGoToSignIn, onGoHome }) => {
   const { resendVerification, user } = useAuth();
   const [state, setState] = useState<State>('CHECKING');
   const [message, setMessage] = useState<string>('');
   const [resendEmail, setResendEmail] = useState<string>(user?.email || '');
   const [resendNote, setResendNote] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
+  const [targetRole, setTargetRole] = useState<string>('LANDLORD');
+  const [countdown, setCountdown] = useState<number>(2);
 
   useEffect(() => {
     let active = true;
 
-    // Supabase reports a failed or expired link in the URL fragment.
-    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const linkError = params.get('error_description') || params.get('error');
+    // Check for error in hash or query params
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const searchParams = new URLSearchParams(window.location.search);
+    const linkError =
+      hashParams.get('error_description') ||
+      hashParams.get('error') ||
+      searchParams.get('error_description') ||
+      searchParams.get('error');
 
     (async () => {
       if (linkError) {
@@ -42,14 +48,54 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({ onGoToSignIn, 
         return;
       }
 
-      // Give the client a moment to turn the URL fragment into a session.
+      // 1. Process OTP token_hash or PKCE code if present
+      const tokenHash = searchParams.get('token_hash');
+      const otpType = (searchParams.get('type') as any) || 'email';
+      const code = searchParams.get('code');
+
+      try {
+        if (tokenHash) {
+          const { error: otpErr } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType,
+          });
+          if (otpErr) throw otpErr;
+        } else if (code) {
+          const { error: codeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (codeErr) throw codeErr;
+        }
+      } catch (err: any) {
+        if (!active) return;
+        setMessage(err?.message || 'The verification link is invalid or has expired.');
+        setState('FAILED');
+        return;
+      }
+
+      // 2. Fetch the session established by Supabase
       const { data } = await supabase.auth.getSession();
       if (!active) return;
 
       if (data.session) {
-        setMessage('Your email address is confirmed. You can now use Notify.');
+        const sbUser = data.session.user;
+        const role =
+          (sbUser?.app_metadata?.role as string) ||
+          (sbUser?.user_metadata?.requested_role as string) ||
+          (sbUser?.user_metadata?.role as string) ||
+          user?.role ||
+          'LANDLORD';
+
+        setTargetRole(role);
+        setMessage('Your email address has been confirmed! Navigating to your dashboard...');
         setState('CONFIRMED');
-        return;
+
+        // Automatically navigate after 2 seconds
+        const timer = setTimeout(() => {
+          if (active) {
+            onGoToDashboard(role);
+          }
+        }, 2000);
+
+        return () => clearTimeout(timer);
       }
 
       // No session and no error usually means the page was opened directly.
@@ -63,7 +109,7 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({ onGoToSignIn, 
     return () => {
       active = false;
     };
-  }, []);
+  }, [onGoToDashboard, user?.role]);
 
   const handleResend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,10 +154,10 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({ onGoToSignIn, 
             <h1 className="text-lg font-black uppercase tracking-wide">Email confirmed</h1>
             <p className="text-sm font-semibold text-slate-600 mt-2 leading-relaxed">{message}</p>
             <button
-              onClick={onGoToSignIn}
+              onClick={() => onGoToDashboard(targetRole)}
               className="mt-6 w-full py-3 px-6 rounded-[16px] bg-[#331A6F] text-white font-black text-sm uppercase tracking-wider border-2 border-black shadow-[0.5px_0.5px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] transition-all cursor-pointer inline-flex items-center justify-center gap-2"
             >
-              <span>Continue</span>
+              <span>Go to Dashboard</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

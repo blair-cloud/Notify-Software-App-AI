@@ -157,14 +157,16 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request):
   </div>
 </body>
 </html>"""
-            await send_email_message(
+            delivery = await send_email_message(
                 to_email=clean_email,
                 subject=subject,
                 body=body,
                 html_content=html,
                 metadata={"purpose": "PASSWORD_RESET"}
             )
-            logger.info("Password reset email sent to %s with direct link %s", clean_email, reset_link)
+            logger.info("Password reset email for %s: ok=%s provider=%s detail=%s link=%s", clean_email, delivery.ok, delivery.provider, delivery.detail, reset_link)
+            if not delivery.ok:
+                logger.error("Password reset email delivery failed for %s: %s", clean_email, delivery.detail)
         else:
             logger.info("Password reset requested for non-existent user %s", clean_email)
     except Exception as exc:

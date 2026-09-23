@@ -364,8 +364,10 @@ function AppRoutes() {
 /** /verify-email - Supabase confirms the link itself; this page just reports the outcome. */
 function VerifyEmailRoute() {
   const nav = useAppNavigation();
+  const { user } = useAuth();
   return (
     <VerifyEmailPage
+      onGoToDashboard={(role) => nav.goToPage(dashboardPathForRole(role || user?.role))}
       onGoToSignIn={() => nav.goToPage('/login')}
       onGoHome={nav.goHome}
     />
