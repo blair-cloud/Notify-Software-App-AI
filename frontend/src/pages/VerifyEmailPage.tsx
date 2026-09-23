@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Mail, LogIn } from 'lucide-react';
+import { Check, CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Mail, LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase, clearAccessTokenCache } from '../services/supabase';
 import { api } from '../services/api';
@@ -209,7 +209,13 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
         />
       </button>
 
-      <div className="w-full max-w-md bg-white rounded-[24px] border-2 border-black shadow-[4px_4px_0_#000000] p-6 sm:p-8 transition-all">
+      <div
+        className={`w-full max-w-md bg-white rounded-[24px] p-6 sm:p-8 transition-all ${
+          state === 'CONFIRMED'
+            ? 'border-2 border-emerald-500 shadow-[4px_4px_0_#059669]'
+            : 'border-2 border-black shadow-[4px_4px_0_#000000]'
+        }`}
+      >
         {state === 'CHECKING' && (
           <div className="text-center py-4">
             <div className="w-16 h-16 rounded-full bg-[#331A6F]/10 border-2 border-[#331A6F] flex items-center justify-center mx-auto mb-5 shadow-[2px_2px_0_#331A6F]">
@@ -226,8 +232,8 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
 
         {state === 'CONFIRMED' && (
           <div className="text-center py-2 animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 border-2 border-emerald-600 flex items-center justify-center mx-auto mb-4 shadow-[2px_2px_0_#059669]">
-              <CheckCircle2 className="w-9 h-9 text-emerald-600" />
+            <div className="w-16 h-16 rounded-full bg-emerald-50 border-2 border-emerald-500 flex items-center justify-center mx-auto mb-4 shadow-[2px_2px_0_#059669]">
+              <Check className="w-9 h-9 text-emerald-600 stroke-[3]" />
             </div>
             <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900">
               Email Confirmed Successfully
@@ -236,19 +242,19 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
               Your account has been verified. Please sign in with your credentials to access your dashboard.
             </p>
             {confirmedEmail && (
-              <p className="text-xs font-bold text-[#331A6F] bg-[#331A6F]/10 rounded-lg px-3 py-1.5 mt-3 inline-block">
+              <p className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 rounded-lg px-3.5 py-1.5 mt-3 inline-block shadow-[1px_1px_0_#059669]">
                 {confirmedEmail}
               </p>
             )}
-            <p className="text-xs font-bold text-slate-400 mt-3">
+            <p className="text-xs font-bold text-emerald-600 mt-3">
               Redirecting to Sign In in {secondsLeft} second{secondsLeft !== 1 ? 's' : ''}...
             </p>
 
             <button
               onClick={handleManualSignIn}
-              className="mt-6 w-full py-3.5 px-6 rounded-[16px] bg-[#331A6F] text-white font-black text-sm uppercase tracking-wider border-2 border-black shadow-[3px_3px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#000000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none transition-all cursor-pointer inline-flex items-center justify-center gap-2"
+              className="mt-6 w-full py-3.5 px-6 rounded-[16px] bg-[#331A6F] text-white font-black text-sm uppercase tracking-wider border-2 border-emerald-600 shadow-[3px_3px_0_#059669] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#059669] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none transition-all cursor-pointer inline-flex items-center justify-center gap-2"
             >
-              <LogIn className="w-4 h-4" />
+              <LogIn className="w-4 h-4 text-emerald-300" />
               <span>Proceed to Sign In</span>
               <ArrowRight className="w-4 h-4" />
             </button>
