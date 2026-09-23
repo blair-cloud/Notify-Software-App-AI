@@ -37,6 +37,8 @@ interface AuthPageProps {
   initialMode?: AuthMode;
   initialRole?: UserRoleType;
   unauthorizedNotice?: string | null;
+  successNotice?: string | null;
+  initialEmail?: string;
   onGoHome: () => void;
   onAuthSuccess?: (role: string) => void;
 }
@@ -45,6 +47,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   initialMode = "SIGNUP",
   initialRole = "LANDLORD",
   unauthorizedNotice = null,
+  successNotice = null,
+  initialEmail = "",
   onGoHome,
   onAuthSuccess,
 }) => {
@@ -75,7 +79,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   }, [initialRole]);
 
   // Form Fields
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail || "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -111,13 +115,27 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(
     unauthorizedNotice,
   );
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(
+    successNotice || null,
+  );
 
   useEffect(() => {
     if (unauthorizedNotice) {
       setErrorMessage(unauthorizedNotice);
     }
   }, [unauthorizedNotice]);
+
+  useEffect(() => {
+    if (successNotice) {
+      setSuccessMessage(successNotice);
+    }
+  }, [successNotice]);
+
+  useEffect(() => {
+    if (initialEmail) {
+      setEmail(initialEmail);
+    }
+  }, [initialEmail]);
 
   // A password-reset link signs the user in just long enough to set a new
   // password. That session is what authorises the change, so its presence is

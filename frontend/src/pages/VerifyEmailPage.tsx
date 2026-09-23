@@ -1,14 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Mail, Sparkles, Building, UserCheck } from 'lucide-react';
+import { CheckCircle2, AlertCircle, RefreshCw, ArrowRight, Mail, LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../services/supabase';
+import { supabase, clearAccessTokenCache } from '../services/supabase';
 import { api } from '../services/api';
 import { BRAND_IMAGES, BrandPicture } from '../constants/brandImages';
 
 type State = 'CHECKING' | 'CONFIRMED' | 'FAILED';
 
 interface VerifyEmailPageProps {
-  onGoToDashboard: (role?: string) => void;
+  onConfirmed: (confirmedEmail?: string) => void;
   onGoToSignIn: () => void;
   onGoHome: () => void;
 }
@@ -16,23 +16,25 @@ interface VerifyEmailPageProps {
 /**
  * Where the confirmation link in the sign-up email lands.
  *
- * Confirms the session via Supabase URL fragment, OTP tokens, or PKCE codes,
- * ensures the backend profile is bootstrapped, and smoothly navigates the user
- * directly into their role-specific dashboard.
+ * 1. Confirms the token/session.
+ * 2. Ensures backend profile is bootstrapped.
+ * 3. Signs the user OUT so they are NOT automatically logged in.
+ * 4. Displays a clear "Email Confirmed Successfully" message.
+ * 5. Automatically redirects to the Sign In page ready for credentials.
  */
 export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
-  onGoToDashboard,
+  onConfirmed,
   onGoToSignIn,
   onGoHome,
 }) => {
-  const { resendVerification, refreshUser, user } = useAuth();
+  const { resendVerification } = useAuth();
   const [state, setState] = useState<State>('CHECKING');
-  const [message, setMessage] = useState<string>('Verifying your email and activating your account...');
-  const [targetRole, setTargetRole] = useState<string>('LANDLORD');
-  const [resendEmail, setResendEmail] = useState<string>(user?.email || '');
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [confirmedEmail, setConfirmedEmail] = useState<string>('');
+  const [resendEmail, setResendEmail] = useState<string>('');
   const [resendNote, setResendNote] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState<number>(2);
+  const [secondsLeft, setSecondsLeft] = useState<number>(3);
   const navigatedRef = useRef(false);
 
   useEffect(() => {
@@ -41,21 +43,29 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
     const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const searchParams = new URLSearchParams(window.location.search);
 
-    const linkError =
+    const rawError =
       hashParams.get('error_description') ||
       hashParams.get('error') ||
       searchParams.get('error_description') ||
       searchParams.get('error');
 
     (async () => {
-      if (linkError) {
+      // 1. Handle error flags reported in the URL fragment/query
+      if (rawError) {
         if (!active) return;
-        setMessage(decodeURIComponent(linkError.replace(/\+/g, ' ')));
+        const decoded = decodeURIComponent(rawError.replace(/\+/g, ' '));
+        let friendly = 'This confirmation link is invalid, has expired, or was already used.';
+        if (/expired/i.test(decoded)) {
+          friendly = 'This confirmation link has expired. Please request a new link below or try signing in if your account is already confirmed.';
+        } else if (/already/i.test(decoded)) {
+          friendly = 'This confirmation link has already been used. If your account is confirmed, please proceed to sign in.';
+        }
+        setErrorMessage(friendly);
         setState('FAILED');
         return;
       }
 
-      // 1. Process OTP token_hash or PKCE code if present in the URL
+      // 2. Process OTP token_hash or PKCE code if present
       const tokenHash = searchParams.get('token_hash');
       const otpType = (searchParams.get('type') as any) || 'signup';
       const code = searchParams.get('code');
@@ -66,20 +76,40 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
             token_hash: tokenHash,
             type: otpType,
           });
-          if (otpErr && otpType === 'signup') {
-            await supabase.auth.verifyOtp({
-              token_hash: tokenHash,
-              type: 'email',
-            });
+          if (otpErr) {
+            // Attempt retry with type 'email' if signup failed
+            if (otpType === 'signup') {
+              const retry = await supabase.auth.verifyOtp({
+                token_hash: tokenHash,
+                type: 'email',
+              });
+              if (retry.error) {
+                if (!active) return;
+                setErrorMessage('This confirmation link is invalid, has expired, or was already used.');
+                setState('FAILED');
+                return;
+              }
+            } else {
+              if (!active) return;
+              setErrorMessage('This confirmation link is invalid, has expired, or was already used.');
+              setState('FAILED');
+              return;
+            }
           }
         } else if (code) {
-          await supabase.auth.exchangeCodeForSession(code);
+          const { error: codeErr } = await supabase.auth.exchangeCodeForSession(code);
+          if (codeErr) {
+            if (!active) return;
+            setErrorMessage('This confirmation link is invalid, has expired, or was already used.');
+            setState('FAILED');
+            return;
+          }
         }
       } catch (err: any) {
-        console.warn('Token exchange notice:', err);
+        console.warn('Token exchange warning:', err);
       }
 
-      // 2. Retrieve session, allowing a short window for detectSessionInUrl to complete
+      // 3. Retrieve established session (allow short window for detectSessionInUrl)
       let session = (await supabase.auth.getSession()).data.session;
       if (!session) {
         for (let i = 0; i < 6; i++) {
@@ -93,43 +123,35 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
       if (!active) return;
 
       if (session) {
-        // 3. Ensure backend profile is bootstrapped (creates LandlordProfile or TenantProfile in DB)
-        let resolvedRole = 'LANDLORD';
+        const verifiedEmail = session.user.email || '';
+        setConfirmedEmail(verifiedEmail);
+        setResendEmail(verifiedEmail);
+
+        // Bootstrap profile while token is valid so the database entity is ready
         try {
           const sessionInfo = await api.auth.getSession();
           if (sessionInfo?.needs_bootstrap) {
             await api.auth.bootstrap({});
           }
-          if (sessionInfo?.role) {
-            resolvedRole = sessionInfo.role;
-          }
         } catch (bootstrapErr) {
           console.warn('Bootstrap during email verification:', bootstrapErr);
         }
 
-        // 4. Refresh full user profile in AuthContext
-        const profile = await refreshUser();
-        const finalRole =
-          profile?.role ||
-          resolvedRole ||
-          (session.user?.app_metadata?.role as string) ||
-          (session.user?.user_metadata?.requested_role as string) ||
-          (session.user?.user_metadata?.role as string) ||
-          'LANDLORD';
+        // CRITICAL REQUIREMENT: Make sure the user is NOT automatically logged in
+        await supabase.auth.signOut().catch(() => {});
+        clearAccessTokenCache();
 
         if (!active) return;
-        setTargetRole(finalRole);
-        setMessage('Your email address has been verified successfully!');
         setState('CONFIRMED');
 
-        // Countdown timer: 2s -> 1s -> redirect
-        const countdownTimer = setInterval(() => {
+        // Automatically redirect to Sign In page after 3 seconds
+        const timer = setInterval(() => {
           setSecondsLeft((prev) => {
             if (prev <= 1) {
-              clearInterval(countdownTimer);
+              clearInterval(timer);
               if (active && !navigatedRef.current) {
                 navigatedRef.current = true;
-                onGoToDashboard(finalRole);
+                onConfirmed(verifiedEmail);
               }
               return 0;
             }
@@ -137,13 +159,12 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
           });
         }, 1000);
 
-        return () => clearInterval(countdownTimer);
+        return () => clearInterval(timer);
       }
 
-      // No session and no error usually means page was visited without token
-      setMessage(
-        'Open the confirmation link from your email to finish setting up your account, ' +
-          'or request a new one below.'
+      // No session and no params
+      setErrorMessage(
+        'Open the confirmation link from your email to finish setting up your account, or request a new one below.'
       );
       setState('FAILED');
     })();
@@ -151,12 +172,12 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
     return () => {
       active = false;
     };
-  }, [onGoToDashboard, refreshUser]);
+  }, [onConfirmed]);
 
-  const handleManualRedirect = () => {
+  const handleManualSignIn = () => {
     if (!navigatedRef.current) {
       navigatedRef.current = true;
-      onGoToDashboard(targetRole);
+      onConfirmed(confirmedEmail);
     }
   };
 
@@ -174,15 +195,6 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
       setResending(false);
     }
   };
-
-  const roleLabel =
-    targetRole === 'LANDLORD'
-      ? 'Landlord Dashboard'
-      : targetRole === 'TENANT'
-      ? 'Tenant Portal'
-      : targetRole === 'SYSTEM_ADMIN'
-      ? 'System Admin Portal'
-      : 'Dashboard';
 
   return (
     <div className="min-h-screen bg-notify-grid text-black font-montserrat flex flex-col items-center justify-center px-4 py-10">
@@ -204,10 +216,10 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
               <RefreshCw className="w-8 h-8 text-[#331A6F] animate-spin" />
             </div>
             <h1 className="text-xl font-black uppercase tracking-wide text-[#331A6F]">
-              Confirming Your Email
+              Verifying Email
             </h1>
             <p className="text-sm font-semibold text-slate-600 mt-2 leading-relaxed">
-              Setting up your session and preparing your workspace...
+              Confirming your email address and preparing your account...
             </p>
           </div>
         )}
@@ -217,25 +229,27 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
             <div className="w-16 h-16 rounded-full bg-emerald-100 border-2 border-emerald-600 flex items-center justify-center mx-auto mb-4 shadow-[2px_2px_0_#059669]">
               <CheckCircle2 className="w-9 h-9 text-emerald-600" />
             </div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#331A6F]/10 text-[#331A6F] text-xs font-black uppercase tracking-wider mb-2">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{roleLabel}</span>
-            </div>
-            <h1 className="text-xl font-black uppercase tracking-wide text-slate-900">
-              Email Confirmed!
+            <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900">
+              Email Confirmed Successfully
             </h1>
             <p className="text-sm font-semibold text-slate-600 mt-2 leading-relaxed">
-              {message}
+              Your account has been verified. Please sign in with your credentials to access your dashboard.
             </p>
-            <p className="text-xs font-bold text-slate-400 mt-1">
-              Redirecting automatically in {secondsLeft} second{secondsLeft !== 1 ? 's' : ''}...
+            {confirmedEmail && (
+              <p className="text-xs font-bold text-[#331A6F] bg-[#331A6F]/10 rounded-lg px-3 py-1.5 mt-3 inline-block">
+                {confirmedEmail}
+              </p>
+            )}
+            <p className="text-xs font-bold text-slate-400 mt-3">
+              Redirecting to Sign In in {secondsLeft} second{secondsLeft !== 1 ? 's' : ''}...
             </p>
 
             <button
-              onClick={handleManualRedirect}
+              onClick={handleManualSignIn}
               className="mt-6 w-full py-3.5 px-6 rounded-[16px] bg-[#331A6F] text-white font-black text-sm uppercase tracking-wider border-2 border-black shadow-[3px_3px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#000000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none transition-all cursor-pointer inline-flex items-center justify-center gap-2"
             >
-              <span>Go to {roleLabel}</span>
+              <LogIn className="w-4 h-4" />
+              <span>Proceed to Sign In</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -247,51 +261,57 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({
               <div className="w-14 h-14 rounded-full bg-amber-100 border-2 border-amber-600 flex items-center justify-center mx-auto mb-4 shadow-[2px_2px_0_#D97706]">
                 <AlertCircle className="w-8 h-8 text-amber-600" />
               </div>
-              <h1 className="text-lg font-black uppercase tracking-wide">
-                Confirmation Link Needed
+              <h1 className="text-lg font-black uppercase tracking-wide text-slate-900">
+                Confirmation Link Notice
               </h1>
               <p className="text-sm font-semibold text-slate-600 mt-2 leading-relaxed">
-                {message}
+                {errorMessage}
               </p>
             </div>
 
-            <form onSubmit={handleResend} className="mt-6 space-y-3">
-              <label className="block text-xs font-black uppercase tracking-wider text-black">
-                Send a new confirmation link
-              </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  required
-                  value={resendEmail}
-                  onChange={(e) => setResendEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  disabled={resending}
-                  className="w-full px-4 py-3 rounded-[14px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
-                />
-                <Mail className="absolute right-4 top-3.5 w-5 h-5 text-slate-500 pointer-events-none" />
-              </div>
+            <div className="mt-6">
               <button
-                type="submit"
-                disabled={resending}
-                className="w-full py-3 px-6 rounded-[16px] bg-[#331A6F] text-white font-black text-sm uppercase tracking-wider border-2 border-black shadow-[2px_2px_0_#000000] disabled:opacity-50 disabled:pointer-events-none hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000000] transition-all cursor-pointer inline-flex items-center justify-center gap-2"
+                type="button"
+                onClick={onGoToSignIn}
+                className="w-full py-3 px-6 rounded-[16px] bg-[#331A6F] text-white font-black text-sm uppercase tracking-wider border-2 border-black shadow-[2px_2px_0_#000000] hover:translate-x-[1px] hover:translate-y-[1px] transition-all cursor-pointer inline-flex items-center justify-center gap-2 mb-4"
               >
-                {resending ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
-                <span>{resending ? 'Sending Link...' : 'Send New Confirmation Link'}</span>
+                <LogIn className="w-4 h-4" />
+                <span>Go to Sign In</span>
               </button>
-              {resendNote && (
-                <p className="text-xs font-semibold text-slate-600 leading-relaxed text-center mt-2">
-                  {resendNote}
-                </p>
-              )}
-            </form>
+            </div>
 
-            <button
-              onClick={onGoToSignIn}
-              className="mt-5 w-full text-sm font-black text-[#331A6F] underline hover:text-black transition-colors cursor-pointer text-center block"
-            >
-              Return to Sign In
-            </button>
+            <div className="border-t border-slate-200 pt-4 mt-2">
+              <form onSubmit={handleResend} className="space-y-3">
+                <label className="block text-xs font-black uppercase tracking-wider text-black">
+                  Need a new confirmation link?
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    required
+                    value={resendEmail}
+                    onChange={(e) => setResendEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    disabled={resending}
+                    className="w-full px-4 py-3 rounded-[14px] bg-white text-black font-bold text-sm border-2 border-black placeholder:text-slate-400 focus:outline-none focus:bg-amber-50 shadow-[0.5px_0.5px_0_#000000] disabled:bg-slate-100 transition-all"
+                  />
+                  <Mail className="absolute right-4 top-3.5 w-5 h-5 text-slate-500 pointer-events-none" />
+                </div>
+                <button
+                  type="submit"
+                  disabled={resending}
+                  className="w-full py-2.5 px-4 rounded-[14px] bg-white text-[#331A6F] font-black text-xs uppercase tracking-wider border-2 border-black shadow-[1.5px_1.5px_0_#000000] disabled:opacity-50 disabled:pointer-events-none hover:bg-slate-50 transition-all cursor-pointer inline-flex items-center justify-center gap-2"
+                >
+                  {resending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+                  <span>{resending ? 'Sending Link...' : 'Send New Confirmation Link'}</span>
+                </button>
+                {resendNote && (
+                  <p className="text-xs font-semibold text-slate-600 leading-relaxed text-center mt-2">
+                    {resendNote}
+                  </p>
+                )}
+              </form>
+            </div>
           </div>
         )}
       </div>

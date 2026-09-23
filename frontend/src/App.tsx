@@ -98,6 +98,8 @@ interface AuthRouteState {
   mode?: AuthMode;
   role?: UserRoleType;
   notice?: string;
+  successNotice?: string;
+  email?: string;
 }
 
 /** Keeps the document title in step with the URL. */
@@ -261,8 +263,8 @@ function AuthRoute({ mode }: { mode: AuthMode }) {
   const location = useLocation();
   const state = (location.state || {}) as AuthRouteState;
 
-  // If already authenticated and visiting login or get-started, proceed straight to the dashboard
-  if (!isLoading && user && (mode === 'LOGIN' || mode === 'SIGNUP')) {
+  // If already authenticated and visiting login or get-started (without a confirmation notice), proceed to dashboard
+  if (!isLoading && user && (mode === 'LOGIN' || mode === 'SIGNUP') && !state.successNotice) {
     return <Navigate to={dashboardPathForRole(user.role)} replace />;
   }
 
@@ -271,6 +273,8 @@ function AuthRoute({ mode }: { mode: AuthMode }) {
       initialMode={state.mode || mode}
       initialRole={state.role || 'LANDLORD'}
       unauthorizedNotice={state.notice || null}
+      successNotice={state.successNotice || null}
+      initialEmail={state.email || ''}
       onGoHome={nav.goHome}
       onAuthSuccess={(role) => nav.goToPage(dashboardPathForRole(role), true)}
     />
@@ -384,13 +388,22 @@ function AppRoutes() {
 
 /** /verify-email - Supabase confirms the link itself; this page just reports the outcome. */
 function VerifyEmailRoute() {
-  const nav = useAppNavigation();
-  const { user } = useAuth();
+  const navigate = useNavigate();
+
   return (
     <VerifyEmailPage
-      onGoToDashboard={(role) => nav.goToPage(dashboardPathForRole(role || user?.role), true)}
-      onGoToSignIn={() => nav.goToPage('/login', true)}
-      onGoHome={nav.goHome}
+      onConfirmed={(confirmedEmail) => {
+        navigate('/login', {
+          state: {
+            mode: 'LOGIN',
+            email: confirmedEmail || '',
+            successNotice: 'Email confirmed successfully! Please sign in with your credentials.',
+          },
+          replace: true,
+        });
+      }}
+      onGoToSignIn={() => navigate('/login', { replace: true })}
+      onGoHome={() => navigate('/', { replace: true })}
     />
   );
 }
