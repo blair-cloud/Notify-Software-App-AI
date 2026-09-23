@@ -127,15 +127,15 @@ function useAppNavigation() {
 
   return {
     goHome: () => go('/'),
-    goToPage: (path: string) => go(path),
+    goToPage: (path: string, replace = false) => go(path, undefined, replace),
     openAuth: (_source?: string, mode: AuthMode = 'SIGNUP', role: UserRoleType = 'LANDLORD', notice?: string) =>
       go(mode === 'LOGIN' ? '/login' : '/get-started', { mode, role, notice }),
-    goToDashboard: () => {
+    goToDashboard: (replace = false) => {
       if (!user) {
-        go('/login', { mode: 'LOGIN', notice: 'Please sign in to access your dashboard.' });
+        go('/login', { mode: 'LOGIN', notice: 'Please sign in to access your dashboard.' }, replace);
         return;
       }
-      go(dashboardPathForRole(user.role));
+      go(dashboardPathForRole(user.role), undefined, replace);
     },
   };
 }
@@ -257,8 +257,14 @@ function InfoPage({ Page, ctaLabel }: { Page: any; ctaLabel: string }) {
 /** Sign in / sign up. The mode comes from the path, with optional route state. */
 function AuthRoute({ mode }: { mode: AuthMode }) {
   const nav = useAppNavigation();
+  const { user, isLoading } = useAuth();
   const location = useLocation();
   const state = (location.state || {}) as AuthRouteState;
+
+  // If already authenticated and visiting login or get-started, proceed straight to the dashboard
+  if (!isLoading && user && (mode === 'LOGIN' || mode === 'SIGNUP')) {
+    return <Navigate to={dashboardPathForRole(user.role)} replace />;
+  }
 
   return (
     <AuthPage
@@ -266,7 +272,7 @@ function AuthRoute({ mode }: { mode: AuthMode }) {
       initialRole={state.role || 'LANDLORD'}
       unauthorizedNotice={state.notice || null}
       onGoHome={nav.goHome}
-      onAuthSuccess={(role) => nav.goToPage(dashboardPathForRole(role))}
+      onAuthSuccess={(role) => nav.goToPage(dashboardPathForRole(role), true)}
     />
   );
 }
@@ -277,20 +283,35 @@ function AppRoutes() {
   const location = useLocation();
   useDocumentTitle();
 
-  // Invitation links have historically arrived with ?token= on any path. The
-  // confirmation and password-reset emails also carry ?token=, so those paths
-  // are excluded - otherwise following a reset link lands on the invitation
-  // page instead.
+  // Handle emailed links (invitations, email confirmation, password recovery).
+  // Emailed links might land on the root "/" or "/login" if Supabase project Site URL is used as fallback.
   useEffect(() => {
+    const hash = window.location.hash || '';
+    const search = window.location.search || '';
+    const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
+    const searchParams = new URLSearchParams(search);
+
+    // If this is an email confirmation callback and we're not yet on /verify-email, route there
+    const isEmailConfirmation =
+      hashParams.get('type') === 'signup' ||
+      hashParams.get('type') === 'email' ||
+      searchParams.get('type') === 'signup' ||
+      (searchParams.has('token_hash') && searchParams.get('type') !== 'recovery');
+
+    if (isEmailConfirmation && location.pathname !== '/verify-email') {
+      navigate(`/verify-email${location.search}${location.hash}`, { replace: true });
+      return;
+    }
+
     const ownsItsToken =
       location.pathname === '/accept-invitation' ||
       location.pathname === '/verify-email' ||
       location.pathname === '/reset-password';
 
-    if (!ownsItsToken && new URLSearchParams(location.search).has('token')) {
+    if (!ownsItsToken && searchParams.has('token')) {
       navigate(`/accept-invitation${location.search}`, { replace: true });
     }
-  }, [location.pathname, location.search, navigate]);
+  }, [location.pathname, location.search, location.hash, navigate]);
 
   const handleLogout = async () => {
     await logout();
@@ -367,8 +388,8 @@ function VerifyEmailRoute() {
   const { user } = useAuth();
   return (
     <VerifyEmailPage
-      onGoToDashboard={(role) => nav.goToPage(dashboardPathForRole(role || user?.role))}
-      onGoToSignIn={() => nav.goToPage('/login')}
+      onGoToDashboard={(role) => nav.goToPage(dashboardPathForRole(role || user?.role), true)}
+      onGoToSignIn={() => nav.goToPage('/login', true)}
       onGoHome={nav.goHome}
     />
   );
