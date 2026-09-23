@@ -68,13 +68,16 @@ export const AdminUnitsTab: React.FC<AdminUnitsTabProps> = ({ units = [], proper
     setSubmitting(true);
     setActionError(null);
     try {
-      await api.units.create({
+      const payload: any = {
         property_id: selectedPropId,
-        unit_number: unitNumber,
-        monthly_rent: Number(monthlyRent),
-        rooms: Number(bedrooms),
-        bathrooms: Number(bathrooms),
-      });
+        unit_number: unitNumber.trim(),
+        monthly_rent: Number(monthlyRent) || 0,
+        unit_type: 'Apartment',
+      };
+      if (bedrooms && !isNaN(Number(bedrooms))) payload.rooms = Number(bedrooms);
+      if (bathrooms && !isNaN(Number(bathrooms))) payload.bathrooms = Number(bathrooms);
+
+      await api.units.create(payload);
 
       setUnitNumber('');
       setShowAddModal(false);

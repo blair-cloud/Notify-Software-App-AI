@@ -329,6 +329,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [selectedPropIdForUnit, setSelectedPropIdForUnit] = useState('');
   const [unitNumber, setUnitNumber] = useState('');
   const [unitFloor, setUnitFloor] = useState(1);
+  const [unitType, setUnitType] = useState('Apartment');
   const [unitRooms, setUnitRooms] = useState('');
   const [unitBathrooms, setUnitBathrooms] = useState('');
   const [unitSquareMeters, setUnitSquareMeters] = useState('');
@@ -340,6 +341,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [editUnitNumber, setEditUnitNumber] = useState('');
   const [editUnitFloor, setEditUnitFloor] = useState(1);
+  const [editUnitType, setEditUnitType] = useState('Apartment');
   const [editUnitRooms, setEditUnitRooms] = useState('');
   const [editUnitBathrooms, setEditUnitBathrooms] = useState('');
   const [editUnitSquareMeters, setEditUnitSquareMeters] = useState('');
@@ -782,21 +784,71 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     }
   };
 
+  const handleOpenAddUnitModal = (preferredPropId?: string) => {
+    if (properties.length === 0) {
+      showError('Please add a property first before creating a unit.');
+      setShowAddPropertyModal(true);
+      return;
+    }
+    const targetPropId =
+      preferredPropId ||
+      (selectedPropIdForUnit && properties.some((p) => p.id === selectedPropIdForUnit)
+        ? selectedPropIdForUnit
+        : (unitPropertyFilter && properties.some((p) => p.id === unitPropertyFilter)
+          ? unitPropertyFilter
+          : properties[0].id));
+    setSelectedPropIdForUnit(targetPropId);
+    setUnitNumber('');
+    setUnitFloor(1);
+    setUnitType('Apartment');
+    setUnitRooms('');
+    setUnitBathrooms('');
+    setUnitSquareMeters('');
+    setUnitRent(300000);
+    setUnitCurrency('RWF');
+    setUnitDesc('');
+    setShowAddUnitModal(true);
+  };
+
   const handleCreateUnit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const effectivePropId =
+      selectedPropIdForUnit ||
+      (properties.length > 0 ? properties[0].id : '');
+
+    if (!effectivePropId) {
+      showError('Please select or create a property first.');
+      return;
+    }
+    if (!unitNumber.trim()) {
+      showError('Unit number is required.');
+      return;
+    }
+    const rent = Number(unitRent);
+    if (isNaN(rent) || rent < 0) {
+      showError('Please enter a valid monthly rent amount.');
+      return;
+    }
+
     setIsCreatingUnit(true);
     try {
-      await api.units.create({
-        property_id: selectedPropIdForUnit,
-        unit_number: unitNumber,
-        floor: Number(unitFloor),
-        rooms: unitRooms.trim() === '' ? undefined : Number(unitRooms),
-        bathrooms: unitBathrooms.trim() === '' ? undefined : Number(unitBathrooms),
-        square_meters: unitSquareMeters.trim() === '' ? undefined : Number(unitSquareMeters),
-        monthly_rent: Number(unitRent),
-        currency: unitCurrency,
-        description: unitDesc,
-      });
+      const payload: any = {
+        property_id: effectivePropId,
+        unit_number: unitNumber.trim(),
+        floor: Math.max(1, parseInt(String(unitFloor), 10) || 1),
+        unit_type: unitType || 'Apartment',
+        monthly_rent: rent,
+        currency: unitCurrency || 'RWF',
+      };
+      const r = String(unitRooms || '').trim();
+      if (r !== '' && !isNaN(Number(r))) payload.rooms = Math.max(0, parseInt(r, 10));
+      const b = String(unitBathrooms || '').trim();
+      if (b !== '' && !isNaN(Number(b))) payload.bathrooms = Math.max(0, parseInt(b, 10));
+      const sq = String(unitSquareMeters || '').trim();
+      if (sq !== '' && !isNaN(Number(sq))) payload.square_meters = Math.max(0, parseFloat(sq));
+      if (unitDesc && String(unitDesc).trim()) payload.description = String(unitDesc).trim();
+
+      await api.units.create(payload);
 
       setUnitNumber('');
       setUnitRooms('');
@@ -817,6 +869,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     setEditingUnit(unit);
     setEditUnitNumber(unit.unit_number || '');
     setEditUnitFloor(unit.floor ?? 1);
+    setEditUnitType(unit.unit_type || 'Apartment');
     setEditUnitRooms(unit.rooms !== undefined && unit.rooms !== null ? String(unit.rooms) : '');
     setEditUnitBathrooms(unit.bathrooms !== undefined && unit.bathrooms !== null ? String(unit.bathrooms) : '');
     setEditUnitSquareMeters(
@@ -830,14 +883,20 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
     if (!editingUnit) return;
     setIsSavingUnit(true);
     try {
-      await api.units.update(editingUnit.id, {
-        unit_number: editUnitNumber,
-        floor: Number(editUnitFloor),
-        rooms: editUnitRooms.trim() === '' ? null : Number(editUnitRooms),
-        bathrooms: editUnitBathrooms.trim() === '' ? null : Number(editUnitBathrooms),
-        square_meters: editUnitSquareMeters.trim() === '' ? null : Number(editUnitSquareMeters),
-        monthly_rent: Number(editUnitRent),
-      });
+      const payload: any = {
+        unit_number: editUnitNumber.trim() || undefined,
+        floor: Math.max(1, parseInt(String(editUnitFloor), 10) || 1),
+        unit_type: editUnitType || 'Apartment',
+        monthly_rent: Number(editUnitRent) >= 0 ? Number(editUnitRent) : undefined,
+      };
+      const r = String(editUnitRooms || '').trim();
+      payload.rooms = r !== '' && !isNaN(Number(r)) ? Math.max(0, parseInt(r, 10)) : null;
+      const b = String(editUnitBathrooms || '').trim();
+      payload.bathrooms = b !== '' && !isNaN(Number(b)) ? Math.max(0, parseInt(b, 10)) : null;
+      const sq = String(editUnitSquareMeters || '').trim();
+      payload.square_meters = sq !== '' && !isNaN(Number(sq)) ? Math.max(0, parseFloat(sq)) : null;
+
+      await api.units.update(editingUnit.id, payload);
 
       setEditingUnit(null);
       showSuccess('Unit updated successfully!');
@@ -3206,6 +3265,13 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                               View Units
                             </button>
                             <button
+                              onClick={() => handleOpenAddUnitModal(prop.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-[#331A6F] hover:bg-purple-50 transition-colors cursor-pointer"
+                              title="Add Unit to this Property"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={() => handleOpenEditProperty(prop)}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-[#331A6F] hover:bg-purple-50 transition-colors cursor-pointer"
                               title="Edit Property"
@@ -3237,7 +3303,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     <p className="text-sm text-slate-500 mt-0.5">Manage individual apartments, shops, and office spaces across properties.</p>
                   </div>
                   <button
-                    onClick={() => setShowAddUnitModal(true)}
+                    onClick={() => handleOpenAddUnitModal()}
                     className="bg-[#331A6F] hover:bg-[#251352] text-white px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer shadow-sm self-start sm:self-auto"
                   >
                     <Plus className="w-4 h-4" />
@@ -4276,20 +4342,38 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
             </div>
 
             <form onSubmit={handleCreateUnit} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">Select Property *</label>
-                <select
-                  value={selectedPropIdForUnit}
-                  onChange={(e) => setSelectedPropIdForUnit(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none"
-                >
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.district})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {properties.length === 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-xs">
+                  <p className="font-semibold">No properties registered yet.</p>
+                  <p className="mt-1">Each rental unit must be associated with a property. Please create a property first.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddUnitModal(false);
+                      setShowAddPropertyModal(true);
+                    }}
+                    className="mt-2.5 px-3 py-1.5 bg-[#331A6F] text-white rounded-md font-semibold hover:bg-[#251352] cursor-pointer"
+                  >
+                    + Register Property First
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Select Property *</label>
+                  <select
+                    value={selectedPropIdForUnit}
+                    onChange={(e) => setSelectedPropIdForUnit(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none"
+                    required
+                  >
+                    {properties.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.district})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -4304,14 +4388,45 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   />
                 </div>
                 <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Unit Type</label>
+                  <select
+                    value={unitType}
+                    onChange={(e) => setUnitType(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none"
+                  >
+                    <option value="Apartment">Apartment</option>
+                    <option value="Studio">Studio</option>
+                    <option value="Retail Shop">Retail Shop</option>
+                    <option value="Office">Office</option>
+                    <option value="Single Room">Single Room</option>
+                    <option value="Warehouse">Warehouse</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="block text-slate-700 font-semibold mb-1">Floor *</label>
                   <input
                     type="number"
                     min={1}
                     required
                     value={unitFloor}
-                    onChange={(e) => setUnitFloor(Number(e.target.value))}
+                    onChange={(e) => setUnitFloor(Math.max(1, Number(e.target.value) || 1))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Monthly Rent ({unitCurrency}) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    step={5000}
+                    value={unitRent}
+                    onChange={(e) => setUnitRent(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none font-bold text-slate-900"
                   />
                 </div>
               </div>
@@ -4354,15 +4469,13 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Monthly Rent (RWF) *</label>
-                <input
-                  type="number"
-                  required
-                  min={10000}
-                  step={5000}
-                  value={unitRent}
-                  onChange={(e) => setUnitRent(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none font-bold text-slate-900"
+                <label className="block text-slate-700 font-semibold mb-1">Description (Optional)</label>
+                <textarea
+                  rows={2}
+                  placeholder="Optional description of this unit..."
+                  value={unitDesc}
+                  onChange={(e) => setUnitDesc(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none resize-none"
                 />
               </div>
 
@@ -4377,7 +4490,7 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                 </button>
                 <button
                   type="submit"
-                  disabled={isCreatingUnit}
+                  disabled={isCreatingUnit || properties.length === 0}
                   className="px-4 py-2 bg-[#331A6F] text-white rounded-lg font-semibold hover:bg-[#251352] disabled:opacity-50"
                 >
                   {isCreatingUnit ? 'Saving...' : 'Save Unit'}
@@ -4429,14 +4542,45 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                   />
                 </div>
                 <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Unit Type</label>
+                  <select
+                    value={editUnitType}
+                    onChange={(e) => setEditUnitType(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none"
+                  >
+                    <option value="Apartment">Apartment</option>
+                    <option value="Studio">Studio</option>
+                    <option value="Retail Shop">Retail Shop</option>
+                    <option value="Office">Office</option>
+                    <option value="Single Room">Single Room</option>
+                    <option value="Warehouse">Warehouse</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="block text-slate-700 font-semibold mb-1">Floor *</label>
                   <input
                     type="number"
                     min={1}
                     required
                     value={editUnitFloor}
-                    onChange={(e) => setEditUnitFloor(Number(e.target.value))}
+                    onChange={(e) => setEditUnitFloor(Math.max(1, Number(e.target.value) || 1))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Monthly Rent (RWF) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    step={5000}
+                    value={editUnitRent}
+                    onChange={(e) => setEditUnitRent(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none font-bold text-slate-900"
                   />
                 </div>
               </div>
@@ -4476,19 +4620,6 @@ export const LandlordDashboardPage: React.FC<LandlordDashboardPageProps> = ({ on
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">Monthly Rent (RWF) *</label>
-                <input
-                  type="number"
-                  required
-                  min={0}
-                  step={5000}
-                  value={editUnitRent}
-                  onChange={(e) => setEditUnitRent(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none font-bold text-slate-900"
-                />
               </div>
 
               <div className="pt-3 flex justify-end gap-2">
