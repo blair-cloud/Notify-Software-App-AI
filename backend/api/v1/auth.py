@@ -164,9 +164,9 @@ async def forgot_password(req: ForgotPasswordRequest, request: Request):
                 html_content=html,
                 metadata={"purpose": "PASSWORD_RESET"}
             )
-            logger.info("Password reset email for %s: ok=%s provider=%s detail=%s link=%s", clean_email, delivery.ok, delivery.provider, delivery.detail, reset_link)
+            logger.info("Password reset email for %s: ok=%s provider=%s error=%s link=%s", clean_email, delivery.ok, delivery.provider, delivery.error, reset_link)
             if not delivery.ok:
-                logger.error("Password reset email delivery failed for %s: %s", clean_email, delivery.detail)
+                logger.error("Password reset email delivery failed for %s: %s", clean_email, delivery.error)
         else:
             logger.info("Password reset requested for non-existent user %s", clean_email)
     except Exception as exc:

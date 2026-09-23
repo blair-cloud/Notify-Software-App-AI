@@ -34,19 +34,42 @@ def _send_smtp_blocking(to_email: str, subject: str, body: str, html_content: Op
     # fail cleanly - the handshake just hangs until something upstream times
     # out, which is what a 504 from a mail-sending API looks like.
     timeout = settings.DELIVERY_TIMEOUT_SECONDS
-    if settings.SMTP_PORT == 465:
-        with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=timeout) as server:
-            if settings.smtp_username and settings.SMTP_PASSWORD:
-                server.login(settings.smtp_username, settings.SMTP_PASSWORD)
-            server.send_message(msg)
-        return
 
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=timeout) as server:
-        if settings.SMTP_USE_TLS:
-            server.starttls()
-        if settings.smtp_username and settings.SMTP_PASSWORD:
-            server.login(settings.smtp_username, settings.SMTP_PASSWORD)
-        server.send_message(msg)
+    # Cloud hosting platforms (like Render, AWS) frequently block outbound port 587.
+    # Brevo officially supports port 2525 and port 465 as unblocked alternatives.
+    ports_to_try = [settings.SMTP_PORT]
+    if "brevo.com" in (settings.SMTP_HOST or "").lower():
+        for alt_port in (2525, 465, 587):
+            if alt_port not in ports_to_try:
+                ports_to_try.append(alt_port)
+
+    last_error = None
+    for port in ports_to_try:
+        try:
+            port_timeout = min(timeout, 8.0) if len(ports_to_try) > 1 else timeout
+            if port == 465:
+                with smtplib.SMTP_SSL(settings.SMTP_HOST, port, timeout=port_timeout) as server:
+                    if settings.smtp_username and settings.SMTP_PASSWORD:
+                        server.login(settings.smtp_username, settings.SMTP_PASSWORD)
+                    server.send_message(msg)
+                return
+            else:
+                with smtplib.SMTP(settings.SMTP_HOST, port, timeout=port_timeout) as server:
+                    if settings.SMTP_USE_TLS:
+                        server.starttls()
+                    if settings.smtp_username and settings.SMTP_PASSWORD:
+                        server.login(settings.smtp_username, settings.SMTP_PASSWORD)
+                    server.send_message(msg)
+                return
+        except (smtplib.SMTPConnectError, TimeoutError, OSError) as exc:
+            last_error = exc
+            logger.warning("SMTP connection on %s:%d failed (%s). Trying fallback port...", settings.SMTP_HOST, port, exc)
+            continue
+        except (smtplib.SMTPAuthenticationError, smtplib.SMTPSenderRefused, smtplib.SMTPRecipientsRefused):
+            raise
+
+    if last_error:
+        raise last_error
 
 
 async def _send_smtp(to_email: str, subject: str, body: str, html_content: Optional[str]) -> Dict[str, Any]:
